@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/export",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Export oneGrid data to CSV (built-in, zero deps) and XLSX (via SheetJS peer dep). MIT-free moats: every commercial grid charges for these.",
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,10 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -30,11 +33,15 @@
     "xlsx": "^0.18.0"
   },
   "peerDependenciesMeta": {
-    "xlsx": { "optional": true }
+    "xlsx": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "xlsx": "^0.18.5"
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false
 }

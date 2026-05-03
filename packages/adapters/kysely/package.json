@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/kysely",
-  "version": "0.0.3",
+  "version": "0.0.5",
   "description": "Kysely query-builder adapter for oneGrid SSRM. Translates BlockRequest into type-safe SQL.",
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,10 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -29,6 +32,8 @@
   "peerDependencies": {
     "kysely": "^0.27.0"
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false
 }

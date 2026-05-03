@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/angular",
-  "version": "0.0.0",
+  "version": "0.0.5",
   "description": "Angular adapter for oneGrid. Standalone component + signals integration over the framework-agnostic core.",
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,10 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -30,6 +33,8 @@
   "peerDependencies": {
     "@angular/core": "^17.0.0 || ^18.0.0 || ^19.0.0"
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false
 }

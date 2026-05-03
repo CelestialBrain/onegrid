@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/data",
-  "version": "0.0.2",
+  "version": "0.0.5",
   "description": "oneGrid columnar data layer: Arrow-compatible tables, bitmap selection, sort cache, group tree, IVM hooks.",
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,10 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -26,6 +29,8 @@
   "dependencies": {
     "@onegrid/protocol": "workspace:*"
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false
 }

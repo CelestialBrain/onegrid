@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/wc",
-  "version": "0.0.0",
+  "version": "0.0.5",
   "description": "Web Component adapter for oneGrid. Optional <one-grid> custom element wrapping the core.",
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,10 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -27,6 +30,8 @@
     "@onegrid/core": "workspace:*",
     "@onegrid/protocol": "workspace:*"
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false
 }

@@ -1,6 +1,6 @@
 {
   "name": "onegrid",
-  "version": "0.0.2",
+  "version": "0.0.5",
   "description": "A free, open-source, highly customizable and optimized grid system that consolidates features across all grid libraries (AG Grid, TanStack Table, etc.) — built to handle millions of rows, multiple databases, instant updates, and modern ORM integrations.",
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,10 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "keywords": [
     "grid",
     "datagrid",
@@ -42,6 +45,8 @@
     "@onegrid/data": "workspace:*",
     "@onegrid/protocol": "workspace:*"
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false
 }

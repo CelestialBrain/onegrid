@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/protocol",
-  "version": "0.0.2",
+  "version": "0.0.5",
   "description": "Wire-format and database-adapter contract types for oneGrid. Types only, no runtime.",
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,10 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -23,6 +26,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src"
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false
 }

@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/react",
-  "version": "0.0.2",
+  "version": "0.0.5",
   "description": "React adapter for oneGrid. Idiomatic hooks over the framework-agnostic core.",
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,10 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -37,6 +40,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false
 }

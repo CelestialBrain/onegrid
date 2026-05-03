@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/duckdb",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Optional plugin: DuckDB-WASM as a client-side query engine and SSRM source for oneGrid.",
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,10 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -31,8 +34,12 @@
     "@duckdb/duckdb-wasm": "^1.28.0"
   },
   "peerDependenciesMeta": {
-    "@duckdb/duckdb-wasm": { "optional": true }
+    "@duckdb/duckdb-wasm": {
+      "optional": true
+    }
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false
 }
