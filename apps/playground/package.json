@@ -13,8 +13,10 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@duckdb/duckdb-wasm": "^1.28.0",
     "@onegrid/core": "workspace:*",
     "@onegrid/data": "workspace:*",
+    "@onegrid/duckdb": "workspace:*",
     "@onegrid/export": "workspace:*",
     "@onegrid/formula": "workspace:*",
     "@onegrid/react": "workspace:*",

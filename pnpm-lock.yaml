@@ -53,12 +53,18 @@ importers:
 
   apps/playground:
     dependencies:
+      '@duckdb/duckdb-wasm':
+        specifier: ^1.28.0
+        version: 1.32.0
       '@onegrid/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@onegrid/data':
         specifier: workspace:*
         version: link:../../packages/data
+      '@onegrid/duckdb':
+        specifier: workspace:*
+        version: link:../../packages/duckdb
       '@onegrid/export':
         specifier: workspace:*
         version: link:../../packages/export

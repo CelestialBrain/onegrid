@@ -17,6 +17,11 @@ import {
 } from './lib/synthetic';
 import { connectSsrm, SSRM_COLUMNS, type SsrmConnection } from './lib/ssrm';
 import {
+  connectDuckDb,
+  DUCKDB_COLUMNS,
+  type DuckDbModeHandle,
+} from './lib/duckdb-mode';
+import {
   FILTER_OPS,
   buildColumnFilter,
   buildQuickFilter,
@@ -34,7 +39,7 @@ import {
 
 const ROW_OPTIONS = [1_000, 10_000, 100_000, 1_000_000, 10_000_000] as const;
 
-type Mode = 'memory' | 'ssrm' | 'formula';
+type Mode = 'memory' | 'ssrm' | 'formula' | 'duckdb';
 
 // Stable references so useOneGrid's effect doesn't re-fire while waiting
 // for async data sources to resolve.
@@ -158,6 +163,14 @@ export const App = (): JSX.Element => {
   const [formulaActiveCell, setFormulaActiveCell] = useState<string>('A1');
   const [formulaInput, setFormulaInput] = useState<string>('');
 
+  // ----- duckdb-wasm playground -----
+  const [duckdb, setDuckdb] = useState<DuckDbModeHandle | null>(null);
+  const [duckdbStatus, setDuckdbStatus] = useState<
+    'idle' | 'connecting' | 'connected' | 'error'
+  >('idle');
+  const [duckdbProgress, setDuckdbProgress] = useState<string>('');
+  const [duckdbTick, setDuckdbTick] = useState(0);
+
   useEffect(() => {
     if (mode !== 'formula') {
       setFormula(null);
@@ -166,6 +179,47 @@ export const App = (): JSX.Element => {
     const handle = createFormulaPlayground();
     setFormula(handle);
     setFormulaInput(handle.getDisplaySource('A1'));
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== 'duckdb') {
+      // Tear down on mode change so the worker + WASM heap are released.
+      setDuckdb((prev) => {
+        if (prev) void prev.close();
+        return null;
+      });
+      setDuckdbStatus('idle');
+      setDuckdbProgress('');
+      return;
+    }
+    let canceled = false;
+    setDuckdbStatus('connecting');
+    setDuckdbProgress('starting…');
+    connectDuckDb({
+      numRows: 100_000,
+      onProgress: (m) => {
+        if (!canceled) setDuckdbProgress(m);
+      },
+      onUpdate: () => {
+        if (!canceled) setDuckdbTick((t) => t + 1);
+      },
+    })
+      .then((handle) => {
+        if (canceled) {
+          void handle.close();
+          return;
+        }
+        setDuckdb(handle);
+        setDuckdbStatus('connected');
+      })
+      .catch((err: unknown) => {
+        if (canceled) return;
+        console.error('[onegrid] duckdb connect failed', err);
+        setDuckdbStatus('error');
+      });
+    return () => {
+      canceled = true;
+    };
   }, [mode]);
 
   useEffect(() => {
@@ -200,7 +254,9 @@ export const App = (): JSX.Element => {
       ? memoryDataset !== null
       : mode === 'ssrm'
         ? ssrm !== null
-        : formula !== null;
+        : mode === 'duckdb'
+          ? duckdb !== null
+          : formula !== null;
 
   // Module-level stable fallbacks so useOneGrid's effect doesn't re-fire
   // every render while we're waiting for the async data source.
@@ -210,7 +266,9 @@ export const App = (): JSX.Element => {
       ? memoryDataset!.columns
       : mode === 'ssrm'
         ? SSRM_COLUMNS
-        : FORMULA_COLUMNS;
+        : mode === 'duckdb'
+          ? DUCKDB_COLUMNS
+          : FORMULA_COLUMNS;
   const safeRowSource: RowSource = !dataReady
     ? EMPTY_ROW_SOURCE
     : mode === 'memory'
@@ -219,7 +277,9 @@ export const App = (): JSX.Element => {
         memoryView?.rowSource ?? memoryDataset!.rowSource
       : mode === 'ssrm'
         ? ssrm!.rowSource
-        : formula!.rowSource;
+        : mode === 'duckdb'
+          ? duckdb!.rowSource
+          : formula!.rowSource;
   const safeRowHeight: number | Float32Array =
     mode === 'memory' && memoryDataset ? memoryDataset.heights : 28;
 
@@ -325,6 +385,12 @@ export const App = (): JSX.Element => {
     if (!grid || mode !== 'ssrm') return;
     grid.refresh();
   }, [grid, ssrmTick, mode]);
+
+  // DuckDB: same idea as SSRM — block lands, repaint visible rows.
+  useEffect(() => {
+    if (!grid || mode !== 'duckdb') return;
+    grid.refresh();
+  }, [grid, duckdbTick, mode]);
 
   // Push sort state into the underlying data source. SSRM mode invalidates
   // the row-source cache and refetches; in-memory mode is visual-only for
@@ -517,6 +583,15 @@ export const App = (): JSX.Element => {
             style={{ fontWeight: mode === 'formula' ? 600 : 400 }}
           >
             Formula
+          </button>{' '}
+          <button
+            type="button"
+            onClick={() => {
+              setMode('duckdb');
+            }}
+            style={{ fontWeight: mode === 'duckdb' ? 600 : 400 }}
+          >
+            DuckDB (in-browser)
           </button>
         </div>
 
@@ -598,6 +673,16 @@ export const App = (): JSX.Element => {
               Filters{columnFilters.length > 0 ? ` (${String(columnFilters.length)})` : ''}
             </button>
           </>
+        )}
+
+        {mode === 'duckdb' && (
+          <span style={{ color: 'var(--muted)' }}>
+            {duckdbStatus === 'connecting' && `${duckdbProgress}`}
+            {duckdbStatus === 'connected' && duckdb
+              ? `${safeRowSource.numRows.toLocaleString()} rows · cache ${String(duckdb.handle.getCacheSize())} blocks`
+              : ''}
+            {duckdbStatus === 'error' && 'duckdb-wasm load failed (check network/CDN)'}
+          </span>
         )}
 
         {mode === 'formula' && formula && (
@@ -782,7 +867,11 @@ export const App = (): JSX.Element => {
               pointerEvents: 'none',
             }}
           >
-            {mode === 'ssrm' ? 'connecting to SSRM…' : 'loading…'}
+            {mode === 'ssrm'
+              ? 'connecting to SSRM…'
+              : mode === 'duckdb'
+                ? `duckdb-wasm: ${duckdbProgress || 'starting…'}`
+                : 'loading…'}
           </div>
         )}
       </div>
