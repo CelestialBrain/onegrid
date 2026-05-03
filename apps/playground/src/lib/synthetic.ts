@@ -41,6 +41,10 @@ export interface SyntheticDataset {
 
 export interface MaterializedSyntheticDataset extends SyntheticDataset {
   readonly table: ColumnTable;
+  /** Mutate a cell in place. Coerces the raw string to the column's
+   *  typed-array type (number columns parse, string columns store as-is).
+   *  Returns false when the value can't be coerced. */
+  readonly writeCell: (sourceRow: number, columnId: string, raw: string) => boolean;
 }
 
 const FIRST_NAMES = [
@@ -240,7 +244,53 @@ export function materializeSynthetic(numRows: number): MaterializedSyntheticData
     getCell: (rowIndex, columnId) => table.column(columnId).get(rowIndex),
   };
 
-  return { columns, rowSource, heights, table };
+  // Map columnId → the underlying mutable backing array. The ColumnTable
+  // wraps these via a closure but reads through on every get(), so writing
+  // here is reflected on the next render.
+  const writeBack: Record<string, (sourceRow: number, raw: string) => boolean> = {
+    rowIndex: (i, raw) => {
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return false;
+      rowIndexCol[i] = n | 0;
+      return true;
+    },
+    firstName: (i, raw) => {
+      firstNameCol[i] = raw;
+      return true;
+    },
+    lastName: (i, raw) => {
+      lastNameCol[i] = raw;
+      return true;
+    },
+    revenue: (i, raw) => {
+      const n = Number(raw.replace(/^\$/, ''));
+      if (!Number.isFinite(n)) return false;
+      revenueCol[i] = n;
+      return true;
+    },
+    status: (i, raw) => {
+      statusCol[i] = raw;
+      return true;
+    },
+    score: (i, raw) => {
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return false;
+      scoreCol[i] = n | 0;
+      return true;
+    },
+    updatedAt: (i, raw) => {
+      updatedAtCol[i] = raw;
+      return true;
+    },
+  };
+
+  const writeCell = (sourceRow: number, columnId: string, raw: string): boolean => {
+    if (sourceRow < 0 || sourceRow >= numRows) return false;
+    const fn = writeBack[columnId];
+    return fn ? fn(sourceRow, raw) : false;
+  };
+
+  return { columns, rowSource, heights, table, writeCell };
 }
 
 export interface MemoryView {

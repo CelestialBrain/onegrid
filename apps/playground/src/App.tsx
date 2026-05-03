@@ -33,6 +33,7 @@ import {
 import {
   createFormulaPlayground,
   FORMULA_COLUMNS,
+  FORMULA_ROW_COUNT,
   indexToColumnId,
   type FormulaPlaygroundHandle,
 } from './lib/formula-mode';
@@ -346,6 +347,93 @@ export const App = (): JSX.Element => {
     });
   }, []);
 
+  // Tick to force a re-render after edits mutate underlying data so the
+  // canvas re-reads cells. Used in memory mode (writeCell) and formula
+  // mode (applyInput).
+  const [editTick, setEditTick] = useState(0);
+
+  // Map a visual row index back to the source row index for the current
+  // memory view. Edits/paste arrive in visual coordinates; the underlying
+  // typed-array column needs the source row.
+  const visualToSourceRow = useCallback(
+    (visualRow: number): number => {
+      if (memoryView?.permutation) return memoryView.permutation[visualRow] ?? visualRow;
+      return visualRow;
+    },
+    [memoryView],
+  );
+
+  const editable = useMemo<
+    boolean | ((rowIndex: number, columnId: string) => boolean) | undefined
+  >(() => {
+    if (mode === 'memory' && memoryDataset?.materialized) {
+      return (_row, columnId) => columnId !== 'rowIndex';
+    }
+    if (mode === 'formula') return true;
+    return undefined;
+  }, [mode, memoryDataset]);
+
+  const handleCellEdit = useCallback(
+    (rowIndex: number, columnId: string, newValue: string): void => {
+      if (mode === 'memory' && memoryDataset?.materialized) {
+        const sourceRow = visualToSourceRow(rowIndex);
+        const ok = memoryDataset.writeCell(sourceRow, columnId, newValue);
+        if (ok) setEditTick((t) => t + 1);
+        return;
+      }
+      if (mode === 'formula' && formula) {
+        const id = formula.cellIdAt(rowIndex, columnId);
+        formula.applyInput(id, newValue);
+        setFormulaTick((t) => t + 1);
+        return;
+      }
+    },
+    [mode, memoryDataset, formula, visualToSourceRow],
+  );
+
+  const handlePaste = useCallback(
+    (
+      anchorRow: number,
+      anchorCol: number,
+      pasted: ReadonlyArray<ReadonlyArray<string>>,
+    ): void => {
+      if (mode === 'memory' && memoryDataset?.materialized) {
+        let wrote = false;
+        for (let r = 0; r < pasted.length; r++) {
+          const row = pasted[r]!;
+          const visualRow = anchorRow + r;
+          if (visualRow >= safeRowSource.numRows) break;
+          const sourceRow = visualToSourceRow(visualRow);
+          for (let c = 0; c < row.length; c++) {
+            const colIdx = anchorCol + c;
+            const column = safeColumns[colIdx];
+            if (!column || column.id === 'rowIndex') continue;
+            if (memoryDataset.writeCell(sourceRow, column.id, row[c] ?? '')) wrote = true;
+          }
+        }
+        if (wrote) setEditTick((t) => t + 1);
+        return;
+      }
+      if (mode === 'formula' && formula) {
+        for (let r = 0; r < pasted.length; r++) {
+          const row = pasted[r]!;
+          const visualRow = anchorRow + r;
+          if (visualRow >= FORMULA_ROW_COUNT) break;
+          for (let c = 0; c < row.length; c++) {
+            const colIdx = anchorCol + c;
+            const colId = indexToColumnId(colIdx);
+            if (!colId) continue;
+            const cellId = formula.cellIdAt(visualRow, colId);
+            formula.applyInput(cellId, row[c] ?? '');
+          }
+        }
+        setFormulaTick((t) => t + 1);
+        return;
+      }
+    },
+    [mode, memoryDataset, formula, safeColumns, safeRowSource, visualToSourceRow],
+  );
+
   const { ref, grid } = useOneGrid({
     columns: safeColumns,
     rowSource: safeRowSource,
@@ -355,10 +443,12 @@ export const App = (): JSX.Element => {
     sort,
     expanded: expandedRows,
     detailHeight: 200,
-    // Conditionally spread getDetailContent + onToggleExpand: under
-    // `exactOptionalPropertyTypes` we can't assign `undefined` to an
-    // optional field, so we omit the keys entirely when off.
+    // Conditionally spread optional callbacks/props so undefined isn't
+    // assigned to optional fields (exactOptionalPropertyTypes).
     ...(getDetailContent ? { getDetailContent } : {}),
+    ...(editable !== undefined ? { editable } : {}),
+    onCellEdit: handleCellEdit,
+    onPaste: handlePaste,
     onToggleExpand: handleToggleExpand,
     onFrame: (s) => {
       setStats(s);
@@ -428,6 +518,15 @@ export const App = (): JSX.Element => {
     grid.scrollToRow(0);
     grid.refresh();
   }, [memoryView, grid, mode]);
+
+  // Memory mode: writeCell mutates underlying typed arrays in place. The
+  // canvas reads through getCell on every frame, but we still need to
+  // explicitly force one pass after an edit so the cell repaints
+  // immediately on commit (rather than waiting for the next scroll).
+  useEffect(() => {
+    if (mode !== 'memory' || !grid || editTick === 0) return;
+    grid.refresh();
+  }, [editTick, grid, mode]);
 
   const addColumnFilter = useCallback(() => {
     const firstColumn = SSRM_COLUMNS[0]?.id ?? 'firstName';

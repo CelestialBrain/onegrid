@@ -153,3 +153,93 @@ describe('Grid', () => {
     document.body.removeChild(host);
   });
 });
+
+describe('Grid · cell editing', () => {
+  it('beginEdit / commitEdit fires onCellEdit with new value and old value', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const edits: Array<{ row: number; col: string; n: string; o: unknown }> = [];
+    const grid = new Grid({
+      host,
+      columns: COLUMNS,
+      rowSource: rowSource(50),
+      rowHeight: 24,
+      editable: true,
+      onCellEdit: (row, col, n, o) => {
+        edits.push({ row, col, n, o });
+      },
+    });
+    grid.beginEdit(3, 1);
+    expect(grid.isEditing()).toBe(true);
+    // Mutate the editor input directly to simulate typing.
+    const input = host.querySelector('input');
+    expect(input).not.toBeNull();
+    input!.value = 'hello';
+    grid.commitEdit();
+    expect(grid.isEditing()).toBe(false);
+    expect(edits).toEqual([{ row: 3, col: 'b', n: 'hello', o: 'b-3' }]);
+    grid.destroy();
+    document.body.removeChild(host);
+  });
+
+  it('cancelEdit does not fire onCellEdit', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let count = 0;
+    const grid = new Grid({
+      host,
+      columns: COLUMNS,
+      rowSource: rowSource(50),
+      rowHeight: 24,
+      editable: true,
+      onCellEdit: () => {
+        count++;
+      },
+    });
+    grid.beginEdit(2, 0);
+    grid.cancelEdit();
+    expect(count).toBe(0);
+    expect(grid.isEditing()).toBe(false);
+    grid.destroy();
+    document.body.removeChild(host);
+  });
+
+  it('beginEdit is gated by the editable predicate', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const grid = new Grid({
+      host,
+      columns: COLUMNS,
+      rowSource: rowSource(50),
+      rowHeight: 24,
+      editable: (_row, columnId) => columnId === 'b',
+    });
+    grid.beginEdit(0, 0); // column 'a' — gated off
+    expect(grid.isEditing()).toBe(false);
+    grid.beginEdit(0, 1); // column 'b' — allowed
+    expect(grid.isEditing()).toBe(true);
+    grid.destroy();
+    document.body.removeChild(host);
+  });
+
+  it('beginEdit with initialText replaces value (type-ahead)', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const edits: string[] = [];
+    const grid = new Grid({
+      host,
+      columns: COLUMNS,
+      rowSource: rowSource(50),
+      rowHeight: 24,
+      editable: true,
+      onCellEdit: (_r, _c, n) => edits.push(n),
+    });
+    grid.beginEdit(0, 0, 'X');
+    const input = host.querySelector('input');
+    expect(input?.value).toBe('X');
+    grid.commitEdit();
+    expect(edits).toEqual(['X']);
+    grid.destroy();
+    document.body.removeChild(host);
+  });
+});

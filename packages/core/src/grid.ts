@@ -97,6 +97,19 @@ export class Grid {
   private mountedDetails = new Map<number, HTMLDivElement>();
   private readonly chevronWidth = 24;
 
+  // Cell editing.
+  private readonly editable: boolean | ((row: number, columnId: string) => boolean) | undefined;
+  private readonly onCellEdit:
+    | ((row: number, columnId: string, newValue: string, oldValue: unknown) => void)
+    | undefined;
+  private readonly onBeginEdit: ((row: number, columnId: string) => void) | undefined;
+  private readonly onPaste:
+    | ((anchorRow: number, anchorCol: number, rows: ReadonlyArray<ReadonlyArray<string>>) => void)
+    | undefined;
+  private editingRow: number | null = null;
+  private editingCol: number | null = null;
+  private editorEl: HTMLInputElement | null = null;
+
   constructor(options: GridOptions) {
     this.host = options.host;
     this.columns = options.columns;
@@ -117,6 +130,12 @@ export class Grid {
     this.detailHeight = options.detailHeight ?? 200;
     this.getDetailContent = options.getDetailContent;
     this.onToggleExpand = options.onToggleExpand;
+
+    // Cell editing wiring.
+    this.editable = options.editable;
+    this.onCellEdit = options.onCellEdit;
+    this.onBeginEdit = options.onBeginEdit;
+    this.onPaste = options.onPaste;
     if (options.expanded) {
       this.expanded = new Set(options.expanded);
     }
@@ -190,8 +209,10 @@ export class Grid {
     this.scrollHost.addEventListener('scroll', this.handleScroll, { passive: true });
     this.scrollHost.addEventListener('pointerdown', this.handlePointerDown);
     this.scrollHost.addEventListener('pointermove', this.handlePointerMove);
+    this.scrollHost.addEventListener('dblclick', this.handleDoubleClick);
     window.addEventListener('pointerup', this.handlePointerUp);
     window.addEventListener('keydown', this.handleKeyDown);
+    window.addEventListener('paste', this.handlePaste);
 
     this.handleResize();
     this.scheduleRender();
@@ -343,14 +364,18 @@ export class Grid {
     this.scrollHost.removeEventListener('scroll', this.handleScroll);
     this.scrollHost.removeEventListener('pointerdown', this.handlePointerDown);
     this.scrollHost.removeEventListener('pointermove', this.handlePointerMove);
+    this.scrollHost.removeEventListener('dblclick', this.handleDoubleClick);
     window.removeEventListener('pointerup', this.handlePointerUp);
     window.removeEventListener('keydown', this.handleKeyDown);
+    window.removeEventListener('paste', this.handlePaste);
     // Only remove the elements we appended — leave any framework-owned
     // siblings alone.
     this.canvas.remove();
     this.scrollHost.remove();
     this.a11yMount.remove();
     this.detailLayer?.remove();
+    this.editorEl?.remove();
+    this.editorEl = null;
     this.mountedDetails.clear();
   }
 
@@ -477,6 +502,43 @@ export class Grid {
     // Ctrl/Cmd + A → select all.
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
       this.selectAll();
+      e.preventDefault();
+      return;
+    }
+
+    // F2 / Enter → begin editing the active cell with current value
+    // pre-selected. Excel/Sheets convention.
+    const active = this.selection.active;
+    if (active && (e.key === 'F2' || e.key === 'Enter') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (this.isEditableAt(active.row, active.col)) {
+        this.beginEdit(active.row, active.col);
+        e.preventDefault();
+        return;
+      }
+    }
+    // Delete / Backspace → clear active cell via empty edit. Bypasses the
+    // editor so power users can blow through ranges.
+    if (active && (e.key === 'Delete' || e.key === 'Backspace') && !e.metaKey && !e.ctrlKey) {
+      const column = this.columns[active.col];
+      if (column && this.isEditableAt(active.row, active.col)) {
+        const oldValue = this.rowSource.getCell(active.row, column.id);
+        this.onCellEdit?.(active.row, column.id, '', oldValue);
+        e.preventDefault();
+        return;
+      }
+    }
+    // Type-ahead: any printable single character with no modifiers
+    // (other than Shift) opens the editor with that character as the
+    // initial value, replacing whatever was in the cell.
+    if (
+      active &&
+      e.key.length === 1 &&
+      !e.metaKey &&
+      !e.ctrlKey &&
+      !e.altKey &&
+      this.isEditableAt(active.row, active.col)
+    ) {
+      this.beginEdit(active.row, active.col, e.key);
       e.preventDefault();
       return;
     }
@@ -658,6 +720,213 @@ export class Grid {
   }
 
   // ---------------------------------------------------------------------------
+  // Cell editing
+  // ---------------------------------------------------------------------------
+
+  /** Whether (row, columnId) accepts edits given the current `editable`
+   *  prop. Falls through to false if `editable` was never supplied. */
+  private isEditableAt(row: number, col: number): boolean {
+    if (!this.editable) return false;
+    const column = this.columns[col];
+    if (!column) return false;
+    if (typeof this.editable === 'function') return this.editable(row, column.id);
+    return this.editable === true;
+  }
+
+  isEditing(): boolean {
+    return this.editingRow !== null && this.editingCol !== null;
+  }
+
+  /** Begin editing at (row, col). Optional initial text replaces the
+   *  current cell value (used for type-ahead — pressing 'A' on a cell
+   *  starts the editor with 'A'). When omitted, the editor opens
+   *  pre-populated with the current displayed value. */
+  beginEdit(row: number, col: number, initialText?: string): void {
+    if (!this.isEditableAt(row, col)) return;
+    if (this.isEditing()) this.commitEdit();
+    const column = this.columns[col];
+    if (!column) return;
+
+    this.editingRow = row;
+    this.editingCol = col;
+
+    if (!this.editorEl) {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.spellcheck = false;
+      input.style.cssText =
+        'position:absolute;box-sizing:border-box;margin:0;padding:0 6px;' +
+        'border:2px solid #6ea8fe;outline:none;background:#ffffff;color:#0b0d10;' +
+        `font-family:${this.theme.fontFamily};font-size:${String(this.theme.fontSize)}px;` +
+        'z-index:5;';
+      input.addEventListener('keydown', this.handleEditorKeyDown);
+      input.addEventListener('blur', this.handleEditorBlur);
+      this.host.appendChild(input);
+      this.editorEl = input;
+    }
+
+    if (initialText !== undefined) {
+      this.editorEl.value = initialText;
+    } else {
+      const value = this.rowSource.getCell(row, column.id);
+      this.editorEl.value = column.format ? column.format(value, row) : String(value ?? '');
+    }
+    this.editorEl.style.display = 'block';
+    this.repositionEditor();
+    this.editorEl.focus();
+    if (initialText === undefined) this.editorEl.select();
+    else {
+      const len = this.editorEl.value.length;
+      this.editorEl.setSelectionRange(len, len);
+    }
+
+    this.onBeginEdit?.(row, column.id);
+  }
+
+  /** Commit the current edit and notify via onCellEdit. No-op when not
+   *  editing. The grid does not write the value back itself; the
+   *  consumer is expected to update its row source. */
+  commitEdit(): void {
+    if (!this.isEditing() || !this.editorEl) return;
+    const row = this.editingRow!;
+    const col = this.editingCol!;
+    const column = this.columns[col];
+    const newValue = this.editorEl.value;
+
+    this.editingRow = null;
+    this.editingCol = null;
+    this.editorEl.style.display = 'none';
+
+    if (column) {
+      const oldValue = this.rowSource.getCell(row, column.id);
+      this.onCellEdit?.(row, column.id, newValue, oldValue);
+    }
+    this.scrollHost.focus();
+    this.scheduleRender();
+  }
+
+  cancelEdit(): void {
+    if (!this.isEditing() || !this.editorEl) return;
+    this.editingRow = null;
+    this.editingCol = null;
+    this.editorEl.style.display = 'none';
+    this.scrollHost.focus();
+    this.scheduleRender();
+  }
+
+  /** Position the editor over the editing cell. Called from beginEdit
+   *  and from tick() so the editor tracks scroll. If the cell is
+   *  scrolled offscreen we hide the editor (display:none) but keep the
+   *  pending value — re-shown when the cell scrolls back in. */
+  private repositionEditor(): void {
+    if (!this.editorEl || this.editingRow === null || this.editingCol === null) return;
+    const rect = this.cellViewportRect(this.editingRow, this.editingCol);
+    if (!rect) {
+      this.editorEl.style.display = 'none';
+      return;
+    }
+    this.editorEl.style.display = 'block';
+    this.editorEl.style.left = `${String(rect.left)}px`;
+    this.editorEl.style.top = `${String(rect.top)}px`;
+    this.editorEl.style.width = `${String(rect.width)}px`;
+    this.editorEl.style.height = `${String(rect.height)}px`;
+  }
+
+  /** Viewport-relative bounding box for (row, col), accounting for
+   *  scroll, frozen columns, and the header band. Returns null if the
+   *  cell is fully outside the visible area. */
+  private cellViewportRect(
+    row: number,
+    col: number,
+  ): { left: number; top: number; width: number; height: number } | null {
+    if (row < 0 || row >= this.rowSource.numRows) return null;
+    if (col < 0 || col >= this.columns.length) return null;
+
+    const rowTop = this.fenwick.prefixSum(row) - this.scrollTop + this.headerHeight;
+    const rowHeight = this.fenwick.get(row);
+    if (rowTop + rowHeight <= this.headerHeight) return null;
+    if (rowTop >= this.viewportHeight) return null;
+
+    const colLeft = this.cumulativeColumnWidths[col] ?? 0;
+    const colWidth = (this.cumulativeColumnWidths[col + 1] ?? colLeft) - colLeft;
+
+    let left: number;
+    if (col < this.frozenColumnCount) {
+      left = colLeft;
+    } else {
+      const frozenEnd = this.cumulativeColumnWidths[this.frozenColumnCount] ?? 0;
+      left = this.frozenWidth + (colLeft - frozenEnd) - this.scrollLeft;
+      if (left + colWidth <= this.frozenWidth) return null;
+      if (left >= this.viewportWidth) return null;
+    }
+
+    return { left, top: rowTop, width: colWidth, height: rowHeight };
+  }
+
+  private handleEditorKeyDown = (e: KeyboardEvent): void => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      this.commitEdit();
+      this.selection.moveActive(
+        e.shiftKey ? -1 : 1,
+        0,
+        this.rowSource.numRows,
+        this.columns.length,
+      );
+      this.notifySelectionChange();
+      this.scrollActiveIntoView();
+      return;
+    }
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      e.stopPropagation();
+      this.commitEdit();
+      this.selection.moveActive(
+        0,
+        e.shiftKey ? -1 : 1,
+        this.rowSource.numRows,
+        this.columns.length,
+      );
+      this.notifySelectionChange();
+      this.scrollActiveIntoView();
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      this.cancelEdit();
+      return;
+    }
+  };
+
+  private handleEditorBlur = (): void => {
+    if (this.isEditing()) this.commitEdit();
+  };
+
+  private handleDoubleClick = (e: MouseEvent): void => {
+    const cell = this.cellAtClient(e.clientX, e.clientY);
+    if (!cell) return;
+    if (!this.isEditableAt(cell.row, cell.col)) return;
+    this.beginEdit(cell.row, cell.col);
+    e.preventDefault();
+  };
+
+  private handlePaste = (e: ClipboardEvent): void => {
+    if (this.isEditing()) return; // let the input handle native paste
+    if (document.activeElement !== this.scrollHost) return;
+    if (!this.onPaste) return;
+    const text = e.clipboardData?.getData('text/plain') ?? '';
+    if (!text) return;
+    const anchor = this.selection.active;
+    if (!anchor) return;
+    const rows = parseTsv(text);
+    if (rows.length === 0) return;
+    e.preventDefault();
+    this.onPaste(anchor.row, anchor.col, rows);
+  };
+
+  // ---------------------------------------------------------------------------
   // Render loop
   // ---------------------------------------------------------------------------
 
@@ -689,6 +958,8 @@ export class Grid {
       this.lastRenderedScrollTop = this.scrollTop;
       this.lastRenderedScrollLeft = this.scrollLeft;
       this.needsRender = false;
+      // Track the cell editor with the latest layout. Cheap when not editing.
+      if (this.isEditing()) this.repositionEditor();
     }
     if (!this.destroyed) {
       this.rafHandle = requestAnimationFrame(this.tick);
@@ -1149,4 +1420,59 @@ function escapeHtml(s: string): string {
         return ch;
     }
   });
+}
+
+/**
+ * Parse Excel-style TSV (tab-separated values, with double-quote
+ * wrapping and `""` escaping) into a 2D array of strings. Trailing
+ * empty rows are dropped so a clipboard payload that ends with a
+ * newline doesn't produce a phantom row.
+ */
+function parseTsv(input: string): string[][] {
+  const rows: string[][] = [];
+  let cur: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (input[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+      continue;
+    }
+    if (ch === '"' && field === '') {
+      inQuotes = true;
+      continue;
+    }
+    if (ch === '\t') {
+      cur.push(field);
+      field = '';
+      continue;
+    }
+    if (ch === '\r') continue;
+    if (ch === '\n') {
+      cur.push(field);
+      rows.push(cur);
+      cur = [];
+      field = '';
+      continue;
+    }
+    field += ch;
+  }
+  if (field !== '' || cur.length > 0) {
+    cur.push(field);
+    rows.push(cur);
+  }
+  while (rows.length > 0 && rows[rows.length - 1]!.length === 1 && rows[rows.length - 1]![0] === '') {
+    rows.pop();
+  }
+  return rows;
 }

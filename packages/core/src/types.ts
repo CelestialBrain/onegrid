@@ -138,4 +138,36 @@ export interface GridOptions {
   /** Fires when the user clicks the chevron column on a row.
    *  Caller owns the expanded state and passes it back via `expanded`. */
   readonly onToggleExpand?: (rowIndex: number) => void;
+
+  // ---- Cell editing ----
+
+  /** Whether cells are editable. Pass a predicate to gate per cell.
+   *  Default: not editable. */
+  readonly editable?: boolean | ((rowIndex: number, columnId: string) => boolean);
+
+  /** Fires when the user commits an edit (Enter, Tab, or focus loss).
+   *  The grid does NOT mutate the row source itself — the consumer is
+   *  responsible for writing the value back. `newValue` is the raw
+   *  string from the editor; coerce as needed. */
+  readonly onCellEdit?: (
+    rowIndex: number,
+    columnId: string,
+    newValue: string,
+    oldValue: unknown,
+  ) => void;
+
+  /** Fires when an edit session begins (F2, Enter, double-click, or
+   *  type-ahead). Use to log/analytics; cancel by ignoring (the grid
+   *  begins regardless). */
+  readonly onBeginEdit?: (rowIndex: number, columnId: string) => void;
+
+  /** Fires on Cmd/Ctrl+V when the grid has focus. The clipboard text
+   *  is parsed as TSV and delivered as a 2D array of strings; the
+   *  consumer writes them to whichever data source it owns, anchored
+   *  at the current active cell. */
+  readonly onPaste?: (
+    anchorRow: number,
+    anchorCol: number,
+    rows: ReadonlyArray<ReadonlyArray<string>>,
+  ) => void;
 }
