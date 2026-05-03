@@ -1,0 +1,87 @@
+:root {
+  --bg: #0b0d10;
+  --panel: #14171c;
+  --border: #2a2f37;
+  --text: #e7e9ec;
+  --muted: #8b929c;
+  --accent: #6ea8fe;
+  --header-bg: #1b1f26;
+  --row-alt: #11141a;
+  --row-hover: #1a1f27;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.toolbar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 10px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.toolbar h1 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+}
+
+.toolbar select,
+.toolbar button {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.toolbar .meter {
+  margin-left: auto;
+  display: flex;
+  gap: 16px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.toolbar .meter strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.grid-host {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.a11y-shadow {
+  position: absolute;
+  left: -100000px;
+  top: -100000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
