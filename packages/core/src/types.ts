@@ -2,6 +2,8 @@
 // Core types for @onegrid/core.
 // =============================================================================
 
+import type { SelectionSnapshot } from './selection';
+
 /**
  * Per-column configuration. Width is the only required visual property; the
  * rest is callbacks the renderer invokes per cell.
@@ -105,4 +107,6 @@ export interface GridOptions {
   readonly theme?: Partial<GridTheme>;
   /** Per-frame callback for live FPS meters. */
   readonly onFrame?: (stats: FrameStats) => void;
+  /** Fires whenever the selection changes (click, drag, keyboard, programmatic). */
+  readonly onSelectionChange?: (selection: SelectionSnapshot) => void;
 }

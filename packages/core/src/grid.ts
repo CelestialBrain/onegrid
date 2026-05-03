@@ -25,6 +25,7 @@ import {
   type MetricsSnapshot,
   type RowSource,
 } from './types';
+import { SelectionModel, type CellPosition, type SelectionSnapshot } from './selection';
 
 interface FrameSample {
   ts: number;
@@ -78,6 +79,10 @@ export class Grid {
   private totalColumnsWidth = 0;
   private frozenWidth = 0;
 
+  private readonly selection = new SelectionModel();
+  private readonly onSelectionChange: ((s: SelectionSnapshot) => void) | undefined;
+  private isPointerDragging = false;
+
   constructor(options: GridOptions) {
     this.host = options.host;
     this.columns = options.columns;
@@ -86,6 +91,7 @@ export class Grid {
     this.frozenColumnCount = options.frozenColumnCount ?? 0;
     this.theme = { ...DEFAULT_THEME, ...options.theme };
     this.onFrame = options.onFrame;
+    this.onSelectionChange = options.onSelectionChange;
 
     this.dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
 
@@ -137,6 +143,9 @@ export class Grid {
     });
     this.resizeObserver.observe(this.host);
     this.scrollHost.addEventListener('scroll', this.handleScroll, { passive: true });
+    this.scrollHost.addEventListener('pointerdown', this.handlePointerDown);
+    this.scrollHost.addEventListener('pointermove', this.handlePointerMove);
+    window.addEventListener('pointerup', this.handlePointerUp);
     window.addEventListener('keydown', this.handleKeyDown);
 
     this.handleResize();
@@ -244,8 +253,63 @@ export class Grid {
     if (this.rafHandle !== null) cancelAnimationFrame(this.rafHandle);
     this.resizeObserver.disconnect();
     this.scrollHost.removeEventListener('scroll', this.handleScroll);
+    this.scrollHost.removeEventListener('pointerdown', this.handlePointerDown);
+    this.scrollHost.removeEventListener('pointermove', this.handlePointerMove);
+    window.removeEventListener('pointerup', this.handlePointerUp);
     window.removeEventListener('keydown', this.handleKeyDown);
     this.host.innerHTML = '';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Selection
+  // ---------------------------------------------------------------------------
+
+  getSelection(): SelectionSnapshot {
+    return this.selection.snapshot();
+  }
+
+  selectCell(pos: CellPosition): void {
+    this.selection.selectCell(pos);
+    this.notifySelectionChange();
+    this.scheduleRender();
+  }
+
+  clearSelection(): void {
+    this.selection.clear();
+    this.notifySelectionChange();
+    this.scheduleRender();
+  }
+
+  selectAll(): void {
+    this.selection.selectAll(this.rowSource.numRows, this.columns.length);
+    this.notifySelectionChange();
+    this.scheduleRender();
+  }
+
+  /**
+   * Serialize the current selection as TSV (Excel/Sheets-compatible) and
+   * write it to the system clipboard. Returns the TSV string for testability.
+   */
+  async copySelectionToClipboard(): Promise<string> {
+    const tsv = this.selection.toTsv((row, col) => {
+      const column = this.columns[col];
+      if (!column) return '';
+      const value = this.rowSource.getCell(row, column.id);
+      return column.format ? column.format(value, row) : String(value ?? '');
+    });
+    if (tsv && typeof navigator !== 'undefined' && navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(tsv);
+      } catch {
+        // Clipboard write can fail in non-secure contexts; the caller still
+        // gets the string back and can use a custom fallback.
+      }
+    }
+    return tsv;
+  }
+
+  private notifySelectionChange(): void {
+    this.onSelectionChange?.(this.selection.snapshot());
   }
 
   // ---------------------------------------------------------------------------
@@ -293,11 +357,40 @@ export class Grid {
 
   private handleKeyDown = (e: KeyboardEvent): void => {
     if (document.activeElement !== this.scrollHost) return;
+
+    // Ctrl/Cmd + C → copy selection as TSV.
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c') {
+      void this.copySelectionToClipboard();
+      e.preventDefault();
+      return;
+    }
+    // Ctrl/Cmd + A → select all.
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
+      this.selectAll();
+      e.preventDefault();
+      return;
+    }
+
+    // Selection-aware arrow keys: extend with shift, replace without.
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      const dr = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
+      const dc = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+      if (e.shiftKey && !this.selection.isEmpty()) {
+        this.selection.extendActiveBy(dr, dc, this.rowSource.numRows, this.columns.length);
+      } else {
+        this.selection.moveActive(dr, dc, this.rowSource.numRows, this.columns.length);
+      }
+      this.notifySelectionChange();
+      this.scrollActiveIntoView();
+      this.scheduleRender();
+      e.preventDefault();
+      return;
+    }
+
+    // Fallback: scroll-only nav.
     const pageStep = Math.max(1, Math.floor(this.viewportHeight / 24));
     let delta = 0;
-    if (e.key === 'ArrowDown') delta = 24;
-    else if (e.key === 'ArrowUp') delta = -24;
-    else if (e.key === 'PageDown') delta = pageStep * 24;
+    if (e.key === 'PageDown') delta = pageStep * 24;
     else if (e.key === 'PageUp') delta = -pageStep * 24;
     else if (e.key === 'Home') {
       this.scrollHost.scrollTo({ top: 0 });
@@ -311,6 +404,92 @@ export class Grid {
     this.scrollHost.scrollBy({ top: delta });
     e.preventDefault();
   };
+
+  // ---------------------------------------------------------------------------
+  // Pointer events → selection
+  // ---------------------------------------------------------------------------
+
+  private handlePointerDown = (e: PointerEvent): void => {
+    const cell = this.cellAtClient(e.clientX, e.clientY);
+    if (!cell) return;
+    if (e.shiftKey && !this.selection.isEmpty()) {
+      this.selection.extendActiveRange(cell);
+    } else if (e.metaKey || e.ctrlKey) {
+      this.selection.addRange(cell);
+    } else {
+      this.selection.startRange(cell);
+    }
+    this.isPointerDragging = true;
+    try {
+      this.scrollHost.setPointerCapture(e.pointerId);
+    } catch {
+      // setPointerCapture can throw if the element doesn't have it; harmless.
+    }
+    this.notifySelectionChange();
+    this.scheduleRender();
+  };
+
+  private handlePointerMove = (e: PointerEvent): void => {
+    if (!this.isPointerDragging) return;
+    const cell = this.cellAtClient(e.clientX, e.clientY);
+    if (!cell) return;
+    this.selection.extendActiveRange(cell);
+    this.notifySelectionChange();
+    this.scheduleRender();
+  };
+
+  private handlePointerUp = (): void => {
+    this.isPointerDragging = false;
+  };
+
+  private cellAtClient(clientX: number, clientY: number): CellPosition | null {
+    const rect = this.host.getBoundingClientRect();
+    const localX = clientX - rect.left;
+    const localY = clientY - rect.top;
+    if (localY < this.headerHeight) return null;
+    if (localX < 0 || localY < 0) return null;
+    if (localX > this.viewportWidth || localY > this.viewportHeight) return null;
+
+    const yInLayout = localY - this.headerHeight + this.scrollTop;
+    if (yInLayout < 0) return null;
+    const row = this.fenwick.indexAtOffset(yInLayout);
+    if (row < 0 || row >= this.rowSource.numRows) return null;
+
+    let col: number;
+    if (localX < this.frozenWidth) {
+      // Frozen band: column index lies in [0, frozenColumnCount).
+      col = colAtX(this.cumulativeColumnWidths, localX, 0, this.frozenColumnCount);
+    } else {
+      // Scrolling band: subtract frozen offset, add scrollLeft.
+      const xInLayout =
+        localX -
+        this.frozenWidth +
+        this.scrollLeft +
+        (this.cumulativeColumnWidths[this.frozenColumnCount] ?? 0);
+      col = colAtX(
+        this.cumulativeColumnWidths,
+        xInLayout,
+        this.frozenColumnCount,
+        this.columns.length,
+      );
+    }
+    if (col < 0) return null;
+    return { row, col };
+  }
+
+  private scrollActiveIntoView(): void {
+    const active = this.selection.active;
+    if (!active) return;
+    const top = this.fenwick.prefixSum(active.row);
+    const bottom = top + this.fenwick.get(active.row);
+    const viewportTop = this.scrollTop;
+    const viewportBottom = this.scrollTop + this.viewportHeight - this.headerHeight;
+    if (top < viewportTop) {
+      this.scrollHost.scrollTo({ top });
+    } else if (bottom > viewportBottom) {
+      this.scrollHost.scrollTo({ top: bottom - (this.viewportHeight - this.headerHeight) });
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Render loop
@@ -449,6 +628,7 @@ export class Grid {
       ctx.restore();
     }
 
+    this.drawSelectionOverlay(start, end);
     this.drawHeader();
     this.updateAccessibilityShadow(start, end);
 
@@ -457,6 +637,55 @@ export class Grid {
       visibleRowEnd: end,
       drawCellsPerFrame: drawnCells,
     };
+  }
+
+  private drawSelectionOverlay(start: number, end: number): void {
+    if (this.selection.isEmpty()) return;
+    const ctx = this.ctx;
+    const ranges = this.selection.normalizedRanges();
+    const active = this.selection.active;
+
+    for (const range of ranges) {
+      if (range.rowEnd < start || range.rowStart > end) continue;
+      const rowFrom = Math.max(range.rowStart, start);
+      const rowTo = Math.min(range.rowEnd, end);
+      const yTop =
+        this.headerHeight + (this.fenwick.prefixSum(rowFrom) - this.scrollTop);
+      let h = 0;
+      for (let r = rowFrom; r <= rowTo; r++) h += this.fenwick.get(r);
+
+      const colFrom = Math.max(range.colStart, 0);
+      const colTo = Math.min(range.colEnd, this.columns.length - 1);
+      for (let c = colFrom; c <= colTo; c++) {
+        const isFrozen = c < this.frozenColumnCount;
+        const x = isFrozen
+          ? (this.cumulativeColumnWidths[c] ?? 0)
+          : this.frozenWidth +
+            ((this.cumulativeColumnWidths[c] ?? 0) -
+              (this.cumulativeColumnWidths[this.frozenColumnCount] ?? 0)) -
+            this.scrollLeft;
+        const w = this.columns[c]?.width ?? 0;
+        if (x + w < 0 || x > this.viewportWidth) continue;
+        ctx.fillStyle = 'rgba(110, 168, 254, 0.18)';
+        ctx.fillRect(x, yTop, w, h);
+      }
+    }
+
+    if (active && active.row >= start && active.row <= end) {
+      const isFrozen = active.col < this.frozenColumnCount;
+      const x = isFrozen
+        ? (this.cumulativeColumnWidths[active.col] ?? 0)
+        : this.frozenWidth +
+          ((this.cumulativeColumnWidths[active.col] ?? 0) -
+            (this.cumulativeColumnWidths[this.frozenColumnCount] ?? 0)) -
+          this.scrollLeft;
+      const y = this.headerHeight + (this.fenwick.prefixSum(active.row) - this.scrollTop);
+      const w = this.columns[active.col]?.width ?? 0;
+      const h = this.fenwick.get(active.row);
+      ctx.strokeStyle = '#6ea8fe';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    }
   }
 
   private drawRows(
@@ -643,6 +872,18 @@ const EMPTY_SNAPSHOT: MetricsSnapshot = {
   scrollPxTotal: 0,
   cellsPerFrameAvg: 0,
 };
+
+function colAtX(
+  cumulative: Float32Array,
+  x: number,
+  start: number,
+  endExclusive: number,
+): number {
+  for (let c = start; c < endExclusive; c++) {
+    if ((cumulative[c + 1] ?? 0) > x) return c;
+  }
+  return endExclusive - 1;
+}
 
 function percentile(sorted: ReadonlyArray<number>, p: number): number {
   if (sorted.length === 0) return 0;
