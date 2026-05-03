@@ -1,36 +1,83 @@
 // =============================================================================
 // @onegrid/formula
 //
-// Excel-compatible formula engine. Native parser (no GPL license entanglement),
-// dependency graph with range-node decomposition, Adapton-style demand-driven
-// recompute, signals integration.
+// Excel-compatible formula engine. Native parser (no GPL entanglement),
+// recursive-descent expression grammar, ~30 built-in functions, and an
+// evaluator that resolves cell / range references through a user-supplied
+// CellResolver.
 //
-// Public API surface (planned). Implementations TODO.
+// Public API:
+//   - parseFormula(input)           → AST
+//   - evaluate(node, resolver)      → value | FormulaError
+//   - createFormulaEngine()         → { evaluate, registerFunction, ... }
+//   - FormulaError + isFormulaError + error sentinels (DIV_ZERO, etc.)
+//
+// Future work (not in v0.0.3):
+//   - Adapton-style demand-driven recompute
+//   - Dependency graph with range-node decomposition
+//   - More functions (VLOOKUP, INDEX, MATCH, statistical, financial)
+//   - Array formulas / dynamic arrays
+//
 // =============================================================================
 
-export interface FormulaCell {
-  readonly source: string;
-  readonly value: unknown;
-  readonly error?: FormulaError;
-}
-
-export interface FormulaError {
-  readonly code: string;
-  readonly message: string;
-}
+import { parseFormula } from './parser';
+import { evaluate, type CellResolver } from './evaluator';
+import {
+  getFunction,
+  listFormulaFunctions,
+  registerFormulaFunction,
+  type FormulaFn,
+} from './functions';
+import { isFormulaError, FormulaError } from './errors';
 
 export interface FormulaEngine {
-  readonly setCell: (cellId: string, source: string) => void;
-  readonly clearCell: (cellId: string) => void;
-  readonly getValue: (cellId: string) => unknown;
-  readonly recompute: () => void;
-  readonly registerFunction: (name: string, fn: (...args: unknown[]) => unknown) => void;
+  /** Parse a formula string and return its AST. Throws on syntax errors. */
+  readonly parse: (input: string) => ReturnType<typeof parseFormula>;
+  /** Parse + evaluate. Returns the value or a FormulaError sentinel. */
+  readonly evaluate: (input: string, resolver: CellResolver) => unknown;
+  /** Register a custom function. Built-in names CAN be overridden. */
+  readonly registerFunction: (name: string, fn: FormulaFn) => void;
+  /** List all registered function names. */
+  readonly listFunctions: () => string[];
 }
 
-export const createFormulaEngine = (): FormulaEngine => {
-  throw new Error('@onegrid/formula: createFormulaEngine is not implemented yet.');
-};
+export function createFormulaEngine(): FormulaEngine {
+  return {
+    parse: parseFormula,
+    evaluate: (input, resolver) => {
+      try {
+        const ast = parseFormula(input);
+        return evaluate(ast, resolver);
+      } catch (err) {
+        if (err instanceof FormulaError) return err;
+        return new FormulaError('#VALUE!', String(err));
+      }
+    },
+    registerFunction: registerFormulaFunction,
+    listFunctions: listFormulaFunctions,
+  };
+}
 
-export const parseFormula = (_source: string): unknown => {
-  throw new Error('@onegrid/formula: parseFormula is not implemented yet.');
-};
+// Direct exports for power users who want to bypass the engine wrapper.
+export { parseFormula } from './parser';
+export { evaluate } from './evaluator';
+export { isFormulaError, FormulaError };
+export {
+  registerFormulaFunction,
+  getFunction,
+  listFormulaFunctions,
+  type FormulaFn,
+} from './functions';
+export type { CellResolver } from './evaluator';
+export type { FormulaNode } from './ast';
+export {
+  DIV_ZERO,
+  VALUE_ERROR,
+  NAME_ERROR,
+  REF_ERROR,
+  NA_ERROR,
+  NUM_ERROR,
+} from './errors';
+export type { FormulaErrorCode } from './errors';
+
+export { FormulaSyntaxError } from './tokenizer';
