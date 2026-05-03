@@ -65,9 +65,18 @@ test('SSRM · slow 3G · block fetches still complete and grid still fills', asy
   await page.evaluate(() => {
     window.__onegrid?.scrollToRow(10_000);
   });
-  await page.waitForTimeout(2_500);
-
-  // Cache should have grown beyond the probe block despite the slow link.
+  // Poll for cache growth: each block fetch on slow 3G takes ~600ms
+  // (400ms RTT + payload). Two blocks should arrive within ~2s; we
+  // poll to 6s to absorb the long tail of TCP slow-start variance.
+  await page.waitForFunction(
+    () => {
+      const text = document.body.innerText;
+      const match = /cache (\d+) blocks/.exec(text);
+      return match !== null && Number(match[1]) >= 2;
+    },
+    undefined,
+    { timeout: 6_000 },
+  );
   const cacheText = await page.locator('text=/cache \\d+ blocks/').textContent();
   expect(cacheText).toBeTruthy();
   const blocks = Number(/cache (\d+) blocks/.exec(cacheText!)?.[1] ?? '0');

@@ -9,7 +9,12 @@ import {
   type SortModel,
 } from '@onegrid/react';
 import { downloadCsv, downloadXlsx, type ExportColumn } from '@onegrid/export';
-import { generateSynthetic } from './lib/synthetic';
+import {
+  buildMemoryView,
+  generateSynthetic,
+  materializeSynthetic,
+  type MaterializedSyntheticDataset,
+} from './lib/synthetic';
 import { connectSsrm, SSRM_COLUMNS, type SsrmConnection } from './lib/ssrm';
 import {
   FILTER_OPS,
@@ -23,7 +28,6 @@ import {
 import {
   createFormulaPlayground,
   FORMULA_COLUMNS,
-  FORMULA_ROW_COUNT,
   indexToColumnId,
   type FormulaPlaygroundHandle,
 } from './lib/formula-mode';
@@ -100,14 +104,46 @@ export const App = (): JSX.Element => {
   }, []);
 
   // ----- in-memory dataset -----
-  const memoryDataset = useMemo(() => {
+  // Materialize typed-array columns (so @onegrid/data sort/filter can run)
+  // for sizes up to 1M; for 10M, fall back to the lazy generator since
+  // materialization would cost ~500 MB.
+  const MATERIALIZE_LIMIT = 1_000_000;
+  const memoryDataset = useMemo<
+    | (MaterializedSyntheticDataset & { materialized: true })
+    | (ReturnType<typeof generateSynthetic> & { materialized: false })
+    | null
+  >(() => {
     if (mode !== 'memory') return null;
     const t0 = performance.now();
+    if (numRows <= MATERIALIZE_LIMIT) {
+      const d = materializeSynthetic(numRows);
+      const t1 = performance.now();
+      setGenMs(Math.round(t1 - t0));
+      return { ...d, materialized: true };
+    }
     const d = generateSynthetic(numRows);
     const t1 = performance.now();
     setGenMs(Math.round(t1 - t0));
-    return d;
+    return { ...d, materialized: false };
   }, [mode, numRows]);
+
+  // Apply sort + column filters to the materialized dataset. For >1M rows
+  // (no materialization), fall through with the lazy rowSource and disabled
+  // sort/filter UI.
+  const memoryView = useMemo(() => {
+    if (!memoryDataset || !memoryDataset.materialized) return null;
+    const t0 = performance.now();
+    const filterModel =
+      buildColumnFilter(columnFilters) ??
+      (filterQuery ? buildQuickFilter(filterQuery, memoryDataset.columns.map((c) => c.id)) : null);
+    const view = buildMemoryView(memoryDataset.table, sort, filterModel);
+    const t1 = performance.now();
+    if (view.permutation) {
+      // eslint-disable-next-line no-console
+      console.log(`[onegrid] memory sort+filter: ${(t1 - t0).toFixed(1)}ms · ${String(view.numRows)} rows`);
+    }
+    return view;
+  }, [memoryDataset, sort, columnFilters, filterQuery]);
 
   // ----- ssrm connection -----
   const [ssrm, setSsrm] = useState<SsrmConnection | null>(null);
@@ -178,7 +214,9 @@ export const App = (): JSX.Element => {
   const safeRowSource: RowSource = !dataReady
     ? EMPTY_ROW_SOURCE
     : mode === 'memory'
-      ? memoryDataset!.rowSource
+      ? // Use the sorted/filtered view when available; fall back to the
+        // lazy rowSource for 10M-row mode (no materialization).
+        memoryView?.rowSource ?? memoryDataset!.rowSource
       : mode === 'ssrm'
         ? ssrm!.rowSource
         : formula!.rowSource;
@@ -231,13 +269,8 @@ export const App = (): JSX.Element => {
     }
   }, [sort, grid, mode, ssrm]);
 
-  // Filter wiring (SSRM only). Combines quick-filter (OR-of-contains across
-  // every column) with structured per-column rules (AND of typed
-  // comparisons) into a single FilterModel:
-  //
-  //   final = (quickFilter) AND (columnFilter)
-  //
-  // Either branch may be null, in which case the other stands alone.
+  // SSRM filter wiring: forward the merged FilterModel to the row source,
+  // which invalidates blocks and refetches on next read.
   useEffect(() => {
     if (mode !== 'ssrm' || !ssrm) return;
     const columnIds = SSRM_COLUMNS.map((c) => c.id);
@@ -252,6 +285,14 @@ export const App = (): JSX.Element => {
     ssrm.handle.setFilter(merged);
     grid?.scrollToRow(0);
   }, [filterQuery, columnFilters, mode, ssrm, grid]);
+
+  // Memory mode: when sort or filter changes, scroll to top and refresh so
+  // the renderer reads through the new permutation.
+  useEffect(() => {
+    if (mode !== 'memory' || !grid) return;
+    grid.scrollToRow(0);
+    grid.refresh();
+  }, [memoryView, grid, mode]);
 
   const addColumnFilter = useCallback(() => {
     const firstColumn = SSRM_COLUMNS[0]?.id ?? 'firstName';
@@ -429,7 +470,34 @@ export const App = (): JSX.Element => {
                 ))}
               </select>
             </label>
-            <span style={{ color: 'var(--muted)' }}>generate: {genMs} ms</span>
+            <span style={{ color: 'var(--muted)' }}>
+              gen {genMs}ms ·{' '}
+              {memoryDataset?.materialized
+                ? `${safeRowSource.numRows.toLocaleString()} rows`
+                : `${numRows.toLocaleString()} rows (lazy — sort/filter disabled)`}
+            </span>
+            {memoryDataset?.materialized && (
+              <>
+                <input
+                  type="search"
+                  placeholder="Quick filter…"
+                  value={filterQuery}
+                  onChange={(e) => {
+                    setFilterQuery(e.target.value);
+                  }}
+                  style={{ minWidth: 180 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowFilterPanel((s) => !s);
+                  }}
+                  style={{ fontWeight: showFilterPanel ? 600 : 400 }}
+                >
+                  Filters{columnFilters.length > 0 ? ` (${String(columnFilters.length)})` : ''}
+                </button>
+              </>
+            )}
           </>
         )}
 

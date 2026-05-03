@@ -56,6 +56,9 @@ importers:
       '@onegrid/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@onegrid/data':
+        specifier: workspace:*
+        version: link:../../packages/data
       '@onegrid/export':
         specifier: workspace:*
         version: link:../../packages/export

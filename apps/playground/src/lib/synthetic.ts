@@ -1,18 +1,46 @@
 /**
- * Synthetic dataset generator. Returns oneGrid-shaped ColumnDef[] + RowSource
- * + per-row heights so the playground can stress the same memory model
- * the real engine uses.
+ * Synthetic dataset generator. Two flavors:
  *
- * Deterministic, seeded by row index so the data is reproducible across
+ *   generateSynthetic(numRows)       — lazy: getCell returns rowIndex,
+ *                                      column.format derives cell content
+ *                                      from the index. Allocation-free at
+ *                                      any size — best for pure render
+ *                                      benchmarks at 1M+ rows.
+ *
+ *   materializeSynthetic(numRows)    — eager: builds typed-array columns
+ *                                      and a ColumnTable so @onegrid/data's
+ *                                      sortIndex / filterIndex / aggregate
+ *                                      can operate on it. Memory cost:
+ *                                      ~50 bytes/row (≈ 50 MB at 1M rows).
+ *
+ *   buildMemoryView(table, sort, filter)
+ *                                    — applies sort + filter to a
+ *                                      ColumnTable and returns a permutation-
+ *                                      backed RowSource. The renderer reads
+ *                                      cells through it as if the data were
+ *                                      pre-sorted; no data is copied.
+ *
+ * Deterministic, seeded by row index so output is reproducible across
  * benchmark runs.
  */
 
-import type { ColumnDef, RowSource } from '@onegrid/react';
+import {
+  createColumnTable,
+  filterIndex,
+  sortIndex,
+  type ColumnInput,
+  type ColumnTable,
+} from '@onegrid/data';
+import type { ColumnDef, FilterModel, RowSource, SortModel } from '@onegrid/react';
 
 export interface SyntheticDataset {
   readonly columns: ReadonlyArray<ColumnDef>;
   readonly rowSource: RowSource;
   readonly heights: Float32Array;
+}
+
+export interface MaterializedSyntheticDataset extends SyntheticDataset {
+  readonly table: ColumnTable;
 }
 
 const FIRST_NAMES = [
@@ -39,16 +67,19 @@ const STATUS_COLORS: Record<(typeof STATUSES)[number], string> = {
   churned: '#e56f6f',
 };
 
+function makeHeights(numRows: number): Float32Array {
+  const heights = new Float32Array(numRows);
+  // 30% tall, 70% short — exercises FenwickHeights' variable-height path.
+  for (let i = 0; i < numRows; i++) heights[i] = i % 10 < 3 ? 40 : 24;
+  return heights;
+}
+
 /**
- * 30% of rows are tall (40 px), 70% short (24 px) so the FenwickHeights
- * variable-height path is exercised at every scroll.
+ * Lazy synthetic dataset — column.format derives display from the row index.
+ * Use this when you only need rendering performance (no sort/filter).
  */
 export function generateSynthetic(numRows: number): SyntheticDataset {
-  const heights = new Float32Array(numRows);
-  for (let i = 0; i < numRows; i++) {
-    heights[i] = i % 10 < 3 ? 40 : 24;
-  }
-
+  const heights = makeHeights(numRows);
   const columns: ReadonlyArray<ColumnDef> = [
     {
       id: 'rowIndex',
@@ -104,10 +135,180 @@ export function generateSynthetic(numRows: number): SyntheticDataset {
 
   const rowSource: RowSource = {
     numRows,
-    // Cell value is the row index itself; the column's format() does the lookup.
-    // This keeps the synthetic dataset allocation-free at any size.
     getCell: (rowIndex) => rowIndex,
   };
 
   return { columns, rowSource, heights };
+}
+
+/**
+ * Eager synthetic dataset — typed-array columns + a ColumnTable so
+ * @onegrid/data ops (sortIndex, filterIndex, aggregate) can run.
+ *
+ * Memory cost: ~50 bytes per row. 1M rows ≈ 50 MB. Avoid at 10M unless
+ * you really need sort/filter — use generateSynthetic instead for
+ * pure render benchmarks at that scale.
+ */
+export function materializeSynthetic(numRows: number): MaterializedSyntheticDataset {
+  const heights = makeHeights(numRows);
+
+  const rowIndexCol = new Int32Array(numRows);
+  const firstNameCol: string[] = new Array(numRows);
+  const lastNameCol: string[] = new Array(numRows);
+  const revenueCol = new Float64Array(numRows);
+  const statusCol: string[] = new Array(numRows);
+  const scoreCol = new Int32Array(numRows);
+  const updatedAtCol: string[] = new Array(numRows);
+
+  for (let i = 0; i < numRows; i++) {
+    rowIndexCol[i] = i;
+    firstNameCol[i] = FIRST_NAMES[i % FIRST_NAMES.length] ?? '';
+    lastNameCol[i] = LAST_NAMES[(i * 17) % LAST_NAMES.length] ?? '';
+    revenueCol[i] = ((i * 1009) % 1_000_000) / 100;
+    statusCol[i] = STATUSES[i % STATUSES.length] ?? 'active';
+    scoreCol[i] = (i * 31) % 100;
+    const t = 1_700_000_000_000 + i * 60_000;
+    updatedAtCol[i] = new Date(t).toISOString().slice(0, 16).replace('T', ' ');
+  }
+
+  const columnInputs: ColumnInput[] = [
+    { schema: { id: 'rowIndex', type: 'int32' }, data: rowIndexCol },
+    { schema: { id: 'firstName', type: 'utf8' }, data: firstNameCol },
+    { schema: { id: 'lastName', type: 'utf8' }, data: lastNameCol },
+    { schema: { id: 'revenue', type: 'float64' }, data: revenueCol },
+    { schema: { id: 'status', type: 'utf8' }, data: statusCol },
+    { schema: { id: 'score', type: 'int32' }, data: scoreCol },
+    { schema: { id: 'updatedAt', type: 'utf8' }, data: updatedAtCol },
+  ];
+
+  const table = createColumnTable(columnInputs);
+
+  // Visual columns read raw values out of the typed arrays — formatters
+  // operate on the cell value, not the row index. This is what lets sort
+  // and filter "actually work" visually: when the renderer asks for
+  // visual row 0, we hand back source row N's value through a permutation.
+  const columns: ReadonlyArray<ColumnDef> = [
+    {
+      id: 'rowIndex',
+      width: 80,
+      displayName: '#',
+      format: (v) => String(v ?? ''),
+      color: () => '#8b929c',
+    },
+    {
+      id: 'firstName',
+      width: 130,
+      displayName: 'First name',
+      format: (v) => String(v ?? ''),
+    },
+    {
+      id: 'lastName',
+      width: 150,
+      displayName: 'Last name',
+      format: (v) => String(v ?? ''),
+    },
+    {
+      id: 'revenue',
+      width: 130,
+      displayName: 'Revenue',
+      format: (v) => (typeof v === 'number' ? `$${v.toFixed(2)}` : ''),
+    },
+    {
+      id: 'status',
+      width: 110,
+      displayName: 'Status',
+      format: (v) => String(v ?? ''),
+      color: (v) =>
+        typeof v === 'string' ? STATUS_COLORS[v as (typeof STATUSES)[number]] : undefined,
+    },
+    {
+      id: 'score',
+      width: 90,
+      displayName: 'Score',
+      format: (v) => String(v ?? ''),
+    },
+    {
+      id: 'updatedAt',
+      width: 170,
+      displayName: 'Updated',
+      format: (v) => String(v ?? ''),
+    },
+  ];
+
+  const rowSource: RowSource = {
+    numRows,
+    getCell: (rowIndex, columnId) => table.column(columnId).get(rowIndex),
+  };
+
+  return { columns, rowSource, heights, table };
+}
+
+export interface MemoryView {
+  readonly numRows: number;
+  readonly rowSource: RowSource;
+  /** Source-row indices in visual order. null = identity (no permutation). */
+  readonly permutation: Int32Array | null;
+}
+
+/**
+ * Apply sort + filter to a ColumnTable and return a permutation-backed
+ * RowSource. The renderer sees `numRows` reduced when filter narrows; the
+ * permutation maps visual rows to source rows in O(1) per cell read.
+ *
+ * Performance:
+ *   - filterIndex: O(rows × filter_complexity)
+ *   - sortIndex:   O(n log n) with one Intl.Collator instance for utf8
+ *
+ * 1M rows: filter typically <300ms, sort 400-600ms on M-class hardware
+ * (single-threaded; can move to a Web Worker if it becomes interactive
+ * blocker — that's v0.0.5 work).
+ */
+export function buildMemoryView(
+  table: ColumnTable,
+  sort: SortModel,
+  filter: FilterModel,
+): MemoryView {
+  let perm: Int32Array | null = null;
+
+  if (filter !== null) {
+    const sel = filterIndex(table, filter);
+    if (sort.length > 0) {
+      const fullPerm = sortIndex(table, sort);
+      const out = new Int32Array(sel.cardinality);
+      let j = 0;
+      for (let i = 0; i < fullPerm.length; i++) {
+        const srcIdx = fullPerm[i] ?? 0;
+        if (sel.contains(srcIdx)) out[j++] = srcIdx;
+      }
+      perm = out.subarray(0, j);
+    } else {
+      perm = sel.toIndices();
+    }
+  } else if (sort.length > 0) {
+    perm = sortIndex(table, sort);
+  }
+
+  if (perm === null) {
+    return {
+      numRows: table.numRows,
+      rowSource: {
+        numRows: table.numRows,
+        getCell: (rowIndex, columnId) => table.column(columnId).get(rowIndex),
+      },
+      permutation: null,
+    };
+  }
+
+  const finalPerm = perm;
+  return {
+    numRows: finalPerm.length,
+    rowSource: {
+      numRows: finalPerm.length,
+      getCell: (visualRow, columnId) => {
+        const srcIdx = finalPerm[visualRow] ?? 0;
+        return table.column(columnId).get(srcIdx);
+      },
+    },
+    permutation: finalPerm,
+  };
 }
