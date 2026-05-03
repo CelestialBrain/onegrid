@@ -55,6 +55,15 @@ application reaches for at some point.
 | **Sparklines in cells** | 🔵 | |
 | **Undo/redo** | 🔵 | Transactional edit history |
 | **Light theme + density variants** | 🔵 | Currently one dark theme |
+| **IME composition-aware editor commit** | 🔵 | Gate Enter-commits on `event.isComposing === false` so CJK input methods aren't broken mid-composition |
+| **Cell editor validation** | 🔵 | Sync + async validators that reject + keep editor open with error styling |
+| **Range fill-handle** | 🔵 | Drag the bottom-right corner of a selection to extrapolate values (Excel-style series fill) |
+| **Multi-select cell type with chips** | 🔵 | Multi-value column type rendering chips per cell, with a popover editor |
+| **Column-group visibility manager** | 🔵 | Toggle whole header groups on/off in one action |
+| **Header text wrap** | 🔵 | Opt-in wrap with auto-row-height in the header band |
+| **Page-level sticky header** | 🔵 | Header sticks to page scroll, not just the grid container — works for grids embedded in long-scroll pages |
+| **FDC3 broadcast + intent listener** | 🔵 | Fintech-desk interop: broadcast row context to peer apps, receive intents back |
+| **Mobile swipe-row actions** | 🔵 | Left/right swipe templates with action buttons; touch-first interaction model |
 
 ## 2. Performance
 
@@ -67,12 +76,16 @@ on benchmark charts.
 | GPU compute kernels (parallel reduce + filter mask) | ✅ | `@onegrid/webgpu` |
 | **Column virtualization** | 🔵 | For 500+ column grids |
 | **Web Worker offload** | 🔵 | Sort/filter/group/pivot off the main thread |
-| **Full WebGPU rendering path** | 🟣 | Canvas replacement: glyph atlas, SDF text, per-cell vertex buffers |
-| **Arrow IPC ingestion** | 🔵 | Zero-copy from server, streaming |
-| **Differential dataflow** | 🟣 | Source change → recompute only affected derived views |
-| **Incremental redraw** | 🟣 | Paint only cells that changed since last frame |
-| **SharedArrayBuffer for cross-thread viewport** | 🟣 | |
+| **Full WebGPU rendering path** | 🟣 | Canvas replacement: MSDF/SDF glyph atlas first, Slug-style per-curve evaluation as a phase-2 fallback, per-cell vertex buffer pipeline |
+| **Arrow IPC ingestion** | 🔵 | Zero-copy from server, streaming via Arrow Flight (gRPC-Web/Connect-Web) |
+| **Differential dataflow** | 🟣 | Source change → recompute only affected derived views; grounded in DBSP operator algebra (Budiu et al. VLDB 2023) |
+| **Incremental redraw with dirty-rect protocol** | 🟣 | Track dirty cell rectangles since last frame; paint only those rectangles |
+| **SharedArrayBuffer for cross-thread viewport** | 🟣 | Worker writes directly into a SAB the renderer reads — eliminates postMessage cost |
 | **Adaptive overscan** | 🔵 | Velocity-aware tuning that learns from real fling traces |
+| **Aggregation-pushdown SSRM** | 🔵 | Group-by happens in the database, not the browser; SSRM contract carries `groupBy` + `aggregations` |
+| **Worker-pool budget controller** | 🔵 | Cap how many cores the grid consumes so collaborative apps don't stall |
+| **BigInt-safe formula path** | 🔵 | Keep DB-typed integers in their own lane through the formula graph for currency / large-id columns |
+| **GPU hash-aggregate for group-by** | 🟣 | Parallel hash-aggregate compute kernel beyond reduce/filter |
 
 ## 3. Hierarchy & nesting
 
@@ -86,6 +99,8 @@ The "inner tables" axis: data and UI that nest cleanly.
 | **Nested grids inside detail panels** | 🔵 | Recursive oneGrid-in-oneGrid with focus + scroll containment |
 | **Server-side tree** | 🔵 | Push tree expansion + lazy children to the server, same DataSource shape |
 | **Recursive grouping + pivot mix** | 🔵 | Tree data with pivot columns at leaf level |
+| **Drag-drop reorder within tree / group** | 🔵 | Reorder rows across siblings in tree data and across groups; the most-requested gap in the wider grid ecosystem |
+| **Aggregation-aware group-row pin** | 🔵 | Parent group row pins at viewport top while scrolling its children |
 
 ## 4. Database + data infrastructure
 
@@ -112,6 +127,11 @@ ways commercial grids are structurally bad at.
 | **Row-level security / column permissions** | 🔵 | Declarative, server-enforced |
 | **Cross-database joins via DuckDB-WASM** | 🟣 | Remote Postgres + local Parquet + CSV, joined in-browser |
 | **Query builder UI** | 🟣 | Build SQL/Mongo queries through the grid UI itself, anchored on the column tool panel |
+| **Keyset/cursor canonicalization in SSRM** | 🔵 | Make compound `(updated_at, id)` keyset cursors the protocol default; document offset as legacy |
+| **Aggregation-pushdown protocol** | 🔵 | Extend the SSRM `BlockRequest` contract with `groupBy` + `aggregations` so servers can group/aggregate without round-tripping raw rows |
+| **Real-time row diff protocol** | 🔵 | `{ kind: 'insert' \| 'update' \| 'delete', pkey, patch, version }` over WS/SSE with monotonic version vectors so clients detect lost updates and re-sync |
+| **Universal CDC adapter shape** | 🔵 | Postgres LISTEN/NOTIFY, Mongo change streams, Kafka, Debezium — all funnel into the same `RowEvent` stream interface |
+| **Schema introspection helper** | 🔵 | `inferColumns(schema)` derives `ColumnDef[]` from Drizzle / Kysely / Prisma schema metadata |
 
 ## 5. Differentiation moats
 
@@ -132,10 +152,17 @@ the data layer and rendering layer in a way commercial alternatives don't.
 | **Plugin / extension API** | 🔵 | Third-party cell types, exports, data sources, themes |
 | **Embeddable block** | 🟣 | Drop oneGrid into Notion/Coda/Obsidian-style hosts |
 | **Linear range decomposition in the formula engine** | 🔵 | Sharing work across overlapping aggregates (A1:A100 → A1:A99 + A100) |
-| **Array formulas / dynamic arrays** | 🔵 | |
-| **Function library expansion** | 🔵 | VLOOKUP, INDEX, MATCH, statistical, financial, date/time |
-| **Conditional formatting** | 🔵 | Per-cell rules driven by the formula engine |
-| **Schema introspection** | 🔵 | Auto-derive ColumnDef[] from a database/ORM schema |
+| **Spill-style dynamic arrays** | 🔵 | Excel-365-style spilling formulas with `#SPILL!` errors when the spill range is blocked |
+| **Function library expansion** | 🔵 | Target ≥400 built-in functions across categories: lookup (VLOOKUP/INDEX/MATCH/XLOOKUP), statistical, financial, text, logical, date/time |
+| **Conditional formatting** | 🔵 | Per-cell rules driven by the formula engine; rule editor in the column tool panel |
+| **Schema introspection** | 🔵 | Auto-derive `ColumnDef[]` from a database/ORM schema |
+| **`@onegrid/migrate` CLI** | 🔵 | Codemod that translates other grids' column definitions to oneGrid configs; per-source migration playbook docs with feature-coverage matrix |
+| **MCP server for the grid** | 🟣 | Expose read/write/range/formula tools over the Model Context Protocol so LLMs can drive the grid as a first-class peer |
+| **DBSP-style derived view registration** | 🔵 | Public `defineView({ from, where, groupBy, agg })` API returning a live RowSource backed by incremental view maintenance |
+| **Salsa-style reactivity substrate** | 🔵 | On-demand memoization framework backing the formula engine, derived views, and the column tool panel — same pattern as `salsa-rs` |
+| **Accessibility conformance suite** | 🔵 | Playwright + axe + screen-reader harness gating CI against the W3C WAI-ARIA 1.2 grid pattern |
+| **Per-feature bundle slicing** | 🔵 | `bundle-budget.json` per package; CI fails on regressions so adopters can predict the cost of every feature flag |
+| **Range navigation history** | 🔵 | Browser-style back/forward stack within huge sheets — surprisingly absent across the field |
 
 ## 6. Sequencing
 
@@ -145,43 +172,54 @@ capability.
 
 ### v0.0.6 — "actually editable"
 Polish on what just shipped + the editing experience users expect.
-- Editor variants (dropdown, date picker, large text)
+- Editor variants (dropdown, date picker, large text, autocomplete, multi-select chips)
+- Cell editor validation (sync + async)
+- IME composition-aware editor commit
 - Custom cell renderers (React/Vue/Svelte/Solid)
 - Set filter
 - Floating filters
+- Header text wrap
 - Light theme + density variants
 - Tooltip system
 - Loading / no-rows / skeleton overlays
 - Schema introspection helper for adapters
+- `@onegrid/migrate` CLI (initial: AG-Grid-style and TanStack-style column definitions)
+- Accessibility conformance suite (CI-gated)
 
 ### v0.0.7 — "hierarchical"
 Tree data + nested grids = the "inner tables" milestone.
 - Tree data with lazy-load children
 - Nested grids inside detail panels
 - Server-side tree expansion
-- Sticky group rows
-- Drag-drop column reorder
-- Column tool panel / sidebar
+- Sticky group rows + aggregation-aware group-row pin
+- Drag-drop reorder (columns, rows, and within tree/group)
+- Range fill-handle
+- Column tool panel / sidebar with column-group visibility manager
 - Context menu
 - Selection checkbox column
 
 ### v0.0.8 — "data infrastructure"
 Lean into the database moat.
+- Keyset/cursor canonicalization in SSRM (protocol-level, before adapters land)
+- Aggregation-pushdown protocol (SSRM `BlockRequest` extension)
 - Raw Postgres adapter with LISTEN/NOTIFY live updates
 - MySQL + SQLite adapters
 - Optimistic mutations + conflict resolution (real impl)
-- Live updates protocol over WebSocket
-- Arrow IPC ingestion
+- Real-time row diff protocol with version vectors
+- Universal CDC adapter shape (Postgres / Mongo / Kafka / Debezium → unified `RowEvent`)
+- Arrow IPC + Arrow Flight ingestion
 - ClickHouse adapter
 - MongoDB adapter
 
 ### v0.0.9 — "performance"
 Push the ceiling above what commercial grids can hit.
-- Web Worker offload for sort/filter/group/pivot
+- DBSP-grounded operator algebra spec (prerequisite for differential dataflow)
+- Web Worker offload for sort/filter/group/pivot, with worker-pool budget controller
 - Column virtualization
 - Differential dataflow updates
-- Incremental redraw
+- Incremental redraw with dirty-rect protocol
 - Adaptive overscan
+- BigInt-safe formula path
 - Range chart + sparklines
 
 ### v0.0.10 — "moats"
@@ -191,17 +229,62 @@ The signature features that aren't on any other grid.
 - Time-travel / temporal data
 - Plugin / extension API
 - AI integration (filters/sorts/formulas from natural language)
+- MCP server for the grid (LLMs read/write through standardized tools)
+- Salsa-style reactivity substrate refactor
 
 ### v0.1.0 — "WebGPU rendering"
 The flagship moonshot.
-- Glyph atlas + SDF text
+- MSDF glyph atlas (the lower-risk path, ports cleanly from the public WebGPU MSDF sample)
+- Slug-style per-curve quadratic Bézier text (atlas-free fallback for arbitrarily-large zoom)
 - Per-cell vertex buffer pipeline
+- GPU hash-aggregate compute kernel for group-by
 - Compute-shader sort/filter at viewport scale
 - Cross-database joins via DuckDB-WASM in the same render frame
 
 ### v1.0.0 — "stable"
 Surface freeze, full a11y audit, every adapter promoted from
 experimental, semver guarantees, security review.
+
+---
+
+## Research foundations
+
+Several roadmap entries lean on published research and standards. These
+are public academic / standards references, not third-party
+implementations — oneGrid will reimplement everything from the public
+descriptions, never from any commercial source.
+
+- **Adapton (Hammer et al., PLDI 2014)** — demand-driven self-adjusting
+  computation. Already underpins the formula engine; will be extended to
+  derived views (groupings, pivots, filters) as first-class observers.
+  → `@onegrid/formula`, plus a planned `@onegrid/derived` package.
+- **DBSP (Budiu et al., VLDB 2023)** — generalized incremental view
+  maintenance. The principled foundation for the "differential dataflow"
+  roadmap entry.
+  → `@onegrid/ssrm` block-cache invalidation + a planned `@onegrid/dbsp`
+  operator engine.
+- **Differential Dataflow (McSherry et al., CIDR 2013)** — the
+  computation model DBSP formalizes; useful for multi-version timestamping
+  when grid edits race against server pushes.
+- **Noria (Gjengset et al., OSDI 2018)** — partially-stateful dataflow
+  for read-heavy apps. Shape for an SSRM mode that asks the server to
+  materialize only the visible viewport's state.
+- **salsa-rs** — Rust on-demand memoization framework used by
+  rust-analyzer. Target for a TS port as the reactivity substrate
+  beneath the formula engine, derived columns, and the column tool panel.
+- **HyperFormula range decomposition** — share work across overlapping
+  aggregates by splitting `A1:A100` into `A1:A99 ∪ A100`. The signature
+  technique behind the "linear range decomposition" roadmap entry.
+- **Apache Arrow Flight** — gRPC + Arrow record batches as wire format
+  with parallel transfer. The standard oneGrid will adopt for any
+  high-throughput data adapter.
+- **MSDF / Slug glyph rendering** — multi-channel signed distance fields
+  (atlas-based) and per-curve quadratic Bézier evaluation (atlas-free)
+  as the two-phase path for the WebGPU text pipeline.
+- **WAI-ARIA 1.2 grid pattern** — the standards-conformance target the
+  accessibility CI suite gates against.
+- **Yjs (YATA) and Automerge** — the two CRDT lineages the
+  collaborative-editing layer will offer as pluggable backends.
 
 ---
 
