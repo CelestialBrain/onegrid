@@ -101,8 +101,17 @@ export class Grid {
         : options.rowHeight,
     );
 
-    this.host.style.position = 'relative';
-    this.host.innerHTML = '';
+    // The host needs to be a positioning context for our absolute children.
+    // Only force `position: relative` if it's currently `static` — otherwise
+    // we'd clobber a caller's deliberate `position: absolute / fixed`, which
+    // would collapse the host to 0 height because relative positioning
+    // requires an explicit dimension to size against.
+    if (getComputedStyle(this.host).position === 'static') {
+      this.host.style.position = 'relative';
+    }
+    // We do NOT clear the host — React (or any framework) may own children
+    // there. The Grid only manages elements it appended itself, removed in
+    // destroy() via Element.remove().
 
     this.canvas = document.createElement('canvas');
     this.canvas.style.position = 'absolute';
@@ -248,6 +257,12 @@ export class Grid {
     this.frameBufferHead = 0;
   }
 
+  /** Force a redraw on the next animation frame. */
+  refresh(): void {
+    this.lastRenderedScrollTop = -1;
+    this.scheduleRender();
+  }
+
   destroy(): void {
     this.destroyed = true;
     if (this.rafHandle !== null) cancelAnimationFrame(this.rafHandle);
@@ -257,7 +272,11 @@ export class Grid {
     this.scrollHost.removeEventListener('pointermove', this.handlePointerMove);
     window.removeEventListener('pointerup', this.handlePointerUp);
     window.removeEventListener('keydown', this.handleKeyDown);
-    this.host.innerHTML = '';
+    // Only remove the elements we appended — leave any framework-owned
+    // siblings alone.
+    this.canvas.remove();
+    this.scrollHost.remove();
+    this.a11yMount.remove();
   }
 
   // ---------------------------------------------------------------------------

@@ -28,6 +28,9 @@ export function useOneGrid(options: UseOneGridOptions): UseOneGridReturn {
 
   useEffect(() => {
     if (!ref.current) return;
+    // Don't mount until we have real data. Lets consumers render a
+    // "connecting…" placeholder while async data sources resolve.
+    if (options.columns.length === 0 || options.rowSource.numRows === 0) return;
     const instance = new Grid({
       ...options,
       host: ref.current,

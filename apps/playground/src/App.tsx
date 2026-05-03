@@ -13,6 +13,11 @@ const ROW_OPTIONS = [1_000, 10_000, 100_000, 1_000_000, 10_000_000] as const;
 
 type Mode = 'memory' | 'ssrm';
 
+// Stable references so useOneGrid's effect doesn't re-fire while waiting
+// for async data sources to resolve.
+const EMPTY_COLUMNS: ReadonlyArray<ColumnDef> = [];
+const EMPTY_ROW_SOURCE: RowSource = { numRows: 0, getCell: () => null };
+
 declare global {
   interface Window {
     __onegrid?: {
@@ -75,19 +80,22 @@ export const App = (): JSX.Element => {
     };
   }, [mode]);
 
-  const columns: ReadonlyArray<ColumnDef> | null =
-    mode === 'memory' ? (memoryDataset?.columns ?? null) : SSRM_COLUMNS;
-  const rowSource: RowSource | null =
-    mode === 'memory' ? (memoryDataset?.rowSource ?? null) : (ssrm?.rowSource ?? null);
-  const rowHeight: number | Float32Array | null =
-    mode === 'memory' ? (memoryDataset?.heights ?? null) : 28;
+  const dataReady = mode === 'memory' ? memoryDataset !== null : ssrm !== null;
 
-  const ready = columns !== null && rowSource !== null && rowHeight !== null;
-
-  // useOneGrid is conditional on ready data; pass safe defaults when not.
-  const safeColumns: ReadonlyArray<ColumnDef> = columns ?? [];
-  const safeRowSource: RowSource = rowSource ?? { numRows: 0, getCell: () => null };
-  const safeRowHeight = rowHeight ?? 28;
+  // Module-level stable fallbacks so useOneGrid's effect doesn't re-fire
+  // every render while we're waiting for the async data source.
+  const safeColumns: ReadonlyArray<ColumnDef> = dataReady
+    ? mode === 'memory'
+      ? memoryDataset!.columns
+      : SSRM_COLUMNS
+    : EMPTY_COLUMNS;
+  const safeRowSource: RowSource = dataReady
+    ? mode === 'memory'
+      ? memoryDataset!.rowSource
+      : ssrm!.rowSource
+    : EMPTY_ROW_SOURCE;
+  const safeRowHeight: number | Float32Array =
+    mode === 'memory' && memoryDataset ? memoryDataset.heights : 28;
 
   const { ref, grid } = useOneGrid({
     columns: safeColumns,
@@ -100,11 +108,11 @@ export const App = (): JSX.Element => {
     },
   });
 
-  // SSRM: when blocks land, ask the grid to repaint by nudging it through
-  // its own scroll API (no-op scroll triggers a needsRender pass).
+  // SSRM: when blocks land, ask the grid to repaint. scrollBy(0) is a
+  // no-op when scroll position is unchanged, so use the explicit refresh.
   useEffect(() => {
     if (!grid || mode !== 'ssrm') return;
-    grid.scrollBy(0);
+    grid.refresh();
   }, [grid, ssrmTick, mode]);
 
   useEffect(() => {
@@ -225,9 +233,23 @@ export const App = (): JSX.Element => {
           </span>
         </div>
       </div>
-      <div className="grid-host" ref={ref}>
-        {!ready && (
-          <div style={{ padding: 16, color: 'var(--muted)' }}>
+      <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <div
+          ref={ref}
+          style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}
+        />
+        {!dataReady && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--muted)',
+              pointerEvents: 'none',
+            }}
+          >
             {mode === 'ssrm' ? 'connecting to SSRM…' : 'loading…'}
           </div>
         )}
