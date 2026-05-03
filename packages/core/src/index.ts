@@ -2,46 +2,42 @@
 // @onegrid/core
 //
 // Framework-agnostic engine. Owns the canvas renderer, accessibility shadow
-// DOM, signals reactive substrate, layout (Fenwick-tree row heights),
-// selection model, editor/menu overlay layer, and keyboard navigation.
+// DOM, layout (FenwickHeights row heights), velocity-aware overscan, and
+// keyboard navigation.
 //
-// Public API surface (planned). Implementations TODO.
+// Public API:
+//   - new Grid(options) — mount a grid into a host element
+//   - createGrid(options) — equivalent factory for non-class style usage
+//   - DEFAULT_THEME, types
 // =============================================================================
 
-import type { DataSource, Schema, SortModel, FilterModel } from '@onegrid/protocol';
+export { Grid } from './grid';
 
-export interface ColumnDef {
-  readonly id: string;
-  readonly width?: number;
-  readonly minWidth?: number;
-  readonly maxWidth?: number;
-  readonly pinned?: 'left' | 'right';
-  readonly sortable?: boolean;
-  readonly filterable?: boolean;
-  readonly resizable?: boolean;
-  readonly headerName?: string;
-}
+export {
+  DEFAULT_THEME,
+} from './types';
+export type {
+  ColumnDef,
+  FrameStats,
+  GridOptions,
+  GridTheme,
+  MetricsSnapshot,
+  RowSource,
+} from './types';
 
-export interface GridOptions {
-  readonly container: HTMLElement;
-  readonly columns: ReadonlyArray<ColumnDef>;
-  readonly dataSource: DataSource;
-  readonly rowHeight?: number | ((rowIndex: number) => number);
-  readonly headerHeight?: number;
-  readonly initialSort?: SortModel;
-  readonly initialFilter?: FilterModel;
-}
+import { Grid } from './grid';
+import type { GridOptions } from './types';
 
-export interface Grid {
-  readonly schema: () => Schema;
-  readonly setSort: (sort: SortModel) => void;
-  readonly setFilter: (filter: FilterModel) => void;
-  readonly scrollToRow: (rowIndex: number) => void;
-  readonly destroy: () => void;
-}
+/** Functional alias for `new Grid(options)`. */
+export const createGrid = (options: GridOptions): Grid => new Grid(options);
 
-export const createGrid = (_options: GridOptions): Grid => {
-  throw new Error('@onegrid/core: createGrid is not implemented yet.');
-};
-
-export type { DataSource, Schema, SortModel, FilterModel } from '@onegrid/protocol';
+// Re-export DataSource shapes from @onegrid/protocol so consumers don't need
+// to know there's a separate package for the contract types.
+export type {
+  BlockRequest,
+  BlockResponse,
+  DataSource,
+  FilterModel,
+  Schema,
+  SortModel,
+} from '@onegrid/protocol';

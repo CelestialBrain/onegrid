@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import { CanvasGrid, type FrameStats, type MetricsSnapshot } from './spike/CanvasGrid';
-import { generateSynthetic } from './spike/synthetic';
+import { useEffect, useMemo, useState, type JSX } from 'react';
+import { useOneGrid, type FrameStats, type MetricsSnapshot } from '@onegrid/react';
+import { generateSynthetic } from './lib/synthetic';
+
+const ROW_OPTIONS = [1_000, 10_000, 100_000, 1_000_000, 10_000_000] as const;
 
 declare global {
   interface Window {
@@ -14,11 +16,7 @@ declare global {
   }
 }
 
-const ROW_OPTIONS = [1_000, 10_000, 100_000, 1_000_000, 10_000_000] as const;
-
 export const App = (): JSX.Element => {
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const gridRef = useRef<CanvasGrid | null>(null);
   const [numRows, setNumRows] = useState<(typeof ROW_OPTIONS)[number]>(1_000_000);
   const [genMs, setGenMs] = useState<number>(0);
   const [stats, setStats] = useState<FrameStats | null>(null);
@@ -31,16 +29,19 @@ export const App = (): JSX.Element => {
     return d;
   }, [numRows]);
 
+  const { ref, grid } = useOneGrid({
+    columns: dataset.columns,
+    rowSource: dataset.rowSource,
+    rowHeight: dataset.heights,
+    headerHeight: 32,
+    frozenColumnCount: 1,
+    onFrame: (s) => {
+      setStats(s);
+    },
+  });
+
   useEffect(() => {
-    if (!hostRef.current) return;
-    const grid = new CanvasGrid({
-      host: hostRef.current,
-      data: dataset,
-      onFrame: (s) => {
-        setStats(s);
-      },
-    });
-    gridRef.current = grid;
+    if (!grid) return;
     window.__onegrid = {
       getMetrics: () => grid.getMetricsSnapshot(),
       reset: () => {
@@ -57,14 +58,11 @@ export const App = (): JSX.Element => {
       },
     };
     return () => {
-      grid.destroy();
-      gridRef.current = null;
       delete window.__onegrid;
     };
-  }, [dataset]);
+  }, [grid]);
 
   const copyMetrics = (): void => {
-    const grid = gridRef.current;
     if (!grid) return;
     const snap = grid.getMetricsSnapshot();
     void navigator.clipboard.writeText(JSON.stringify(snap, null, 2));
@@ -74,12 +72,14 @@ export const App = (): JSX.Element => {
   return (
     <div className="app">
       <div className="toolbar">
-        <h1>oneGrid · Phase 0 Spike A</h1>
+        <h1>oneGrid · v0.0.2</h1>
         <label>
           Rows{' '}
           <select
             value={numRows}
-            onChange={(e) => setNumRows(Number(e.target.value) as (typeof ROW_OPTIONS)[number])}
+            onChange={(e) => {
+              setNumRows(Number(e.target.value) as (typeof ROW_OPTIONS)[number]);
+            }}
           >
             {ROW_OPTIONS.map((n) => (
               <option key={n} value={n}>
@@ -92,7 +92,12 @@ export const App = (): JSX.Element => {
         <button type="button" onClick={copyMetrics}>
           Copy metrics
         </button>
-        <button type="button" onClick={() => gridRef.current?.resetMetrics()}>
+        <button
+          type="button"
+          onClick={() => {
+            grid?.resetMetrics();
+          }}
+        >
           Reset
         </button>
         <div className="meter">
@@ -114,7 +119,7 @@ export const App = (): JSX.Element => {
           </span>
         </div>
       </div>
-      <div className="grid-host" ref={hostRef} />
+      <div className="grid-host" ref={ref} />
     </div>
   );
 };

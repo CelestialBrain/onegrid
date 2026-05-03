@@ -1,26 +1,18 @@
 /**
- * Synthetic dataset generator. Columnar (Struct-of-Arrays) layout so we can
- * stress the same memory model the real engine will use.
+ * Synthetic dataset generator. Returns oneGrid-shaped ColumnDef[] + RowSource
+ * + per-row heights so the playground can stress the same memory model
+ * the real engine uses.
  *
- * No Arrow JS dependency yet — that's Spike B's concern. Plain typed arrays
- * are enough to validate canvas + Fenwick FPS.
+ * Deterministic, seeded by row index so the data is reproducible across
+ * benchmark runs.
  */
 
-export interface SyntheticDataset {
-  readonly numRows: number;
-  readonly columns: ReadonlyArray<SyntheticColumn>;
-  readonly heights: Float32Array;
-}
+import type { ColumnDef, RowSource } from '@onegrid/react';
 
-export interface SyntheticColumn {
-  readonly id: string;
-  readonly displayName: string;
-  readonly width: number;
-  readonly type: 'int' | 'float' | 'string' | 'bool' | 'date';
-  /** Format the cell at row index → display string. */
-  readonly format: (rowIndex: number) => string;
-  /** Optional per-cell foreground color. */
-  readonly color?: (rowIndex: number) => string | undefined;
+export interface SyntheticDataset {
+  readonly columns: ReadonlyArray<ColumnDef>;
+  readonly rowSource: RowSource;
+  readonly heights: Float32Array;
 }
 
 const FIRST_NAMES = [
@@ -48,9 +40,8 @@ const STATUS_COLORS: Record<(typeof STATUSES)[number], string> = {
 };
 
 /**
- * Deterministic synthetic generator (seeded by row index). 30% of rows are
- * tall (40 px) to exercise the Fenwick variable-height path; the rest are
- * compact (24 px).
+ * 30% of rows are tall (40 px), 70% short (24 px) so the FenwickHeights
+ * variable-height path is exercised at every scroll.
  */
 export function generateSynthetic(numRows: number): SyntheticDataset {
   const heights = new Float32Array(numRows);
@@ -58,65 +49,65 @@ export function generateSynthetic(numRows: number): SyntheticDataset {
     heights[i] = i % 10 < 3 ? 40 : 24;
   }
 
-  const columns: SyntheticColumn[] = [
+  const columns: ReadonlyArray<ColumnDef> = [
     {
       id: 'rowIndex',
-      displayName: '#',
       width: 80,
-      type: 'int',
-      format: (i) => i.toString(),
+      displayName: '#',
+      format: (_v, i) => i.toString(),
       color: () => '#8b929c',
     },
     {
       id: 'firstName',
-      displayName: 'First name',
       width: 130,
-      type: 'string',
-      format: (i) => FIRST_NAMES[i % FIRST_NAMES.length] ?? '',
+      displayName: 'First name',
+      format: (_v, i) => FIRST_NAMES[i % FIRST_NAMES.length] ?? '',
     },
     {
       id: 'lastName',
-      displayName: 'Last name',
       width: 150,
-      type: 'string',
-      format: (i) => LAST_NAMES[(i * 17) % LAST_NAMES.length] ?? '',
+      displayName: 'Last name',
+      format: (_v, i) => LAST_NAMES[(i * 17) % LAST_NAMES.length] ?? '',
     },
     {
       id: 'revenue',
-      displayName: 'Revenue',
       width: 130,
-      type: 'float',
-      format: (i) => {
+      displayName: 'Revenue',
+      format: (_v, i) => {
         const v = ((i * 1009) % 1_000_000) / 100;
         return `$${v.toFixed(2)}`;
       },
     },
     {
       id: 'status',
-      displayName: 'Status',
       width: 110,
-      type: 'string',
-      format: (i) => STATUSES[i % STATUSES.length] ?? 'active',
-      color: (i) => STATUS_COLORS[STATUSES[i % STATUSES.length] ?? 'active'],
+      displayName: 'Status',
+      format: (_v, i) => STATUSES[i % STATUSES.length] ?? 'active',
+      color: (_v, i) => STATUS_COLORS[STATUSES[i % STATUSES.length] ?? 'active'],
     },
     {
       id: 'score',
-      displayName: 'Score',
       width: 90,
-      type: 'int',
-      format: (i) => ((i * 31) % 100).toString(),
+      displayName: 'Score',
+      format: (_v, i) => ((i * 31) % 100).toString(),
     },
     {
       id: 'updatedAt',
-      displayName: 'Updated',
       width: 170,
-      type: 'date',
-      format: (i) => {
+      displayName: 'Updated',
+      format: (_v, i) => {
         const t = 1_700_000_000_000 + i * 60_000;
         return new Date(t).toISOString().slice(0, 16).replace('T', ' ');
       },
     },
   ];
 
-  return { numRows, columns, heights };
+  const rowSource: RowSource = {
+    numRows,
+    // Cell value is the row index itself; the column's format() does the lookup.
+    // This keeps the synthetic dataset allocation-free at any size.
+    getCell: (rowIndex) => rowIndex,
+  };
+
+  return { columns, rowSource, heights };
 }

@@ -1,6 +1,6 @@
 {
   "name": "onegrid",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A free, open-source, highly customizable and optimized grid system that consolidates features across all grid libraries (AG Grid, TanStack Table, etc.) — built to handle millions of rows, multiple databases, instant updates, and modern ORM integrations.",
   "license": "MIT",
   "type": "module",

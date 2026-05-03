@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/ssrm",
-  "version": "0.0.0",
+  "version": "0.0.2",
   "description": "oneGrid server-side row model: cursor-paged block fetcher, sliding-window cache, optimistic mutations, Arrow IPC over WebSocket/SSE.",
   "license": "MIT",
   "type": "module",

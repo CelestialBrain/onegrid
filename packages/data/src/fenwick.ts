@@ -1,15 +1,21 @@
-/**
- * Fenwick tree (binary indexed tree) over per-row heights.
- *
- * Provides:
- *   - O(log n) prefixSum(i)         — total height of rows [0, i)
- *   - O(log n) indexAtOffset(y)     — first row whose top edge is > y
- *   - O(log n) update(i, delta)     — add delta to row i's height
- *
- * Storage is a single Float32Array of size n + 1 (1-indexed). For 10M rows
- * that's ~40 MB — significant but tolerable, and zero GC pressure during
- * scroll because no allocation happens on the hot path.
- */
+// =============================================================================
+// FenwickHeights
+//
+// Fenwick (binary indexed) tree over per-row heights. Powers O(log n)
+// virtualization at 10M+ rows with variable row heights:
+//
+//   prefixSum(i)        — total height of rows [0, i)        — O(log n)
+//   indexAtOffset(y)    — first row whose top edge is > y    — O(log n)
+//   setHeight(i, h)     — replace row i's height             — O(log n)
+//
+// Storage is a Float32Array of size n + 1 (1-indexed). 10M rows uses ~40 MB,
+// significant but tolerable, with zero allocations on the scroll hot path.
+//
+// CodeMirror 6 uses the same data structure for line heights; the technique
+// scales to multi-million-row spreadsheets without measurable cost on each
+// scroll frame.
+// =============================================================================
+
 export class FenwickHeights {
   private readonly tree: Float32Array;
   private readonly heights: Float32Array;
@@ -58,7 +64,7 @@ export class FenwickHeights {
   /**
    * Find the first row index `i` such that prefixSum(i+1) > offset.
    * In other words: which row contains the pixel at vertical offset `y`.
-   * Returns length-1 if offset is beyond the bottom.
+   * Returns length-1 if offset is beyond the bottom; 0 if offset <= 0.
    */
   indexAtOffset(offset: number): number {
     if (offset <= 0) return 0;
@@ -77,7 +83,7 @@ export class FenwickHeights {
     return i;
   }
 
-  /** Replace row `index`'s height. */
+  /** Replace row `index`'s height. O(log n). */
   setHeight(index: number, newHeight: number): void {
     const cur = this.heights[index] ?? 0;
     if (cur === newHeight) return;
