@@ -217,6 +217,29 @@ export function tokenize(input: string): Token[] {
         continue;
       }
 
+      // Whole-column range: identifier is letters-only ($A or A) and the
+      // next char is `:` followed by another letters-only sequence.
+      // Examples: A:A, A:Z, $A:$A. Engine treats these as columns extending
+      // from row 1 to a configurable maxRow (default 1000).
+      if (/^[$]?[A-Za-z]+$/.test(s) && input[i] === ':') {
+        let j = i + 1;
+        let endLetters = '';
+        while (j < len && /[A-Za-z$]/.test(input[j]!)) {
+          endLetters += input[j];
+          j++;
+        }
+        if (endLetters && /^[$]?[A-Za-z]+$/.test(endLetters)) {
+          tokens.push({
+            type: 'rangeRef',
+            text: input.slice(start, j),
+            value: input.slice(start, j),
+            start,
+          });
+          i = j;
+          continue;
+        }
+      }
+
       // Otherwise: function name / identifier.
       tokens.push({ type: 'identifier', text: s, value: s, start });
       continue;

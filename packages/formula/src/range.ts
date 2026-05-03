@@ -45,7 +45,23 @@ export function parseCellRef(ref: string): CellRef {
   };
 }
 
-export function parseRangeRef(ref: string): { start: CellRef; end: CellRef } {
+/**
+ * Maximum row that whole-column refs (`A:A`) expand to. Excel's grid is
+ * 1,048,576 rows; we cap lower by default to keep memory bounded. Apps
+ * that need more should pass an explicit range like `A1:A1000000`, or
+ * raise this limit via `parseRangeRef(ref, { wholeColumnMaxRow: N })`.
+ */
+export const DEFAULT_WHOLE_COLUMN_MAX_ROW = 1000;
+
+export interface ParseRangeOptions {
+  /** Override the cap applied to whole-column refs like `A:A`. */
+  readonly wholeColumnMaxRow?: number;
+}
+
+export function parseRangeRef(
+  ref: string,
+  options: ParseRangeOptions = {},
+): { start: CellRef; end: CellRef } {
   const normalized = normalizeRangeRef(ref);
   const idx = normalized.indexOf(':');
   if (idx < 0) {
@@ -53,9 +69,22 @@ export function parseRangeRef(ref: string): { start: CellRef; end: CellRef } {
   }
   const startRef = normalized.slice(0, idx);
   const endRef = normalized.slice(idx + 1);
+  // Whole-column refs: `A:A`, `A:Z`. No row numbers — we expand to
+  // [row 1 .. wholeColumnMaxRow] for evaluation. Engines that want
+  // dynamic extent based on occupied cells can override the option.
+  const startIsColumnOnly = /^[A-Za-z]+$/.test(startRef);
+  const endIsColumnOnly = /^[A-Za-z]+$/.test(endRef);
+  if (startIsColumnOnly && endIsColumnOnly) {
+    const maxRow = options.wholeColumnMaxRow ?? DEFAULT_WHOLE_COLUMN_MAX_ROW;
+    const startCol = letterToIndex(startRef);
+    const endCol = letterToIndex(endRef);
+    return {
+      start: { column: Math.min(startCol, endCol), row: 0 },
+      end: { column: Math.max(startCol, endCol), row: maxRow - 1 },
+    };
+  }
   let start = parseCellRef(startRef);
   let end = parseCellRef(endRef);
-  // Normalize so start is top-left, end is bottom-right.
   if (start.column > end.column || start.row > end.row) {
     const minCol = Math.min(start.column, end.column);
     const maxCol = Math.max(start.column, end.column);
@@ -76,8 +105,8 @@ export function parseRangeRef(ref: string): { start: CellRef; end: CellRef } {
  * For very large ranges (>100k cells) the array allocation can be costly;
  * the engine caps range size internally to keep memory bounded.
  */
-export function expandRange(ref: string): string[] {
-  const { start, end } = parseRangeRef(ref);
+export function expandRange(ref: string, options: ParseRangeOptions = {}): string[] {
+  const { start, end } = parseRangeRef(ref, options);
   const out: string[] = [];
   for (let r = start.row; r <= end.row; r++) {
     for (let c = start.column; c <= end.column; c++) {
@@ -85,6 +114,16 @@ export function expandRange(ref: string): string[] {
     }
   }
   return out;
+}
+
+/** True if the ref uses whole-column syntax (`A:A`, `$A:$Z`). */
+export function isWholeColumnRange(ref: string): boolean {
+  const normalized = normalizeRangeRef(ref);
+  const colonIdx = normalized.indexOf(':');
+  if (colonIdx < 0) return false;
+  const startRef = normalized.slice(0, colonIdx);
+  const endRef = normalized.slice(colonIdx + 1);
+  return /^[A-Za-z]+$/.test(startRef) && /^[A-Za-z]+$/.test(endRef);
 }
 
 /** A1 = column 0, Z = 25, AA = 26, AB = 27, … */

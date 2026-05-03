@@ -94,11 +94,13 @@ export { DependencyGraph } from './dependency-graph';
 export {
   expandRange,
   isRangeId,
+  isWholeColumnRange,
   letterToIndex,
   indexToLetter,
   normalizeCellRef,
   normalizeRangeRef,
   parseCellRef,
   parseRangeRef,
+  DEFAULT_WHOLE_COLUMN_MAX_ROW,
 } from './range';
-export type { CellRef } from './range';
+export type { CellRef, ParseRangeOptions } from './range';
