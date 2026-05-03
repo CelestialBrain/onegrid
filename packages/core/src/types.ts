@@ -117,4 +117,25 @@ export interface GridOptions {
   /** Fires when the user clicks a column header. Use to toggle sort, open a
    *  filter menu, etc. Receives the columnId. */
   readonly onHeaderClick?: (columnId: string) => void;
+
+  // ---- Master-detail (expandable rows) ----
+
+  /** Set of currently-expanded row indices. The renderer reserves
+   *  `detailHeight` extra space below each expanded row and calls
+   *  `getDetailContent` to render the panel. */
+  readonly expanded?: ReadonlySet<number> | ReadonlyArray<number>;
+
+  /** Pixels of detail content per expanded row. Default 200. */
+  readonly detailHeight?: number;
+
+  /** Returns the DOM element to mount in the detail panel for a given row.
+   *  Return null to suppress the panel even though the row is in `expanded`.
+   *  The Grid manages mount/unmount lifecycle and positioning; the caller
+   *  is responsible only for producing the element. Re-mounted on layout
+   *  changes (sort/filter); cache externally if construction is expensive. */
+  readonly getDetailContent?: (rowIndex: number) => HTMLElement | null;
+
+  /** Fires when the user clicks the chevron column on a row.
+   *  Caller owns the expanded state and passes it back via `expanded`. */
+  readonly onToggleExpand?: (rowIndex: number) => void;
 }

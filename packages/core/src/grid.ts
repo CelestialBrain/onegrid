@@ -87,6 +87,16 @@ export class Grid {
   private isPointerDragging = false;
   private suppressSelectionUntilUp = false;
 
+  // Master-detail (expandable rows) state.
+  private baseHeights: Float32Array;
+  private expanded: Set<number> = new Set();
+  private readonly detailHeight: number;
+  private readonly getDetailContent: ((rowIndex: number) => HTMLElement | null) | undefined;
+  private readonly onToggleExpand: ((rowIndex: number) => void) | undefined;
+  private detailLayer: HTMLDivElement | null = null;
+  private mountedDetails = new Map<number, HTMLDivElement>();
+  private readonly chevronWidth = 24;
+
   constructor(options: GridOptions) {
     this.host = options.host;
     this.columns = options.columns;
@@ -101,11 +111,20 @@ export class Grid {
 
     this.dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
 
-    this.fenwick = new FenwickHeights(
+    // Master-detail wiring: track BASE row heights separately so we can
+    // compose effective heights = base + (expanded ? detailHeight : 0)
+    // when the user toggles row expansion.
+    this.detailHeight = options.detailHeight ?? 200;
+    this.getDetailContent = options.getDetailContent;
+    this.onToggleExpand = options.onToggleExpand;
+    if (options.expanded) {
+      this.expanded = new Set(options.expanded);
+    }
+    this.baseHeights =
       typeof options.rowHeight === 'number'
         ? new Float32Array(options.rowSource.numRows).fill(options.rowHeight)
-        : options.rowHeight,
-    );
+        : new Float32Array(options.rowHeight); // copy so the user's array isn't mutated
+    this.fenwick = new FenwickHeights(this.computeEffectiveHeights());
 
     // The host needs to be a positioning context for our absolute children.
     // Only force `position: relative` if it's currently `static` — otherwise
@@ -149,6 +168,17 @@ export class Grid {
     this.host.appendChild(this.canvas);
     this.host.appendChild(this.scrollHost);
     this.host.appendChild(this.a11yMount);
+
+    // Master-detail layer: only created when getDetailContent is provided.
+    // Sits above the canvas but inherits pointer-events from each panel
+    // child (so detail UIs can be interactive without intercepting grid
+    // scrolling).
+    if (this.getDetailContent) {
+      this.detailLayer = document.createElement('div');
+      this.detailLayer.style.cssText =
+        'position:absolute;inset:0;pointer-events:none;overflow:hidden;';
+      this.host.appendChild(this.detailLayer);
+    }
 
     this.cumulativeColumnWidths = new Float32Array(this.columns.length + 1);
     this.recomputeColumnLayout();
@@ -276,6 +306,36 @@ export class Grid {
     this.refresh();
   }
 
+  // ---------------------------------------------------------------------------
+  // Master-detail (expandable rows) — public API
+  // ---------------------------------------------------------------------------
+
+  /** Replace the expanded set. Triggers a layout pass + redraw so heights
+   *  update and detail panels mount/unmount as needed. */
+  setExpanded(expanded: ReadonlySet<number> | ReadonlyArray<number>): void {
+    this.expanded = new Set(expanded);
+    this.rebuildHeightsFromExpansion();
+    this.handleResize();
+    this.refresh();
+  }
+
+  /** Toggle a single row's expansion. */
+  toggleExpanded(rowIndex: number): void {
+    if (this.expanded.has(rowIndex)) {
+      this.expanded.delete(rowIndex);
+    } else {
+      this.expanded.add(rowIndex);
+    }
+    this.onToggleExpand?.(rowIndex);
+    this.rebuildHeightsFromExpansion();
+    this.handleResize();
+    this.refresh();
+  }
+
+  isExpanded(rowIndex: number): boolean {
+    return this.expanded.has(rowIndex);
+  }
+
   destroy(): void {
     this.destroyed = true;
     if (this.rafHandle !== null) cancelAnimationFrame(this.rafHandle);
@@ -290,6 +350,24 @@ export class Grid {
     this.canvas.remove();
     this.scrollHost.remove();
     this.a11yMount.remove();
+    this.detailLayer?.remove();
+    this.mountedDetails.clear();
+  }
+
+  /** Combine baseHeights + detailHeight per expanded row into the array
+   *  the FenwickHeights tree consumes. Cheap: ~1 alloc + O(rows) iteration.
+   *  Called on expansion changes. */
+  private computeEffectiveHeights(): Float32Array {
+    if (this.expanded.size === 0) return this.baseHeights;
+    const out = new Float32Array(this.baseHeights.length);
+    for (let i = 0; i < this.baseHeights.length; i++) {
+      out[i] = (this.baseHeights[i] ?? 0) + (this.expanded.has(i) ? this.detailHeight : 0);
+    }
+    return out;
+  }
+
+  private rebuildHeightsFromExpansion(): void {
+    this.fenwick = new FenwickHeights(this.computeEffectiveHeights());
   }
 
   // ---------------------------------------------------------------------------
@@ -457,6 +535,25 @@ export class Grid {
         }
       }
       return;
+    }
+
+    // Master-detail chevron click: leftmost `chevronWidth` pixels of any
+    // row toggle that row's expansion. Higher priority than cell selection.
+    if (
+      this.getDetailContent &&
+      localY >= this.headerHeight &&
+      localX >= 0 &&
+      localX < this.chevronWidth
+    ) {
+      const yInLayout = localY - this.headerHeight + this.scrollTop;
+      if (yInLayout >= 0) {
+        const row = this.fenwick.indexAtOffset(yInLayout);
+        if (row >= 0 && row < this.rowSource.numRows) {
+          this.toggleExpanded(row);
+          this.suppressSelectionUntilUp = true;
+          return;
+        }
+      }
     }
 
     const cell = this.cellAtClient(e.clientX, e.clientY);
@@ -698,6 +795,10 @@ export class Grid {
     }
 
     this.drawSelectionOverlay(start, end);
+    if (this.getDetailContent) {
+      this.drawChevrons(start, end, firstRowTop);
+      this.syncDetailLayer(start, end, firstRowTop);
+    }
     this.drawHeader();
     this.updateAccessibilityShadow(start, end);
 
@@ -706,6 +807,67 @@ export class Grid {
       visibleRowEnd: end,
       drawCellsPerFrame: drawnCells,
     };
+  }
+
+  /** Paint a small ▶/▼ chevron at the leftmost edge of every visible row.
+   *  Click detection lives in handlePointerDown; this is purely visual.
+   *  Drawn after rows but before the header so it doesn't bleed into the
+   *  header band on scroll. */
+  private drawChevrons(start: number, end: number, firstRowTop: number): void {
+    const ctx = this.ctx;
+    let y = this.headerHeight + (firstRowTop - this.scrollTop);
+    ctx.font = `${String(this.theme.fontSize)}px ${this.theme.fontFamily}`;
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = this.theme.mutedText;
+    for (let row = start; row <= end; row++) {
+      const baseH = this.baseHeights[row] ?? 0;
+      const expanded = this.expanded.has(row);
+      const glyph = expanded ? '\u25BC' : '\u25B6'; // ▼ / ▶
+      // Center the chevron vertically in the row's BASE band (not over
+      // the detail panel area).
+      ctx.fillText(glyph, 8, y + baseH / 2 + 1);
+      y += baseH + (expanded ? this.detailHeight : 0);
+    }
+  }
+
+  /** Mount / position / unmount detail panel divs based on which expanded
+   *  rows fall in the visible viewport. Reuses cached panel elements so
+   *  the user's content survives scroll without re-render. */
+  private syncDetailLayer(start: number, end: number, firstRowTop: number): void {
+    if (!this.detailLayer || !this.getDetailContent) return;
+    const visibleExpanded = new Set<number>();
+    let y = this.headerHeight + (firstRowTop - this.scrollTop);
+    for (let row = start; row <= end; row++) {
+      const baseH = this.baseHeights[row] ?? 0;
+      if (this.expanded.has(row)) {
+        visibleExpanded.add(row);
+        let panel = this.mountedDetails.get(row);
+        if (!panel) {
+          const content = this.getDetailContent(row);
+          if (content) {
+            panel = document.createElement('div');
+            panel.style.cssText =
+              'position:absolute;left:0;right:0;pointer-events:auto;overflow:hidden;';
+            panel.appendChild(content);
+            this.detailLayer.appendChild(panel);
+            this.mountedDetails.set(row, panel);
+          }
+        }
+        if (panel) {
+          panel.style.top = `${String(y + baseH)}px`;
+          panel.style.height = `${String(this.detailHeight)}px`;
+        }
+      }
+      y += baseH + (this.expanded.has(row) ? this.detailHeight : 0);
+    }
+    // Garbage-collect panels for rows that are no longer in view OR no
+    // longer expanded.
+    for (const [row, panel] of this.mountedDetails) {
+      if (!visibleExpanded.has(row)) {
+        panel.remove();
+        this.mountedDetails.delete(row);
+      }
+    }
   }
 
   private drawSelectionOverlay(start: number, end: number): void {

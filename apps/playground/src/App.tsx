@@ -230,6 +230,62 @@ export const App = (): JSX.Element => {
     [shiftDown],
   );
 
+  // Master-detail (memory mode only): track which rows are expanded.
+  const [expandedRows, setExpandedRows] = useState<ReadonlySet<number>>(() => new Set());
+
+  // Reset expansion when the dataset changes (mode/numRows shift).
+  useEffect(() => {
+    setExpandedRows(new Set());
+  }, [mode, numRows]);
+
+  // Build an HTMLElement-returning detail content function only in memory
+  // mode. Other modes don't need it; passing undefined is the off switch.
+  const getDetailContent = useMemo<((rowIndex: number) => HTMLElement | null) | undefined>(() => {
+    if (mode !== 'memory' || !memoryDataset?.materialized) return undefined;
+    return (rowIndex: number): HTMLElement | null => {
+      const root = document.createElement('div');
+      root.style.cssText =
+        'background:#11141a;border-top:1px solid #2a2f37;padding:14px 18px;height:100%;box-sizing:border-box;color:#a5b1c2;font-size:12px;display:flex;flex-direction:column;gap:8px;font-family:ui-sans-serif,system-ui,sans-serif;';
+
+      const title = document.createElement('div');
+      title.style.cssText = 'font-weight:600;color:#e7e9ec;font-size:13px;';
+      title.textContent = `Row ${String(rowIndex + 1)} · master-detail panel`;
+      root.appendChild(title);
+
+      const table = document.createElement('div');
+      table.style.cssText = 'display:grid;grid-template-columns:140px 1fr;gap:6px 16px;';
+      for (const col of memoryDataset.columns) {
+        const k = document.createElement('span');
+        k.style.cssText = 'color:#8b929c;';
+        k.textContent = String(col.displayName ?? col.id);
+        const v = document.createElement('span');
+        v.style.cssText = 'font-family:ui-monospace,monospace;color:#e7e9ec;';
+        const value = memoryDataset.rowSource.getCell(rowIndex, col.id);
+        v.textContent = col.format ? col.format(value, rowIndex) : String(value ?? '');
+        table.appendChild(k);
+        table.appendChild(v);
+      }
+      root.appendChild(table);
+
+      const hint = document.createElement('div');
+      hint.style.cssText = 'color:#8b929c;font-size:11px;';
+      hint.textContent =
+        'This panel is a real DOM child of the Grid\u2019s detail layer — interactive widgets (forms, charts, nested grids) drop in here directly.';
+      root.appendChild(hint);
+
+      return root;
+    };
+  }, [mode, memoryDataset]);
+
+  const handleToggleExpand = useCallback((rowIndex: number) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowIndex)) next.delete(rowIndex);
+      else next.add(rowIndex);
+      return next;
+    });
+  }, []);
+
   const { ref, grid } = useOneGrid({
     columns: safeColumns,
     rowSource: safeRowSource,
@@ -237,6 +293,13 @@ export const App = (): JSX.Element => {
     headerHeight: 32,
     frozenColumnCount: mode === 'formula' ? 0 : 1,
     sort,
+    expanded: expandedRows,
+    detailHeight: 200,
+    // Conditionally spread getDetailContent + onToggleExpand: under
+    // `exactOptionalPropertyTypes` we can't assign `undefined` to an
+    // optional field, so we omit the keys entirely when off.
+    ...(getDetailContent ? { getDetailContent } : {}),
+    onToggleExpand: handleToggleExpand,
     onFrame: (s) => {
       setStats(s);
     },
@@ -249,6 +312,12 @@ export const App = (): JSX.Element => {
       setFormulaInput(formula.getDisplaySource(id));
     },
   });
+
+  // Sync expanded set into the live grid imperatively. Re-creating the
+  // grid on every Set identity change would cost a full unmount/remount.
+  useEffect(() => {
+    grid?.setExpanded(expandedRows);
+  }, [grid, expandedRows]);
 
   // SSRM: when blocks land, ask the grid to repaint. scrollBy(0) is a
   // no-op when scroll position is unchanged, so use the explicit refresh.
