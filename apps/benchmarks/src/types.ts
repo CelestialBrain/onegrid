@@ -38,6 +38,8 @@ declare global {
       setRows: (n: number) => void;
       setSort: (sort: ReadonlyArray<SortField>) => void;
       getSort: () => ReadonlyArray<SortField>;
+      setFilter: (query: string) => void;
+      getFilter: () => string;
     };
   }
 }

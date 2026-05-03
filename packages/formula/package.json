@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/formula",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "oneGrid formula engine: Excel-compatible parser, dependency graph with range nodes, Adapton-style demand-driven recompute.",
   "license": "MIT",
   "type": "module",
