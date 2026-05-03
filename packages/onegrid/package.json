@@ -1,0 +1,47 @@
+{
+  "name": "onegrid",
+  "version": "0.0.1",
+  "description": "A free, open-source, highly customizable and optimized grid system that consolidates features across all grid libraries (AG Grid, TanStack Table, etc.) — built to handle millions of rows, multiple databases, instant updates, and modern ORM integrations.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "keywords": [
+    "grid",
+    "datagrid",
+    "table",
+    "data-table",
+    "ag-grid",
+    "tanstack",
+    "virtualization",
+    "orm",
+    "spreadsheet",
+    "ssrm",
+    "arrow",
+    "duckdb"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@onegrid/core": "workspace:*",
+    "@onegrid/data": "workspace:*",
+    "@onegrid/protocol": "workspace:*"
+  },
+  "publishConfig": { "access": "public" },
+  "sideEffects": false
+}

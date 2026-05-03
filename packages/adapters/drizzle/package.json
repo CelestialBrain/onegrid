@@ -1,0 +1,34 @@
+{
+  "name": "@onegrid/drizzle",
+  "version": "0.0.0",
+  "description": "Drizzle ORM adapter for oneGrid SSRM. Translates BlockRequest into Drizzle queries against Postgres, MySQL, SQLite.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@onegrid/protocol": "workspace:*"
+  },
+  "peerDependencies": {
+    "drizzle-orm": "^0.36.0"
+  },
+  "publishConfig": { "access": "public" },
+  "sideEffects": false
+}
