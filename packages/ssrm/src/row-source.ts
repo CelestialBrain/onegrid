@@ -7,8 +7,8 @@
 // placeholder. When the fetch resolves, calls onUpdate so the renderer
 // can re-render the now-populated row.
 //
-// Block size is configurable; default 200 rows per block matches AG Grid's
-// SSRM default. Concurrent fetches for the same block are deduplicated.
+// Block size is configurable; default 200 rows per block. Concurrent
+// fetches for the same block are deduplicated.
 //
 // Cursor strategy: this row source uses offset-encoded cursors
 // (`offset:N`) so it can jump directly to any row index without walking

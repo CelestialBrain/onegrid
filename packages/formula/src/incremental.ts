@@ -16,10 +16,10 @@
 //     re-enter a cell already on the stack, the inner reference resolves
 //     to #REF! and the outer evaluation completes without infinite recursion.
 //
-// Limitations (v0.0.4):
-//   - Linear range decomposition (sharing work across overlapping aggregates,
-//     HyperFormula's optimization) is not implemented. Each distinct range
-//     gets its own node; no decomposition of A1:A100 into A1:A99 + A100.
+// Limitations (v0.0.5):
+//   - Linear range decomposition (sharing work across overlapping aggregates
+//     by splitting A1:A100 into A1:A99 + A100) is not implemented. Each
+//     distinct range gets its own node.
 //   - Range expansion is eager: A1:Z1000 will allocate 26000 entries.
 //     Caller-side guard recommended for unbounded ranges.
 //

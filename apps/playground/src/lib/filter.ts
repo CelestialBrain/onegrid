@@ -2,8 +2,7 @@
  * Filter helpers for the playground:
  *
  *   buildQuickFilter(query, columnIds) — fans one query out as
- *     case-insensitive `contains` ORed across every column. AG Grid's
- *     "Quick Filter" equivalent.
+ *     case-insensitive `contains` ORed across every column.
  *
  *   buildColumnFilter(rules) — builds a structured FilterModel from a
  *     list of per-column rules with operator pickers. Combines via AND.
