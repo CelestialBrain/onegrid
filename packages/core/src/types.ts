@@ -170,4 +170,41 @@ export interface GridOptions {
     anchorCol: number,
     rows: ReadonlyArray<ReadonlyArray<string>>,
   ) => void;
+
+  // ---- Pinned rows ----
+
+  /** Optional read-only RowSource pinned to the top of the viewport,
+   *  below the header. Common use: aggregation/totals rows. Cells use
+   *  the same column ids; the source's getCell is read each frame. */
+  readonly pinnedTopRowSource?: RowSource;
+
+  /** Symmetric pinned-bottom source. */
+  readonly pinnedBottomRowSource?: RowSource;
+
+  /** Fixed row height (CSS px) for pinned bands. Default 28. Pinned
+   *  rows do not support per-row variable heights. */
+  readonly pinnedRowHeight?: number;
+
+  // ---- Column groups (header tree) ----
+
+  /** Optional grouping band. Each entry spans `children.length` adjacent
+   *  columns starting from the first un-grouped column. The header
+   *  band height doubles when at least one group is supplied. */
+  readonly columnGroups?: ReadonlyArray<ColumnGroupDef>;
+
+  // ---- Status bar ----
+
+  /** Show a status band below the data area summarizing the current
+   *  selection: count plus min/max/sum/avg for numeric cells. Default
+   *  false. */
+  readonly statusBar?: boolean;
+}
+
+export interface ColumnGroupDef {
+  /** Display label drawn in the top header band. */
+  readonly label: string;
+  /** Column ids spanned by this group, in display order. */
+  readonly columnIds: ReadonlyArray<string>;
+  /** Optional band background. */
+  readonly background?: string;
 }

@@ -391,6 +391,45 @@ export const App = (): JSX.Element => {
     [mode, memoryDataset, formula, visualToSourceRow],
   );
 
+  // Pinned-bottom totals row: only meaningful in materialized memory mode.
+  // Numeric columns sum into a single pinned row that lives beneath the
+  // scrollable data and tracks live edits via editTick.
+  const pinnedBottom = useMemo<RowSource | undefined>(() => {
+    if (mode !== 'memory' || !memoryDataset?.materialized) return undefined;
+    const totals: Record<string, unknown> = {};
+    const numRows = memoryDataset.rowSource.numRows;
+    for (const col of memoryDataset.columns) {
+      let sum = 0;
+      let any = false;
+      for (let r = 0; r < numRows; r++) {
+        const v = memoryDataset.rowSource.getCell(r, col.id);
+        const n = typeof v === 'number' ? v : Number(v);
+        if (Number.isFinite(n)) {
+          sum += n;
+          any = true;
+        }
+      }
+      totals[col.id] = any ? sum : '';
+    }
+    totals.firstName = 'Σ totals';
+    return {
+      numRows: 1,
+      getCell: (_row, columnId) => totals[columnId] ?? '',
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, memoryDataset, editTick]);
+
+  // Column groups: only show in memory mode for the materialized dataset.
+  // Maps the synthetic schema into three logical groups.
+  const columnGroups = useMemo(() => {
+    if (mode !== 'memory' || !memoryDataset?.materialized) return undefined;
+    return [
+      { label: 'Identity', columnIds: ['rowIndex', 'firstName', 'lastName'] },
+      { label: 'Activity', columnIds: ['revenue', 'status'] },
+      { label: 'Health', columnIds: ['score', 'updatedAt'] },
+    ];
+  }, [mode, memoryDataset]);
+
   const handlePaste = useCallback(
     (
       anchorRow: number,
@@ -447,6 +486,9 @@ export const App = (): JSX.Element => {
     // assigned to optional fields (exactOptionalPropertyTypes).
     ...(getDetailContent ? { getDetailContent } : {}),
     ...(editable !== undefined ? { editable } : {}),
+    ...(pinnedBottom ? { pinnedBottomRowSource: pinnedBottom } : {}),
+    ...(columnGroups ? { columnGroups } : {}),
+    statusBar: true,
     onCellEdit: handleCellEdit,
     onPaste: handlePaste,
     onToggleExpand: handleToggleExpand,

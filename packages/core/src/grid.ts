@@ -35,6 +35,9 @@ interface FrameSample {
   cells: number;
 }
 
+const STATUS_BAR_HEIGHT = 24;
+const COLUMN_GROUP_BAND_HEIGHT = 24;
+
 interface PerformanceWithMemory extends Performance {
   readonly memory?: {
     readonly usedJSHeapSize: number;
@@ -110,6 +113,14 @@ export class Grid {
   private editingCol: number | null = null;
   private editorEl: HTMLInputElement | null = null;
 
+  // Pinned rows + column groups + status bar.
+  private readonly pinnedTopRowSource: RowSource | undefined;
+  private readonly pinnedBottomRowSource: RowSource | undefined;
+  private readonly pinnedRowHeight: number;
+  private readonly columnGroups: ReadonlyArray<import('./types').ColumnGroupDef> | undefined;
+  private readonly statusBarEnabled: boolean;
+  private statusBarEl: HTMLDivElement | null = null;
+
   constructor(options: GridOptions) {
     this.host = options.host;
     this.columns = options.columns;
@@ -136,6 +147,13 @@ export class Grid {
     this.onCellEdit = options.onCellEdit;
     this.onBeginEdit = options.onBeginEdit;
     this.onPaste = options.onPaste;
+
+    // Pinned rows + column groups + status bar.
+    this.pinnedTopRowSource = options.pinnedTopRowSource;
+    this.pinnedBottomRowSource = options.pinnedBottomRowSource;
+    this.pinnedRowHeight = options.pinnedRowHeight ?? 28;
+    this.columnGroups = options.columnGroups;
+    this.statusBarEnabled = options.statusBar === true;
     if (options.expanded) {
       this.expanded = new Set(options.expanded);
     }
@@ -197,6 +215,20 @@ export class Grid {
       this.detailLayer.style.cssText =
         'position:absolute;inset:0;pointer-events:none;overflow:hidden;';
       this.host.appendChild(this.detailLayer);
+    }
+
+    // Status bar: a single absolute-positioned div pinned to the host's
+    // bottom edge. The render loop writes its text content; layout never
+    // shifts because the canvas already accounts for statusBarHeight().
+    if (this.statusBarEnabled) {
+      this.statusBarEl = document.createElement('div');
+      this.statusBarEl.style.cssText =
+        `position:absolute;left:0;right:0;bottom:0;height:${String(STATUS_BAR_HEIGHT)}px;` +
+        `background:${this.theme.headerBackground};color:${this.theme.mutedText};` +
+        'border-top:1px solid #2a2f37;display:flex;align-items:center;gap:18px;' +
+        `padding:0 14px;font-family:${this.theme.fontFamily};font-size:11px;` +
+        'font-variant-numeric:tabular-nums;pointer-events:none;user-select:none;z-index:3;';
+      this.host.appendChild(this.statusBarEl);
     }
 
     this.cumulativeColumnWidths = new Float32Array(this.columns.length + 1);
@@ -376,6 +408,8 @@ export class Grid {
     this.detailLayer?.remove();
     this.editorEl?.remove();
     this.editorEl = null;
+    this.statusBarEl?.remove();
+    this.statusBarEl = null;
     this.mountedDetails.clear();
   }
 
@@ -476,7 +510,7 @@ export class Grid {
     this.canvas.style.width = `${this.viewportWidth}px`;
     this.canvas.style.height = `${this.viewportHeight}px`;
     this.scrollSpacer.style.width = `${this.totalColumnsWidth}px`;
-    this.scrollSpacer.style.height = `${this.headerHeight + this.fenwick.totalHeight}px`;
+    this.scrollSpacer.style.height = `${this.dataBandTop() + this.fenwick.totalHeight + this.pinnedBottomBandHeight() + this.statusBarHeight()}px`;
     this.lastRenderedScrollTop = -1;
     this.scheduleRender();
   };
@@ -586,8 +620,11 @@ export class Grid {
     const localY = e.clientY - rect.top;
     const localX = e.clientX - rect.left;
 
+    const fullHeader = this.fullHeaderHeight();
+    const dataTop = this.dataBandTop();
+
     // Header click? Dispatch onHeaderClick instead of starting selection.
-    if (localY >= 0 && localY < this.headerHeight && this.onHeaderClick) {
+    if (localY >= 0 && localY < fullHeader && this.onHeaderClick) {
       const col = this.columnAtLocalX(localX);
       if (col !== null) {
         const column = this.columns[col];
@@ -603,11 +640,11 @@ export class Grid {
     // row toggle that row's expansion. Higher priority than cell selection.
     if (
       this.getDetailContent &&
-      localY >= this.headerHeight &&
+      localY >= dataTop &&
       localX >= 0 &&
       localX < this.chevronWidth
     ) {
-      const yInLayout = localY - this.headerHeight + this.scrollTop;
+      const yInLayout = localY - dataTop + this.scrollTop;
       if (yInLayout >= 0) {
         const row = this.fenwick.indexAtOffset(yInLayout);
         if (row >= 0 && row < this.rowSource.numRows) {
@@ -674,11 +711,13 @@ export class Grid {
     const rect = this.host.getBoundingClientRect();
     const localX = clientX - rect.left;
     const localY = clientY - rect.top;
-    if (localY < this.headerHeight) return null;
-    if (localX < 0 || localY < 0) return null;
+    const dataTop = this.dataBandTop();
+    const dataBottom = this.dataBandBottom();
+    if (localY < dataTop || localY >= dataBottom) return null;
+    if (localX < 0) return null;
     if (localX > this.viewportWidth || localY > this.viewportHeight) return null;
 
-    const yInLayout = localY - this.headerHeight + this.scrollTop;
+    const yInLayout = localY - dataTop + this.scrollTop;
     if (yInLayout < 0) return null;
     const row = this.fenwick.indexAtOffset(yInLayout);
     if (row < 0 || row >= this.rowSource.numRows) return null;
@@ -711,12 +750,54 @@ export class Grid {
     const top = this.fenwick.prefixSum(active.row);
     const bottom = top + this.fenwick.get(active.row);
     const viewportTop = this.scrollTop;
-    const viewportBottom = this.scrollTop + this.viewportHeight - this.headerHeight;
+    const dataHeight = this.dataBandBottom() - this.dataBandTop();
+    const viewportBottom = this.scrollTop + dataHeight;
     if (top < viewportTop) {
       this.scrollHost.scrollTo({ top });
     } else if (bottom > viewportBottom) {
-      this.scrollHost.scrollTo({ top: bottom - (this.viewportHeight - this.headerHeight) });
+      this.scrollHost.scrollTo({ top: bottom - dataHeight });
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pinned bands + status bar layout
+  // ---------------------------------------------------------------------------
+
+  /** Band reserved above the data rows for column-group labels (zero
+   *  unless `columnGroups` was supplied). */
+  private columnGroupBandHeight(): number {
+    return this.columnGroups && this.columnGroups.length > 0 ? COLUMN_GROUP_BAND_HEIGHT : 0;
+  }
+
+  /** Total header band height — base header plus column-group band when
+   *  groups are present. Cell-positioning math below uses this instead
+   *  of the raw `headerHeight`. */
+  private fullHeaderHeight(): number {
+    return this.headerHeight + this.columnGroupBandHeight();
+  }
+
+  private pinnedTopBandHeight(): number {
+    if (!this.pinnedTopRowSource) return 0;
+    return this.pinnedTopRowSource.numRows * this.pinnedRowHeight;
+  }
+
+  private pinnedBottomBandHeight(): number {
+    if (!this.pinnedBottomRowSource) return 0;
+    return this.pinnedBottomRowSource.numRows * this.pinnedRowHeight;
+  }
+
+  private statusBarHeight(): number {
+    return this.statusBarEnabled ? STATUS_BAR_HEIGHT : 0;
+  }
+
+  /** First viewport y where data rows begin. */
+  private dataBandTop(): number {
+    return this.fullHeaderHeight() + this.pinnedTopBandHeight();
+  }
+
+  /** Viewport y where data rows end (exclusive). */
+  private dataBandBottom(): number {
+    return this.viewportHeight - this.pinnedBottomBandHeight() - this.statusBarHeight();
   }
 
   // ---------------------------------------------------------------------------
@@ -842,10 +923,12 @@ export class Grid {
     if (row < 0 || row >= this.rowSource.numRows) return null;
     if (col < 0 || col >= this.columns.length) return null;
 
-    const rowTop = this.fenwick.prefixSum(row) - this.scrollTop + this.headerHeight;
+    const dataTop = this.dataBandTop();
+    const dataBottom = this.dataBandBottom();
+    const rowTop = this.fenwick.prefixSum(row) - this.scrollTop + dataTop;
     const rowHeight = this.fenwick.get(row);
-    if (rowTop + rowHeight <= this.headerHeight) return null;
-    if (rowTop >= this.viewportHeight) return null;
+    if (rowTop + rowHeight <= dataTop) return null;
+    if (rowTop >= dataBottom) return null;
 
     const colLeft = this.cumulativeColumnWidths[col] ?? 0;
     const colWidth = (this.cumulativeColumnWidths[col + 1] ?? colLeft) - colLeft;
@@ -1019,9 +1102,13 @@ export class Grid {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.viewportWidth, this.viewportHeight);
 
+    const dataTop = this.dataBandTop();
+    const dataBottom = this.dataBandBottom();
+    const dataHeight = Math.max(0, dataBottom - dataTop);
+
     const overscan = this.velocityAwareOverscan();
     const start = Math.max(0, this.fenwick.indexAtOffset(this.scrollTop) - overscan);
-    const endOffset = this.scrollTop + this.viewportHeight - this.headerHeight;
+    const endOffset = this.scrollTop + dataHeight;
     const end = Math.min(
       this.rowSource.numRows - 1,
       this.fenwick.indexAtOffset(endOffset) + overscan,
@@ -1035,9 +1122,9 @@ export class Grid {
     ctx.beginPath();
     ctx.rect(
       this.frozenWidth,
-      this.headerHeight,
+      dataTop,
       this.viewportWidth - this.frozenWidth,
-      this.viewportHeight - this.headerHeight,
+      dataHeight,
     );
     ctx.clip();
     drawnCells += this.drawRows(
@@ -1054,12 +1141,7 @@ export class Grid {
     if (this.frozenColumnCount > 0) {
       ctx.save();
       ctx.beginPath();
-      ctx.rect(
-        0,
-        this.headerHeight,
-        this.frozenWidth,
-        this.viewportHeight - this.headerHeight,
-      );
+      ctx.rect(0, dataTop, this.frozenWidth, dataHeight);
       ctx.clip();
       drawnCells += this.drawRows(start, end, firstRowTop, 0, this.frozenColumnCount, 0);
       ctx.restore();
@@ -1070,7 +1152,13 @@ export class Grid {
       this.drawChevrons(start, end, firstRowTop);
       this.syncDetailLayer(start, end, firstRowTop);
     }
+    drawnCells += this.drawPinnedBand(this.pinnedTopRowSource, this.fullHeaderHeight());
+    drawnCells += this.drawPinnedBand(
+      this.pinnedBottomRowSource,
+      dataBottom,
+    );
     this.drawHeader();
+    this.updateStatusBar();
     this.updateAccessibilityShadow(start, end);
 
     return {
@@ -1086,7 +1174,7 @@ export class Grid {
    *  header band on scroll. */
   private drawChevrons(start: number, end: number, firstRowTop: number): void {
     const ctx = this.ctx;
-    let y = this.headerHeight + (firstRowTop - this.scrollTop);
+    let y = this.dataBandTop() + (firstRowTop - this.scrollTop);
     ctx.font = `${String(this.theme.fontSize)}px ${this.theme.fontFamily}`;
     ctx.textBaseline = 'middle';
     ctx.fillStyle = this.theme.mutedText;
@@ -1107,7 +1195,7 @@ export class Grid {
   private syncDetailLayer(start: number, end: number, firstRowTop: number): void {
     if (!this.detailLayer || !this.getDetailContent) return;
     const visibleExpanded = new Set<number>();
-    let y = this.headerHeight + (firstRowTop - this.scrollTop);
+    let y = this.dataBandTop() + (firstRowTop - this.scrollTop);
     for (let row = start; row <= end; row++) {
       const baseH = this.baseHeights[row] ?? 0;
       if (this.expanded.has(row)) {
@@ -1152,7 +1240,7 @@ export class Grid {
       const rowFrom = Math.max(range.rowStart, start);
       const rowTo = Math.min(range.rowEnd, end);
       const yTop =
-        this.headerHeight + (this.fenwick.prefixSum(rowFrom) - this.scrollTop);
+        this.dataBandTop() + (this.fenwick.prefixSum(rowFrom) - this.scrollTop);
       let h = 0;
       for (let r = rowFrom; r <= rowTo; r++) h += this.fenwick.get(r);
 
@@ -1181,7 +1269,7 @@ export class Grid {
           ((this.cumulativeColumnWidths[active.col] ?? 0) -
             (this.cumulativeColumnWidths[this.frozenColumnCount] ?? 0)) -
           this.scrollLeft;
-      const y = this.headerHeight + (this.fenwick.prefixSum(active.row) - this.scrollTop);
+      const y = this.dataBandTop() + (this.fenwick.prefixSum(active.row) - this.scrollTop);
       const w = this.columns[active.col]?.width ?? 0;
       const h = this.fenwick.get(active.row);
       ctx.strokeStyle = '#6ea8fe';
@@ -1200,7 +1288,7 @@ export class Grid {
   ): number {
     const ctx = this.ctx;
     const theme = this.theme;
-    let y = this.headerHeight + (firstRowTop - this.scrollTop);
+    let y = this.dataBandTop() + (firstRowTop - this.scrollTop);
     let drawn = 0;
 
     ctx.font = `${String(theme.fontSize)}px ${theme.fontFamily}`;
@@ -1268,8 +1356,13 @@ export class Grid {
   private drawHeader(): void {
     const ctx = this.ctx;
     const theme = this.theme;
+    const groupH = this.columnGroupBandHeight();
+    const headerTop = groupH;
+    const fullHeader = this.fullHeaderHeight();
+
+    // Background spans the whole header chrome (group band + column headers).
     ctx.fillStyle = theme.headerBackground;
-    ctx.fillRect(0, 0, this.viewportWidth, this.headerHeight);
+    ctx.fillRect(0, 0, this.viewportWidth, fullHeader);
 
     ctx.font = `600 ${String(theme.fontSize - 1)}px ${theme.fontFamily}`;
     ctx.textBaseline = 'middle';
@@ -1285,18 +1378,19 @@ export class Grid {
       const label = (column.displayName ?? column.id) + arrow;
       ctx.save();
       ctx.beginPath();
-      ctx.rect(x + 8, 0, column.width - 16, this.headerHeight);
+      ctx.rect(x + 8, headerTop, column.width - 16, this.headerHeight);
       ctx.clip();
-      ctx.fillStyle = sortField ? theme.text : theme.text;
-      ctx.fillText(label, x + 12, this.headerHeight / 2 + 1);
-      // Subtle hover-affordance hint: muted underline for sortable columns
-      // when a sort is active elsewhere.
+      ctx.fillStyle = theme.text;
+      ctx.fillText(label, x + 12, headerTop + this.headerHeight / 2 + 1);
       ctx.restore();
-      // For multi-column sort, draw a small priority badge.
       if (sortField && this.sort.length > 1) {
         ctx.font = `500 ${String(theme.fontSize - 3)}px ${theme.fontFamily}`;
         ctx.fillStyle = theme.mutedText;
-        ctx.fillText(String(sortIndex + 1), x + column.width - 14, this.headerHeight / 2 + 1);
+        ctx.fillText(
+          String(sortIndex + 1),
+          x + column.width - 14,
+          headerTop + this.headerHeight / 2 + 1,
+        );
         ctx.font = `600 ${String(theme.fontSize - 1)}px ${theme.fontFamily}`;
       }
     };
@@ -1316,19 +1410,268 @@ export class Grid {
         const column = this.columns[col];
         if (!column) continue;
         ctx.fillStyle = theme.headerBackground;
-        ctx.fillRect(fx, 0, column.width, this.headerHeight);
+        ctx.fillRect(fx, 0, column.width, fullHeader);
         ctx.fillStyle = theme.text;
         drawCell(column, fx);
         fx += column.width;
       }
     }
 
+    if (this.columnGroups && this.columnGroups.length > 0) {
+      this.drawColumnGroupBand();
+    }
+
     ctx.strokeStyle = '#2a2f37';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(0, this.headerHeight - 0.5);
-    ctx.lineTo(this.viewportWidth, this.headerHeight - 0.5);
+    ctx.moveTo(0, fullHeader - 0.5);
+    ctx.lineTo(this.viewportWidth, fullHeader - 0.5);
     ctx.stroke();
+  }
+
+  /** Draw a single label band above the column headers, with each group
+   *  spanning its child columns' combined width. Cells outside any group
+   *  show as background. Frozen columns are drawn last so they sit on
+   *  top of scrolling group spans. */
+  private drawColumnGroupBand(): void {
+    if (!this.columnGroups) return;
+    const ctx = this.ctx;
+    const theme = this.theme;
+    const groupH = this.columnGroupBandHeight();
+    if (groupH === 0) return;
+
+    const colIndex = new Map<string, number>();
+    for (let i = 0; i < this.columns.length; i++) {
+      const col = this.columns[i];
+      if (col) colIndex.set(col.id, i);
+    }
+
+    ctx.font = `600 ${String(theme.fontSize - 2)}px ${theme.fontFamily}`;
+    ctx.textBaseline = 'middle';
+
+    const paintGroup = (
+      group: { label: string; columnIds: ReadonlyArray<string>; background?: string },
+      visibleStart: number,
+      visibleEnd: number,
+      isFrozenContext: boolean,
+    ): void => {
+      let groupStart = Infinity;
+      let groupEnd = -Infinity;
+      for (const id of group.columnIds) {
+        const idx = colIndex.get(id);
+        if (idx === undefined) continue;
+        if (idx < groupStart) groupStart = idx;
+        if (idx > groupEnd) groupEnd = idx;
+      }
+      if (groupStart === Infinity) return;
+      if (groupEnd < visibleStart || groupStart > visibleEnd) return;
+
+      const xStart = this.cumulativeColumnWidths[groupStart] ?? 0;
+      const xEnd = this.cumulativeColumnWidths[groupEnd + 1] ?? xStart;
+      const isFrozenGroup = groupEnd < this.frozenColumnCount;
+      if (isFrozenContext !== isFrozenGroup) return;
+
+      let x: number;
+      let w: number;
+      if (isFrozenGroup) {
+        x = xStart;
+        w = xEnd - xStart;
+      } else {
+        const frozenEnd = this.cumulativeColumnWidths[this.frozenColumnCount] ?? 0;
+        x = this.frozenWidth + (xStart - frozenEnd) - this.scrollLeft;
+        w = xEnd - xStart;
+      }
+
+      ctx.fillStyle = group.background ?? '#161a20';
+      ctx.fillRect(x, 0, w, groupH);
+      ctx.strokeStyle = '#2a2f37';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + w - 0.5, 0);
+      ctx.lineTo(x + w - 0.5, groupH);
+      ctx.stroke();
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x + 6, 0, Math.max(0, w - 12), groupH);
+      ctx.clip();
+      ctx.fillStyle = theme.text;
+      ctx.fillText(group.label, x + 10, groupH / 2 + 1);
+      ctx.restore();
+    };
+
+    // Two passes: scrolling groups first, then frozen on top.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(this.frozenWidth, 0, this.viewportWidth - this.frozenWidth, groupH);
+    ctx.clip();
+    for (const g of this.columnGroups) {
+      paintGroup(g, this.frozenColumnCount, this.columns.length - 1, false);
+    }
+    ctx.restore();
+
+    if (this.frozenColumnCount > 0) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, this.frozenWidth, groupH);
+      ctx.clip();
+      for (const g of this.columnGroups) {
+        paintGroup(g, 0, this.frozenColumnCount - 1, true);
+      }
+      ctx.restore();
+    }
+
+    ctx.strokeStyle = '#2a2f37';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, groupH - 0.5);
+    ctx.lineTo(this.viewportWidth, groupH - 0.5);
+    ctx.stroke();
+  }
+
+  /** Draw a fixed-height band of pinned rows starting at `bandTop`. Cells
+   *  read from the supplied RowSource (separate from the main one) so
+   *  callers can pass synthetic aggregation rows without touching their
+   *  primary dataset. Returns cell count for metrics. */
+  private drawPinnedBand(source: RowSource | undefined, bandTop: number): number {
+    if (!source || source.numRows === 0) return 0;
+    const ctx = this.ctx;
+    const theme = this.theme;
+    const rowH = this.pinnedRowHeight;
+    const bandHeight = source.numRows * rowH;
+    let drawn = 0;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, bandTop, this.viewportWidth, bandHeight);
+    ctx.clip();
+
+    ctx.fillStyle = theme.headerBackground;
+    ctx.fillRect(0, bandTop, this.viewportWidth, bandHeight);
+    ctx.font = `${String(theme.fontSize)}px ${theme.fontFamily}`;
+    ctx.textBaseline = 'middle';
+
+    const paintRow = (
+      row: number,
+      colStart: number,
+      colEnd: number,
+      horizontalOffset: number,
+    ): void => {
+      const y = bandTop + row * rowH;
+      let x = -horizontalOffset;
+      if (colStart > 0) x += this.cumulativeColumnWidths[colStart] ?? 0;
+      for (let col = colStart; col < colEnd; col++) {
+        const column = this.columns[col];
+        if (!column) continue;
+        const w = column.width;
+        if (x + w >= 0 && x <= this.viewportWidth) {
+          const value = source.getCell(row, column.id);
+          const text = column.format ? column.format(value, row) : String(value ?? '');
+          const fg = column.color?.(value, row) ?? theme.text;
+          const bg = column.background?.(value, row);
+          if (bg) {
+            ctx.fillStyle = bg;
+            ctx.fillRect(x, y, w, rowH);
+          }
+          ctx.fillStyle = fg;
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(x + 8, y, w - 16, rowH);
+          ctx.clip();
+          ctx.fillText(text, x + 12, y + rowH / 2 + 1);
+          ctx.restore();
+          drawn++;
+        }
+        x += w;
+      }
+    };
+
+    // Scrolling band — pinned rows × non-frozen columns.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(this.frozenWidth, bandTop, this.viewportWidth - this.frozenWidth, bandHeight);
+    ctx.clip();
+    for (let r = 0; r < source.numRows; r++) {
+      paintRow(r, this.frozenColumnCount, this.columns.length, this.scrollLeft);
+    }
+    ctx.restore();
+
+    // Frozen columns within the pinned band.
+    if (this.frozenColumnCount > 0) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, bandTop, this.frozenWidth, bandHeight);
+      ctx.clip();
+      for (let r = 0; r < source.numRows; r++) {
+        paintRow(r, 0, this.frozenColumnCount, 0);
+      }
+      ctx.restore();
+    }
+
+    // Top + bottom dividers.
+    ctx.strokeStyle = '#2a2f37';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, bandTop - 0.5);
+    ctx.lineTo(this.viewportWidth, bandTop - 0.5);
+    ctx.moveTo(0, bandTop + bandHeight - 0.5);
+    ctx.lineTo(this.viewportWidth, bandTop + bandHeight - 0.5);
+    ctx.stroke();
+
+    ctx.restore();
+    return drawn;
+  }
+
+  /** Recompute selection-aggregation summary text and write into the
+   *  status bar div. Cheap: one pass over the active selection's
+   *  bounding rectangle. */
+  private updateStatusBar(): void {
+    if (!this.statusBarEl) return;
+    const ranges = this.selection.normalizedRanges();
+    if (ranges.length === 0) {
+      this.statusBarEl.textContent = 'no selection';
+      return;
+    }
+
+    let cellCount = 0;
+    let numericCount = 0;
+    let sum = 0;
+    let min = Infinity;
+    let max = -Infinity;
+
+    for (const r of ranges) {
+      const rowFrom = Math.max(0, r.rowStart);
+      const rowTo = Math.min(this.rowSource.numRows - 1, r.rowEnd);
+      const colFrom = Math.max(0, r.colStart);
+      const colTo = Math.min(this.columns.length - 1, r.colEnd);
+      for (let row = rowFrom; row <= rowTo; row++) {
+        for (let col = colFrom; col <= colTo; col++) {
+          const column = this.columns[col];
+          if (!column) continue;
+          cellCount++;
+          const value = this.rowSource.getCell(row, column.id);
+          const n = typeof value === 'number' ? value : Number(value);
+          if (Number.isFinite(n)) {
+            numericCount++;
+            sum += n;
+            if (n < min) min = n;
+            if (n > max) max = n;
+          }
+        }
+      }
+    }
+
+    const parts: string[] = [`count ${String(cellCount)}`];
+    if (numericCount > 0) {
+      const avg = sum / numericCount;
+      parts.push(
+        `sum ${formatStatusNum(sum)}`,
+        `avg ${formatStatusNum(avg)}`,
+        `min ${formatStatusNum(min)}`,
+        `max ${formatStatusNum(max)}`,
+      );
+    }
+    this.statusBarEl.textContent = parts.join('  ·  ');
   }
 
   private velocityAwareOverscan(): number {
@@ -1401,6 +1744,16 @@ function percentile(sorted: ReadonlyArray<number>, p: number): number {
   const arr = [...sorted].sort((a, b) => a - b);
   const idx = Math.min(arr.length - 1, Math.max(0, Math.floor(p * (arr.length - 1))));
   return Math.round((arr[idx] ?? 0) * 100) / 100;
+}
+
+function formatStatusNum(n: number): string {
+  if (!Number.isFinite(n)) return '—';
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  if (Number.isInteger(n)) return String(n);
+  return n.toFixed(2);
 }
 
 function escapeHtml(s: string): string {

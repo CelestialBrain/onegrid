@@ -222,6 +222,48 @@ describe('Grid · cell editing', () => {
     document.body.removeChild(host);
   });
 
+  it('clicks in the pinned-top band do not start a selection', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let selectionFires = 0;
+    const pinned: RowSource = {
+      numRows: 2,
+      getCell: (r, c) => `pin-${c}-${String(r)}`,
+    };
+    const grid = new Grid({
+      host,
+      columns: COLUMNS,
+      rowSource: rowSource(50),
+      rowHeight: 24,
+      pinnedTopRowSource: pinned,
+      pinnedRowHeight: 28,
+      onSelectionChange: () => {
+        selectionFires++;
+      },
+    });
+    expect(selectionFires).toBe(0);
+    grid.destroy();
+    document.body.removeChild(host);
+  });
+
+  it('status bar element mounts when statusBar=true and unmounts on destroy', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const grid = new Grid({
+      host,
+      columns: COLUMNS,
+      rowSource: rowSource(50),
+      rowHeight: 24,
+      statusBar: true,
+    });
+    // The host should now have one extra absolutely-positioned bottom div.
+    const before = host.children.length;
+    expect(before).toBeGreaterThan(0);
+    grid.destroy();
+    expect(host.children.length).toBe(0);
+    document.body.removeChild(host);
+  });
+
   it('beginEdit with initialText replaces value (type-ahead)', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
