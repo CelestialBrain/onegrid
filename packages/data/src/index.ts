@@ -39,3 +39,6 @@ export type {
   GroupNode,
   GroupRowsOptions,
 } from './group';
+
+export { pivot } from './pivot';
+export type { PivotedTable } from './pivot';

@@ -19,7 +19,9 @@ import {
   groupRows,
   flattenGroupTree,
   pathKey,
+  pivot,
   type FlatGroupEntry,
+  type PivotedTable,
 } from '@onegrid/data';
 import type { RowMeta } from '@onegrid/core';
 import { connectSsrm, SSRM_COLUMNS, type SsrmConnection } from './lib/ssrm';
@@ -47,7 +49,7 @@ import {
 
 const ROW_OPTIONS = [1_000, 10_000, 100_000, 1_000_000, 10_000_000] as const;
 
-type Mode = 'memory' | 'ssrm' | 'formula' | 'duckdb';
+type Mode = 'memory' | 'ssrm' | 'formula' | 'duckdb' | 'pivot';
 
 // Stable references so useOneGrid's effect doesn't re-fire while waiting
 // for async data sources to resolve.
@@ -257,6 +259,52 @@ export const App = (): JSX.Element => {
     };
   }, [mode]);
 
+  // ----- Pivot mode -----
+  // Pivot rebuilds a materialized synthetic dataset (so all groupings have
+  // values to aggregate) and pivots region/status × measures into a fresh
+  // ColumnTable + ColumnDef set. Cached on numRows so toggling between
+  // modes doesn't pay the rebuild cost twice.
+  const pivotResult = useMemo<{
+    columns: ReadonlyArray<ColumnDef>;
+    rowSource: RowSource;
+    pivoted: PivotedTable;
+  } | null>(() => {
+    if (mode !== 'pivot') return null;
+    const ds = materializeSynthetic(Math.min(numRows, 100_000));
+    const pivoted = pivot(ds.table, {
+      rows: ['status'],
+      columns: ['firstName'],
+      measures: [
+        { fn: 'sum', columnId: 'revenue', alias: 'rev' },
+        { fn: 'avg', columnId: 'score', alias: 'score' },
+      ],
+    });
+    const columns: ColumnDef[] = [
+      { id: 'status', width: 130, displayName: 'Status' },
+    ];
+    for (const c of pivoted.pivotColumns) {
+      const head = String(c.pivotPath[0] ?? '');
+      columns.push({
+        id: c.id,
+        width: 110,
+        displayName: `${head} · ${c.measure.alias ?? c.measure.fn}`,
+        format: (v) => {
+          const n = typeof v === 'number' ? v : Number(v);
+          if (!Number.isFinite(n)) return '—';
+          return c.measure.fn === 'avg' ? n.toFixed(1) : `$${n.toFixed(0)}`;
+        },
+      });
+    }
+    return {
+      columns,
+      rowSource: {
+        numRows: pivoted.table.numRows,
+        getCell: (r, id) => pivoted.table.column(id).get(r),
+      },
+      pivoted,
+    };
+  }, [mode, numRows]);
+
   // ----- Row grouping (memory mode only) -----
   const [groupByColumn, setGroupByColumn] = useState<'none' | 'status'>('none');
   const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(() => new Set());
@@ -329,7 +377,9 @@ export const App = (): JSX.Element => {
         ? ssrm !== null
         : mode === 'duckdb'
           ? duckdb !== null
-          : formula !== null;
+          : mode === 'pivot'
+            ? pivotResult !== null
+            : formula !== null;
 
   // Module-level stable fallbacks so useOneGrid's effect doesn't re-fire
   // every render while we're waiting for the async data source.
@@ -341,7 +391,9 @@ export const App = (): JSX.Element => {
         ? SSRM_COLUMNS
         : mode === 'duckdb'
           ? DUCKDB_COLUMNS
-          : FORMULA_COLUMNS;
+          : mode === 'pivot'
+            ? pivotResult!.columns
+            : FORMULA_COLUMNS;
   const safeRowSource: RowSource = !dataReady
     ? EMPTY_ROW_SOURCE
     : mode === 'memory'
@@ -352,7 +404,9 @@ export const App = (): JSX.Element => {
         ? ssrm!.rowSource
         : mode === 'duckdb'
           ? duckdb!.rowSource
-          : formula!.rowSource;
+          : mode === 'pivot'
+            ? pivotResult!.rowSource
+            : formula!.rowSource;
   const safeRowHeight: number | Float32Array =
     mode === 'memory' && memoryDataset ? memoryDataset.heights : 28;
 
@@ -806,6 +860,15 @@ export const App = (): JSX.Element => {
             style={{ fontWeight: mode === 'duckdb' ? 600 : 400 }}
           >
             DuckDB (in-browser)
+          </button>{' '}
+          <button
+            type="button"
+            onClick={() => {
+              setMode('pivot');
+            }}
+            style={{ fontWeight: mode === 'pivot' ? 600 : 400 }}
+          >
+            Pivot
           </button>
         </div>
 
