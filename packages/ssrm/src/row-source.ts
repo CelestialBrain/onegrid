@@ -18,7 +18,13 @@
 // than via this synchronous adapter.
 // =============================================================================
 
-import type { BlockRequest, BlockResponse, DataSource } from '@onegrid/protocol';
+import type {
+  BlockRequest,
+  BlockResponse,
+  DataSource,
+  FilterModel,
+  SortModel,
+} from '@onegrid/protocol';
 
 export interface RowSource {
   readonly numRows: number;
@@ -32,10 +38,12 @@ export interface SsrmRowSourceOptions {
   readonly blockSize?: number;
   /** Called whenever a block lands so the renderer can re-render. */
   readonly onUpdate?: () => void;
-  /**
-   * Placeholder value returned for not-yet-loaded cells. Default: '…'.
-   */
+  /** Placeholder value returned for not-yet-loaded cells. Default: '…'. */
   readonly placeholder?: unknown;
+  /** Initial sort. Defaults to []. */
+  readonly initialSort?: SortModel;
+  /** Initial filter. Defaults to null. */
+  readonly initialFilter?: FilterModel;
 }
 
 export interface SsrmRowSourceHandle extends RowSource {
@@ -45,6 +53,14 @@ export interface SsrmRowSourceHandle extends RowSource {
   readonly invalidateAll: () => void;
   /** Number of blocks currently in cache (for telemetry). */
   readonly getCacheSize: () => number;
+  /** Replace the active sort. Drops all cached blocks and refetches on
+   *  next read — invariant: blocks fetched under sort A aren't valid under
+   *  sort B. */
+  readonly setSort: (sort: SortModel) => void;
+  /** Replace the active filter. Same cache invalidation as setSort. */
+  readonly setFilter: (filter: FilterModel) => void;
+  /** Update the total row count (e.g., after a filter narrows the result). */
+  readonly setNumRows: (numRows: number) => void;
 }
 
 interface CachedBlock {
@@ -59,6 +75,9 @@ export function createSsrmRowSource(
   const placeholder = options.placeholder ?? '…';
   const blocks = new Map<number, CachedBlock>();
   const inflight = new Map<number, Promise<void>>();
+  let currentSort: SortModel = options.initialSort ?? [];
+  let currentFilter: FilterModel = options.initialFilter ?? null;
+  let currentNumRows = options.numRows;
 
   function fetchBlock(blockIndex: number): void {
     if (blocks.has(blockIndex) || inflight.has(blockIndex)) return;
@@ -67,8 +86,8 @@ export function createSsrmRowSource(
       cursor: startRow === 0 ? null : `offset:${String(startRow)}`,
       direction: 'after',
       limit: blockSize,
-      sort: [],
-      filter: null,
+      sort: currentSort,
+      filter: currentFilter,
     };
     const promise = dataSource
       .fetchBlock(req)
@@ -87,7 +106,7 @@ export function createSsrmRowSource(
   }
 
   function getCell(rowIndex: number, columnId: string): unknown {
-    if (rowIndex < 0 || rowIndex >= options.numRows) return undefined;
+    if (rowIndex < 0 || rowIndex >= currentNumRows) return undefined;
     const blockIndex = Math.floor(rowIndex / blockSize);
     const block = blocks.get(blockIndex);
     if (!block) {
@@ -99,17 +118,37 @@ export function createSsrmRowSource(
     return row[columnId];
   }
 
-  return {
-    numRows: options.numRows,
+  function invalidateAll(): void {
+    blocks.clear();
+    inflight.clear();
+  }
+
+  const handle: SsrmRowSourceHandle = {
+    get numRows(): number {
+      return currentNumRows;
+    },
     getCell,
     invalidateBlock: (blockIndex) => {
       blocks.delete(blockIndex);
     },
-    invalidateAll: () => {
-      blocks.clear();
-    },
+    invalidateAll,
     getCacheSize: () => blocks.size,
+    setSort: (sort) => {
+      currentSort = sort;
+      invalidateAll();
+      options.onUpdate?.();
+    },
+    setFilter: (filter) => {
+      currentFilter = filter;
+      invalidateAll();
+      options.onUpdate?.();
+    },
+    setNumRows: (n) => {
+      currentNumRows = n;
+      options.onUpdate?.();
+    },
   };
+  return handle;
 }
 
 function ensureJsonRows(

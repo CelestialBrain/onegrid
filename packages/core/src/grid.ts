@@ -26,6 +26,7 @@ import {
   type RowSource,
 } from './types';
 import { SelectionModel, type CellPosition, type SelectionSnapshot } from './selection';
+import type { SortModel } from '@onegrid/protocol';
 
 interface FrameSample {
   ts: number;
@@ -81,7 +82,10 @@ export class Grid {
 
   private readonly selection = new SelectionModel();
   private readonly onSelectionChange: ((s: SelectionSnapshot) => void) | undefined;
+  private readonly onHeaderClick: ((columnId: string) => void) | undefined;
+  private sort: SortModel = [];
   private isPointerDragging = false;
+  private suppressSelectionUntilUp = false;
 
   constructor(options: GridOptions) {
     this.host = options.host;
@@ -92,6 +96,8 @@ export class Grid {
     this.theme = { ...DEFAULT_THEME, ...options.theme };
     this.onFrame = options.onFrame;
     this.onSelectionChange = options.onSelectionChange;
+    this.onHeaderClick = options.onHeaderClick;
+    this.sort = options.sort ?? [];
 
     this.dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
 
@@ -263,6 +269,13 @@ export class Grid {
     this.scheduleRender();
   }
 
+  /** Replace the current sort and redraw header indicators. Caller is
+   *  responsible for re-fetching / re-sorting the underlying data. */
+  setSort(sort: SortModel): void {
+    this.sort = sort;
+    this.refresh();
+  }
+
   destroy(): void {
     this.destroyed = true;
     if (this.rafHandle !== null) cancelAnimationFrame(this.rafHandle);
@@ -429,6 +442,23 @@ export class Grid {
   // ---------------------------------------------------------------------------
 
   private handlePointerDown = (e: PointerEvent): void => {
+    const rect = this.host.getBoundingClientRect();
+    const localY = e.clientY - rect.top;
+    const localX = e.clientX - rect.left;
+
+    // Header click? Dispatch onHeaderClick instead of starting selection.
+    if (localY >= 0 && localY < this.headerHeight && this.onHeaderClick) {
+      const col = this.columnAtLocalX(localX);
+      if (col !== null) {
+        const column = this.columns[col];
+        if (column) {
+          this.onHeaderClick(column.id);
+          this.suppressSelectionUntilUp = true;
+        }
+      }
+      return;
+    }
+
     const cell = this.cellAtClient(e.clientX, e.clientY);
     if (!cell) return;
     if (e.shiftKey && !this.selection.isEmpty()) {
@@ -448,6 +478,25 @@ export class Grid {
     this.scheduleRender();
   };
 
+  private columnAtLocalX(localX: number): number | null {
+    if (localX < 0) return null;
+    if (localX < this.frozenWidth) {
+      return colAtX(this.cumulativeColumnWidths, localX, 0, this.frozenColumnCount);
+    }
+    if (localX > this.viewportWidth) return null;
+    const xInLayout =
+      localX -
+      this.frozenWidth +
+      this.scrollLeft +
+      (this.cumulativeColumnWidths[this.frozenColumnCount] ?? 0);
+    return colAtX(
+      this.cumulativeColumnWidths,
+      xInLayout,
+      this.frozenColumnCount,
+      this.columns.length,
+    );
+  }
+
   private handlePointerMove = (e: PointerEvent): void => {
     if (!this.isPointerDragging) return;
     const cell = this.cellAtClient(e.clientX, e.clientY);
@@ -459,6 +508,7 @@ export class Grid {
 
   private handlePointerUp = (): void => {
     this.isPointerDragging = false;
+    this.suppressSelectionUntilUp = false;
   };
 
   private cellAtClient(clientX: number, clientY: number): CellPosition | null {
@@ -790,22 +840,40 @@ export class Grid {
 
     ctx.font = `600 ${String(theme.fontSize - 1)}px ${theme.fontFamily}`;
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = theme.text;
+
+    const drawCell = (column: ColumnDef, x: number): void => {
+      const sortIndex = this.sort.findIndex((s) => s.columnId === column.id);
+      const sortField = sortIndex >= 0 ? this.sort[sortIndex] : undefined;
+      const arrow = sortField
+        ? sortField.direction === 'asc'
+          ? ' \u25B2'
+          : ' \u25BC'
+        : '';
+      const label = (column.displayName ?? column.id) + arrow;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x + 8, 0, column.width - 16, this.headerHeight);
+      ctx.clip();
+      ctx.fillStyle = sortField ? theme.text : theme.text;
+      ctx.fillText(label, x + 12, this.headerHeight / 2 + 1);
+      // Subtle hover-affordance hint: muted underline for sortable columns
+      // when a sort is active elsewhere.
+      ctx.restore();
+      // For multi-column sort, draw a small priority badge.
+      if (sortField && this.sort.length > 1) {
+        ctx.font = `500 ${String(theme.fontSize - 3)}px ${theme.fontFamily}`;
+        ctx.fillStyle = theme.mutedText;
+        ctx.fillText(String(sortIndex + 1), x + column.width - 14, this.headerHeight / 2 + 1);
+        ctx.font = `600 ${String(theme.fontSize - 1)}px ${theme.fontFamily}`;
+      }
+    };
 
     let x = -this.scrollLeft + (this.cumulativeColumnWidths[this.frozenColumnCount] ?? 0);
     for (let col = this.frozenColumnCount; col < this.columns.length; col++) {
       const column = this.columns[col];
       if (!column) continue;
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(x + 8, 0, column.width - 16, this.headerHeight);
-      ctx.clip();
-      ctx.fillText(
-        column.displayName ?? column.id,
-        x + 12,
-        this.headerHeight / 2 + 1,
-      );
-      ctx.restore();
+      ctx.fillStyle = theme.text;
+      drawCell(column, x);
       x += column.width;
     }
 
@@ -817,16 +885,7 @@ export class Grid {
         ctx.fillStyle = theme.headerBackground;
         ctx.fillRect(fx, 0, column.width, this.headerHeight);
         ctx.fillStyle = theme.text;
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(fx + 8, 0, column.width - 16, this.headerHeight);
-        ctx.clip();
-        ctx.fillText(
-          column.displayName ?? column.id,
-          fx + 12,
-          this.headerHeight / 2 + 1,
-        );
-        ctx.restore();
+        drawCell(column, fx);
         fx += column.width;
       }
     }

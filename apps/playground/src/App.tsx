@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState, type JSX } from 'react';
+import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
 import {
   useOneGrid,
   type ColumnDef,
   type FrameStats,
   type MetricsSnapshot,
   type RowSource,
+  type SortModel,
 } from '@onegrid/react';
+import { downloadCsv, downloadXlsx, type ExportColumn } from '@onegrid/export';
 import { generateSynthetic } from './lib/synthetic';
 import { connectSsrm, SSRM_COLUMNS, type SsrmConnection } from './lib/ssrm';
 
@@ -26,8 +28,28 @@ declare global {
       scrollBy: (deltaY: number) => void;
       scrollToRow: (rowIndex: number) => void;
       setRows: (n: number) => void;
+      setSort: (sort: SortModel) => void;
+      getSort: () => SortModel;
     };
   }
+}
+
+/**
+ * Three-state header click toggle: none → asc → desc → none. Honors shift
+ * for multi-column sort priority (Excel/Sheets convention).
+ */
+function toggleSortFor(
+  sort: SortModel,
+  columnId: string,
+  shiftKey: boolean,
+): SortModel {
+  const existing = sort.find((s) => s.columnId === columnId);
+  const others = shiftKey ? sort.filter((s) => s.columnId !== columnId) : [];
+  if (!existing) return [...others, { columnId, direction: 'asc' }];
+  if (existing.direction === 'asc') {
+    return [...others, { columnId, direction: 'desc' }];
+  }
+  return others; // was desc → remove from sort
 }
 
 export const App = (): JSX.Element => {
@@ -35,6 +57,22 @@ export const App = (): JSX.Element => {
   const [numRows, setNumRows] = useState<(typeof ROW_OPTIONS)[number]>(1_000_000);
   const [genMs, setGenMs] = useState<number>(0);
   const [stats, setStats] = useState<FrameStats | null>(null);
+  const [sort, setSort] = useState<SortModel>([]);
+  // Capture shiftKey at click-time inside the canvas; the Grid's onHeaderClick
+  // doesn't pass the event, so we read it from the latest pointer state.
+  const [shiftDown, setShiftDown] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Shift') setShiftDown(e.type === 'keydown');
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKey);
+    };
+  }, []);
 
   // ----- in-memory dataset -----
   const memoryDataset = useMemo(() => {
@@ -97,15 +135,24 @@ export const App = (): JSX.Element => {
   const safeRowHeight: number | Float32Array =
     mode === 'memory' && memoryDataset ? memoryDataset.heights : 28;
 
+  const handleHeaderClick = useCallback(
+    (columnId: string) => {
+      setSort((prev) => toggleSortFor(prev, columnId, shiftDown));
+    },
+    [shiftDown],
+  );
+
   const { ref, grid } = useOneGrid({
     columns: safeColumns,
     rowSource: safeRowSource,
     rowHeight: safeRowHeight,
     headerHeight: 32,
     frozenColumnCount: 1,
+    sort,
     onFrame: (s) => {
       setStats(s);
     },
+    onHeaderClick: handleHeaderClick,
   });
 
   // SSRM: when blocks land, ask the grid to repaint. scrollBy(0) is a
@@ -114,6 +161,18 @@ export const App = (): JSX.Element => {
     if (!grid || mode !== 'ssrm') return;
     grid.refresh();
   }, [grid, ssrmTick, mode]);
+
+  // Push sort state into the underlying data source. SSRM mode invalidates
+  // the row-source cache and refetches; in-memory mode is visual-only for
+  // now (sorting an in-memory dataset is a v0.0.4 follow-up).
+  useEffect(() => {
+    if (!grid) return;
+    grid.setSort(sort);
+    grid.scrollToRow(0);
+    if (mode === 'ssrm' && ssrm) {
+      ssrm.handle.setSort(sort);
+    }
+  }, [sort, grid, mode, ssrm]);
 
   useEffect(() => {
     if (!grid) return;
@@ -131,6 +190,10 @@ export const App = (): JSX.Element => {
       setRows: (n) => {
         setNumRows(n as (typeof ROW_OPTIONS)[number]);
       },
+      setSort: (s) => {
+        setSort(s);
+      },
+      getSort: () => sort,
     };
     return () => {
       delete window.__onegrid;
@@ -142,6 +205,47 @@ export const App = (): JSX.Element => {
     const snap = grid.getMetricsSnapshot();
     void navigator.clipboard.writeText(JSON.stringify(snap, null, 2));
     console.log('[onegrid] metrics snapshot', snap);
+  };
+
+  /** Materialize up to N rows from the active row source for export.
+   *  SSRM mode pulls only what's already in the row-source cache. */
+  const collectExportData = (
+    maxRows = 50_000,
+  ): {
+    rows: ReadonlyArray<Record<string, unknown>>;
+    columns: ReadonlyArray<ExportColumn>;
+  } => {
+    const exportColumns: ExportColumn[] = safeColumns.map((c) => {
+      const fmt = c.format;
+      return {
+        id: c.id,
+        header: c.displayName ?? c.id,
+        ...(fmt ? { format: (v: unknown, i: number) => fmt(v, i) } : {}),
+      };
+    });
+    const limit = Math.min(safeRowSource.numRows, maxRows);
+    const rows: Record<string, unknown>[] = [];
+    for (let i = 0; i < limit; i++) {
+      const row: Record<string, unknown> = {};
+      for (const c of safeColumns) row[c.id] = safeRowSource.getCell(i, c.id);
+      rows.push(row);
+    }
+    return { rows, columns: exportColumns };
+  };
+
+  const handleExportCsv = (): void => {
+    const { rows, columns: cols } = collectExportData();
+    const date = new Date().toISOString().slice(0, 10);
+    downloadCsv(rows, cols, `onegrid-${mode}-${date}.csv`, { bom: true });
+  };
+
+  const handleExportXlsx = async (): Promise<void> => {
+    const { rows, columns: cols } = collectExportData();
+    const date = new Date().toISOString().slice(0, 10);
+    await downloadXlsx(rows, cols, `onegrid-${mode}-${date}.xlsx`, {
+      sheetName: 'oneGrid Export',
+      meta: { title: 'oneGrid export', author: 'oneGrid' },
+    });
   };
 
   return (
@@ -213,6 +317,18 @@ export const App = (): JSX.Element => {
           }}
         >
           Reset
+        </button>
+        <button type="button" onClick={handleExportCsv} disabled={!dataReady}>
+          Export CSV
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            void handleExportXlsx();
+          }}
+          disabled={!dataReady}
+        >
+          Export XLSX
         </button>
         <div className="meter">
           <span>

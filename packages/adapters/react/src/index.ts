@@ -25,3 +25,16 @@ export type {
   MetricsSnapshot,
   RowSource,
 } from '@onegrid/core';
+
+// Pass-through of common protocol types so adapters can speak the SSRM
+// contract without a separate @onegrid/protocol install.
+export type {
+  BlockRequest,
+  BlockResponse,
+  DataSource,
+  FilterModel,
+  FilterNode,
+  Schema,
+  SortField,
+  SortModel,
+} from '@onegrid/protocol';

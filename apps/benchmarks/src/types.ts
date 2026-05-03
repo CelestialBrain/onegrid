@@ -22,6 +22,12 @@ export interface MetricsSnapshot {
   heapUsedBytes?: number;
 }
 
+interface SortField {
+  readonly columnId: string;
+  readonly direction: 'asc' | 'desc';
+  readonly nulls?: 'first' | 'last';
+}
+
 declare global {
   interface Window {
     __onegrid?: {
@@ -30,6 +36,8 @@ declare global {
       scrollBy: (deltaY: number) => void;
       scrollToRow: (rowIndex: number) => void;
       setRows: (n: number) => void;
+      setSort: (sort: ReadonlyArray<SortField>) => void;
+      getSort: () => ReadonlyArray<SortField>;
     };
   }
 }

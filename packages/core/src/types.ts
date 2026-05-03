@@ -3,6 +3,7 @@
 // =============================================================================
 
 import type { SelectionSnapshot } from './selection';
+import type { SortModel } from '@onegrid/protocol';
 
 /**
  * Per-column configuration. Width is the only required visual property; the
@@ -109,4 +110,11 @@ export interface GridOptions {
   readonly onFrame?: (stats: FrameStats) => void;
   /** Fires whenever the selection changes (click, drag, keyboard, programmatic). */
   readonly onSelectionChange?: (selection: SelectionSnapshot) => void;
+  /** Current sort state. Renderer draws ▲/▼ in matching column headers.
+   *  Caller owns the state — change in response to onHeaderClick and re-pass
+   *  via setSort(). */
+  readonly sort?: SortModel;
+  /** Fires when the user clicks a column header. Use to toggle sort, open a
+   *  filter menu, etc. Receives the columnId. */
+  readonly onHeaderClick?: (columnId: string) => void;
 }
