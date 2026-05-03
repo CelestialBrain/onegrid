@@ -46,12 +46,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Build the libs the playground + mock server resolve at runtime.
-      - run: pnpm --filter @onegrid/protocol build
-      - run: pnpm --filter @onegrid/data build
-      - run: pnpm --filter @onegrid/core build
-      - run: pnpm --filter @onegrid/ssrm build
-      - run: pnpm --filter @onegrid/react build
+      # Build the entire workspace — the playground depends on every
+      # publishable package via dist artifacts, and Turborepo skips
+      # already-built ones via its cache.
+      - run: pnpm build
 
       # Cache the playwright browser binaries — chromium is ~150 MB.
       - uses: actions/cache@v4

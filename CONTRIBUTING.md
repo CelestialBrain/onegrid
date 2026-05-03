@@ -36,7 +36,10 @@ Requires Node 20.10+ and pnpm 9+. The repo uses [Turborepo](https://turbo.build)
 - `@onegrid/core` must remain framework-agnostic. No `react`, `vue`, etc. imports.
 - Adapter packages should be thin. If logic creeps into an adapter, the abstraction in core is wrong — fix the core, not the adapter.
 - `Array<Object>` is never the right data structure for the row store. Stay columnar.
+- `@onegrid/data` owns sort/filter/group/pivot/aggregate over `ColumnTable`. New analytical primitives go here, not in core.
+- `@onegrid/webgpu` is an optional accelerator. Every GPU kernel ships a CPU fallback with the same signature so callers can pick at runtime.
 - New ORM/database adapters live under `packages/adapters/` and depend only on `@onegrid/protocol`.
+- New backing engines (DuckDB, future ones) live as their own package and bridge into `@onegrid/ssrm`'s `DataSource` shape so they reuse the existing block cache + Arrow path.
 
 ## Performance
 

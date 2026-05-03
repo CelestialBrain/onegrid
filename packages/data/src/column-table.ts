@@ -7,9 +7,9 @@
 // pressure on the scroll hot path.
 //
 // This is the minimal implementation oneGrid needs. It does NOT yet ingest
-// real Apache Arrow IPC bytes; that's a v0.0.3 feature once the data adapter
-// surface settles. For now, ColumnTable is built from typed-array column
-// data plus a Schema.
+// real Apache Arrow IPC bytes — that's on the roadmap once the data
+// adapter surface settles. For now, ColumnTable is built from typed-array
+// column data plus a Schema.
 // =============================================================================
 
 import type { ColumnSchema, Schema } from '@onegrid/protocol';

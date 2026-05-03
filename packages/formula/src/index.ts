@@ -12,9 +12,8 @@
 //   - createFormulaEngine()         → { evaluate, registerFunction, ... }
 //   - FormulaError + isFormulaError + error sentinels (DIV_ZERO, etc.)
 //
-// Future work (not in v0.0.3):
-//   - Adapton-style demand-driven recompute
-//   - Dependency graph with range-node decomposition
+// Roadmap (not yet shipped):
+//   - Linear range decomposition (sharing work across overlapping aggregates)
 //   - More functions (VLOOKUP, INDEX, MATCH, statistical, financial)
 //   - Array formulas / dynamic arrays
 //

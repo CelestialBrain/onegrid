@@ -2,8 +2,8 @@
 // BitmapSelection
 //
 // A row-selection bitmap backed by Uint8Array. Each bit represents whether
-// row `i` is selected. Operations are O(n / 8) which is enough for v0.0.2;
-// a Roaring-bitmap implementation can drop in later for sparse selections.
+// row `i` is selected. Operations are O(n / 8); a Roaring-bitmap
+// implementation can drop in later for sparse selections.
 //
 // Designed as the "selection vector" output of filter operations. Combined
 // with sort permutations and group trees, BitmapSelection forms the

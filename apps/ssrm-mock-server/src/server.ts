@@ -122,7 +122,7 @@ function fetchBlock(req: BlockRequest): BlockResponse<'json'> {
     permutation = filteredIndices;
   } else {
     // Sort the underlying table, then filter. Could be more efficient by
-    // sorting only filtered rows; v0.0.3 keeps it simple.
+    // sorting only filtered rows; the mock keeps it simple.
     const fullPerm = sortIndex(TABLE, req.sort);
     const filterMask = sel;
     const out = new Int32Array(filteredIndices.length);

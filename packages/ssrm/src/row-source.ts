@@ -162,7 +162,7 @@ function ensureJsonRows(
   response: BlockResponse,
 ): ReadonlyArray<Record<string, unknown>> {
   if (response.encoding !== 'json') {
-    // Arrow IPC support arrives in v0.0.4; for now, throw if we get bytes back.
+    // Arrow IPC support is on the roadmap; for now, throw if we get bytes back.
     throw new Error('createSsrmRowSource: arrow-ipc encoding not yet supported here.');
   }
   return response.rows as ReadonlyArray<Record<string, unknown>>;

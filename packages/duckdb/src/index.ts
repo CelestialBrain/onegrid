@@ -17,7 +17,7 @@
 // Consumers who don't pass a `db` won't pull SheetJS-style imports — the
 // types are imported via `import type` so they erase at runtime.
 //
-// What's wired in v0.0.4:
+// What's wired:
 //   - schema()       — DESCRIBE-derived ColumnSchema[]; user can override.
 //   - fetchBlock()   — sort + filter + offset pagination, plus a parallel
 //                      COUNT(*) for totalRowCount on every fetch (lets the

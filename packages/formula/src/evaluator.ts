@@ -131,9 +131,8 @@ function evalCall(
   if (!fn) return NAME_ERROR;
 
   // Evaluate args. Errors propagate UNLESS the function explicitly handles
-  // them (IFERROR, ISERROR). Implementing per-function error opt-in via
-  // metadata can come later; for v0.0.3 we keep the simple rule that
-  // IFERROR/ISERROR are special-cased here.
+  // them (IFERROR, ISERROR). Per-function error opt-in via metadata is on
+  // the roadmap; for now IFERROR/ISERROR/ISBLANK are special-cased here.
   const upper = name.toUpperCase();
   const handlesErrors = upper === 'IFERROR' || upper === 'ISERROR' || upper === 'ISBLANK';
 

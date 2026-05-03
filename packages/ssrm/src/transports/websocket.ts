@@ -1,8 +1,8 @@
 // =============================================================================
 // WebSocket SSRM transport
 //
-// A minimal but correct WebSocket-backed transport. Wire format is JSON
-// for v0.0.2 (Arrow IPC support comes later, behind a negotiated handshake).
+// A minimal but correct WebSocket-backed transport. Wire format is JSON;
+// Arrow IPC support is planned and will negotiate via a handshake.
 // Each request is correlated by a client-generated `requestId`; responses
 // match by id. Subscriptions use a single open channel and receive
 // `patch` messages until unsubscribed.

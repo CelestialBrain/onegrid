@@ -690,8 +690,8 @@ export const App = (): JSX.Element => {
   }, [grid, duckdbTick, mode]);
 
   // Push sort state into the underlying data source. SSRM mode invalidates
-  // the row-source cache and refetches; in-memory mode is visual-only for
-  // now (sorting an in-memory dataset is a v0.0.4 follow-up).
+  // the row-source cache and refetches; in-memory mode rebuilds memoryView
+  // through @onegrid/data's sortIndex on every change.
   useEffect(() => {
     if (!grid) return;
     grid.setSort(sort);
@@ -860,7 +860,7 @@ export const App = (): JSX.Element => {
   return (
     <div className="app">
       <div className="toolbar">
-        <h1>oneGrid · v0.0.3</h1>
+        <h1>oneGrid · v0.0.5</h1>
 
         <div role="tablist" aria-label="data source mode">
           <button

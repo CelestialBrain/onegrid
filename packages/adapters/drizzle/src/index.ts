@@ -5,14 +5,14 @@
 // with keyset (cursor) pagination. Works against any Drizzle-supported
 // dialect: Postgres, MySQL, SQLite, Cloudflare D1, Bun SQLite, etc.
 //
-// What's wired up in v0.0.3:
+// What's wired up:
 //   - schema()       — derives ColumnSchema[] from drizzle's column metadata
 //                      where possible; user can override via `schema` option.
 //   - fetchBlock()   — translates SortModel → orderBy, FilterModel → where,
 //                      cursor → keyset condition (after / before),
 //                      and limit. Returns JSON-encoded rows.
 //
-// Not yet wired (will land in subsequent versions):
+// Not yet wired:
 //   - subscribe / live updates
 //   - mutate (write-back) — reasonable since most apps want explicit
 //     mutation paths anyway.
