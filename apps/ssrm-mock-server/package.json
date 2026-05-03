@@ -1,0 +1,20 @@
+{
+  "name": "@onegrid/ssrm-mock-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Localhost mock server speaking the oneGrid SSRM HTTP protocol against 1M synthetic rows.",
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .turbo"
+  },
+  "dependencies": {
+    "@onegrid/data": "workspace:*",
+    "@onegrid/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
+}

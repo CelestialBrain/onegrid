@@ -4,13 +4,14 @@
 // Server-side row model. Cursor-paged block fetcher with sliding-window LRU
 // cache, schema memoization, fingerprint-based invalidation on sort/filter
 // /group/pivot changes, and AbortController-aware request cancellation.
-// Includes a default WebSocket transport.
+// Ships HTTP and WebSocket transports plus a sync RowSource bridge.
 //
 // Public surface:
 //   - createSsrmDataSource(transport, options?) → DataSource (+ invalidate, stats)
+//   - createHttpTransport({ baseUrl, ... }) → SsrmTransport
 //   - createWebSocketTransport({ url, ... }) → SsrmTransport
-//   - BlockCache (advanced consumers building custom datasources)
-//   - fingerprintQuery (advanced consumers building cache-aware tooling)
+//   - createSsrmRowSource(dataSource, opts) → RowSource w/ block cache + lazy fetch
+//   - BlockCache, fingerprintQuery — advanced consumers building cache-aware tooling
 //
 // =============================================================================
 
@@ -24,5 +25,15 @@ export type { SsrmDataSourceHandle } from './datasource';
 
 export type { SsrmCacheOptions, SsrmTransport } from './types';
 
-export { createWebSocketTransport } from './transports';
-export type { WebSocketTransportOptions } from './transports';
+export { createWebSocketTransport, createHttpTransport } from './transports';
+export type {
+  WebSocketTransportOptions,
+  HttpTransportOptions,
+} from './transports';
+
+export { createSsrmRowSource } from './row-source';
+export type {
+  RowSource,
+  SsrmRowSourceHandle,
+  SsrmRowSourceOptions,
+} from './row-source';
