@@ -12,10 +12,17 @@ import { downloadCsv, downloadXlsx, type ExportColumn } from '@onegrid/export';
 import { generateSynthetic } from './lib/synthetic';
 import { connectSsrm, SSRM_COLUMNS, type SsrmConnection } from './lib/ssrm';
 import { buildQuickFilter } from './lib/filter';
+import {
+  createFormulaPlayground,
+  FORMULA_COLUMNS,
+  FORMULA_ROW_COUNT,
+  indexToColumnId,
+  type FormulaPlaygroundHandle,
+} from './lib/formula-mode';
 
 const ROW_OPTIONS = [1_000, 10_000, 100_000, 1_000_000, 10_000_000] as const;
 
-type Mode = 'memory' | 'ssrm';
+type Mode = 'memory' | 'ssrm' | 'formula';
 
 // Stable references so useOneGrid's effect doesn't re-fire while waiting
 // for async data sources to resolve.
@@ -34,6 +41,9 @@ declare global {
       getSort: () => SortModel;
       setFilter: (query: string) => void;
       getFilter: () => string;
+      formulaSet?: (id: string, input: string) => void;
+      formulaGet?: (id: string) => unknown;
+      formulaStats?: () => unknown;
     };
   }
 }
@@ -96,6 +106,22 @@ export const App = (): JSX.Element => {
   );
   const [ssrmTick, setSsrmTick] = useState(0);
 
+  // ----- formula playground -----
+  const [formula, setFormula] = useState<FormulaPlaygroundHandle | null>(null);
+  const [formulaTick, setFormulaTick] = useState(0);
+  const [formulaActiveCell, setFormulaActiveCell] = useState<string>('A1');
+  const [formulaInput, setFormulaInput] = useState<string>('');
+
+  useEffect(() => {
+    if (mode !== 'formula') {
+      setFormula(null);
+      return;
+    }
+    const handle = createFormulaPlayground();
+    setFormula(handle);
+    setFormulaInput(handle.getDisplaySource('A1'));
+  }, [mode]);
+
   useEffect(() => {
     if (mode !== 'ssrm') {
       setSsrm(null);
@@ -123,20 +149,29 @@ export const App = (): JSX.Element => {
     };
   }, [mode]);
 
-  const dataReady = mode === 'memory' ? memoryDataset !== null : ssrm !== null;
+  const dataReady =
+    mode === 'memory'
+      ? memoryDataset !== null
+      : mode === 'ssrm'
+        ? ssrm !== null
+        : formula !== null;
 
   // Module-level stable fallbacks so useOneGrid's effect doesn't re-fire
   // every render while we're waiting for the async data source.
-  const safeColumns: ReadonlyArray<ColumnDef> = dataReady
-    ? mode === 'memory'
+  const safeColumns: ReadonlyArray<ColumnDef> = !dataReady
+    ? EMPTY_COLUMNS
+    : mode === 'memory'
       ? memoryDataset!.columns
-      : SSRM_COLUMNS
-    : EMPTY_COLUMNS;
-  const safeRowSource: RowSource = dataReady
-    ? mode === 'memory'
+      : mode === 'ssrm'
+        ? SSRM_COLUMNS
+        : FORMULA_COLUMNS;
+  const safeRowSource: RowSource = !dataReady
+    ? EMPTY_ROW_SOURCE
+    : mode === 'memory'
       ? memoryDataset!.rowSource
-      : ssrm!.rowSource
-    : EMPTY_ROW_SOURCE;
+      : mode === 'ssrm'
+        ? ssrm!.rowSource
+        : formula!.rowSource;
   const safeRowHeight: number | Float32Array =
     mode === 'memory' && memoryDataset ? memoryDataset.heights : 28;
 
@@ -152,12 +187,19 @@ export const App = (): JSX.Element => {
     rowSource: safeRowSource,
     rowHeight: safeRowHeight,
     headerHeight: 32,
-    frozenColumnCount: 1,
+    frozenColumnCount: mode === 'formula' ? 0 : 1,
     sort,
     onFrame: (s) => {
       setStats(s);
     },
     onHeaderClick: handleHeaderClick,
+    onSelectionChange: (selection) => {
+      // In formula mode, mirror the active cell into the formula bar.
+      if (mode !== 'formula' || !formula || !selection.active) return;
+      const id = formula.cellIdAt(selection.active.row, indexToColumnId(selection.active.col));
+      setFormulaActiveCell(id);
+      setFormulaInput(formula.getDisplaySource(id));
+    },
   });
 
   // SSRM: when blocks land, ask the grid to repaint. scrollBy(0) is a
@@ -190,6 +232,22 @@ export const App = (): JSX.Element => {
     grid?.scrollToRow(0);
   }, [filterQuery, mode, ssrm, grid]);
 
+  // Formula mode: every cell edit bumps formulaTick → grid.refresh() so the
+  // canvas re-reads via getCell, which in turn calls engine.getValue (Adapton-
+  // style demand-driven recompute). Cells that aren't visible are not
+  // recomputed on read.
+  useEffect(() => {
+    if (mode !== 'formula' || !grid) return;
+    grid.refresh();
+  }, [grid, mode, formulaTick]);
+
+  const applyFormula = useCallback(() => {
+    if (!formula) return;
+    formula.applyInput(formulaActiveCell, formulaInput);
+    setFormulaTick((t) => t + 1);
+    setFormulaInput(formula.getDisplaySource(formulaActiveCell));
+  }, [formula, formulaActiveCell, formulaInput]);
+
   useEffect(() => {
     if (!grid) return;
     window.__onegrid = {
@@ -214,6 +272,12 @@ export const App = (): JSX.Element => {
         setFilterQuery(q);
       },
       getFilter: () => filterQuery,
+      formulaSet: (id, input) => {
+        formula?.applyInput(id, input);
+        setFormulaTick((t) => t + 1);
+      },
+      formulaGet: (id) => formula?.engine.getValue(id),
+      formulaStats: () => formula?.engine.getStats(),
     };
     return () => {
       delete window.__onegrid;
@@ -291,6 +355,15 @@ export const App = (): JSX.Element => {
             style={{ fontWeight: mode === 'ssrm' ? 600 : 400 }}
           >
             SSRM (localhost:3001)
+          </button>{' '}
+          <button
+            type="button"
+            onClick={() => {
+              setMode('formula');
+            }}
+            style={{ fontWeight: mode === 'formula' ? 600 : 400 }}
+          >
+            Formula
           </button>
         </div>
 
@@ -335,6 +408,44 @@ export const App = (): JSX.Element => {
               }}
               style={{ minWidth: 180 }}
             />
+          </>
+        )}
+
+        {mode === 'formula' && formula && (
+          <>
+            <span style={{ color: 'var(--muted)', fontFamily: 'ui-monospace, monospace' }}>
+              {formulaActiveCell}
+            </span>
+            <input
+              type="text"
+              value={formulaInput}
+              onChange={(e) => {
+                setFormulaInput(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  applyFormula();
+                }
+              }}
+              placeholder="Type a value or =FORMULA, then Enter…"
+              spellCheck={false}
+              style={{
+                minWidth: 320,
+                fontFamily: 'ui-monospace, monospace',
+              }}
+            />
+            <button type="button" onClick={applyFormula}>
+              Apply
+            </button>
+            <span style={{ color: 'var(--muted)', fontSize: 12 }}>
+              {(() => {
+                const stats = formula.engine.getStats();
+                return `${String(stats.formulaCount)} formulas · ${String(
+                  stats.edgeCount,
+                )} edges · ${String(stats.dirtyCount)} dirty`;
+              })()}
+            </span>
           </>
         )}
 

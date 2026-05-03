@@ -81,3 +81,24 @@ export {
 export type { FormulaErrorCode } from './errors';
 
 export { FormulaSyntaxError } from './tokenizer';
+
+// -----------------------------------------------------------------------------
+// Incremental engine — Adapton-style demand-driven recompute.
+// -----------------------------------------------------------------------------
+
+export { createIncrementalEngine } from './incremental';
+export type { EngineStats, IncrementalFormulaEngine } from './incremental';
+
+export { DependencyGraph } from './dependency-graph';
+
+export {
+  expandRange,
+  isRangeId,
+  letterToIndex,
+  indexToLetter,
+  normalizeCellRef,
+  normalizeRangeRef,
+  parseCellRef,
+  parseRangeRef,
+} from './range';
+export type { CellRef } from './range';

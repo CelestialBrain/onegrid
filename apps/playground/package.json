@@ -15,6 +15,7 @@
   "dependencies": {
     "@onegrid/core": "workspace:*",
     "@onegrid/export": "workspace:*",
+    "@onegrid/formula": "workspace:*",
     "@onegrid/react": "workspace:*",
     "@onegrid/ssrm": "workspace:*",
     "react": "^19.0.0",

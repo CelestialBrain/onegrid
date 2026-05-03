@@ -59,6 +59,9 @@ importers:
       '@onegrid/export':
         specifier: workspace:*
         version: link:../../packages/export
+      '@onegrid/formula':
+        specifier: workspace:*
+        version: link:../../packages/formula
       '@onegrid/react':
         specifier: workspace:*
         version: link:../../packages/adapters/react
