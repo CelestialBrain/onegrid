@@ -51,6 +51,12 @@ All under a single MIT license. No paywalled tiers. No commercial-only features.
 
 ---
 
+## Roadmap
+
+The full slate of planned work — surface area, performance, hierarchy, database adapters, and signature differentiation features — is tracked in **[ROADMAP.md](ROADMAP.md)**. Releases v0.0.6 through v1.0.0 are sketched there with explicit milestones.
+
+---
+
 ## Architecture
 
 - **[packages/protocol/src/index.ts](packages/protocol/src/index.ts)** — Load-bearing schema. The contract every other package depends on.
