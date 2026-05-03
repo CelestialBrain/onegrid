@@ -11,7 +11,15 @@ import {
 import { downloadCsv, downloadXlsx, type ExportColumn } from '@onegrid/export';
 import { generateSynthetic } from './lib/synthetic';
 import { connectSsrm, SSRM_COLUMNS, type SsrmConnection } from './lib/ssrm';
-import { buildQuickFilter } from './lib/filter';
+import {
+  FILTER_OPS,
+  buildColumnFilter,
+  buildQuickFilter,
+  isUnaryOp,
+  newFilterRule,
+  type FilterOp,
+  type FilterRule,
+} from './lib/filter';
 import {
   createFormulaPlayground,
   FORMULA_COLUMNS,
@@ -73,6 +81,8 @@ export const App = (): JSX.Element => {
   const [stats, setStats] = useState<FrameStats | null>(null);
   const [sort, setSort] = useState<SortModel>([]);
   const [filterQuery, setFilterQuery] = useState<string>('');
+  const [columnFilters, setColumnFilters] = useState<ReadonlyArray<FilterRule>>([]);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
   // Capture shiftKey at click-time inside the canvas; the Grid's onHeaderClick
   // doesn't pass the event, so we read it from the latest pointer state.
   const [shiftDown, setShiftDown] = useState(false);
@@ -221,16 +231,49 @@ export const App = (): JSX.Element => {
     }
   }, [sort, grid, mode, ssrm]);
 
-  // Quick filter wiring. SSRM mode forwards the FilterModel; the row source
-  // invalidates blocks and the next response carries the new totalRowCount
-  // (e.g. 1M → 50k after a narrowing filter).
+  // Filter wiring (SSRM only). Combines quick-filter (OR-of-contains across
+  // every column) with structured per-column rules (AND of typed
+  // comparisons) into a single FilterModel:
+  //
+  //   final = (quickFilter) AND (columnFilter)
+  //
+  // Either branch may be null, in which case the other stands alone.
   useEffect(() => {
     if (mode !== 'ssrm' || !ssrm) return;
     const columnIds = SSRM_COLUMNS.map((c) => c.id);
-    const filter: FilterModel = buildQuickFilter(filterQuery, columnIds);
-    ssrm.handle.setFilter(filter);
+    const quick = buildQuickFilter(filterQuery, columnIds);
+    const columnar = buildColumnFilter(columnFilters);
+    let merged: FilterModel = null;
+    if (quick && columnar) {
+      merged = { type: 'logical', op: 'and', filters: [quick, columnar] };
+    } else {
+      merged = quick ?? columnar;
+    }
+    ssrm.handle.setFilter(merged);
     grid?.scrollToRow(0);
-  }, [filterQuery, mode, ssrm, grid]);
+  }, [filterQuery, columnFilters, mode, ssrm, grid]);
+
+  const addColumnFilter = useCallback(() => {
+    const firstColumn = SSRM_COLUMNS[0]?.id ?? 'firstName';
+    setColumnFilters((prev) => [...prev, newFilterRule(firstColumn)]);
+  }, []);
+
+  const updateColumnFilter = useCallback(
+    (id: string, patch: Partial<FilterRule>): void => {
+      setColumnFilters((prev) =>
+        prev.map((rule) => (rule.id === id ? { ...rule, ...patch } : rule)),
+      );
+    },
+    [],
+  );
+
+  const removeColumnFilter = useCallback((id: string): void => {
+    setColumnFilters((prev) => prev.filter((rule) => rule.id !== id));
+  }, []);
+
+  const clearAllColumnFilters = useCallback(() => {
+    setColumnFilters([]);
+  }, []);
 
   // Formula mode: every cell edit bumps formulaTick → grid.refresh() so the
   // canvas re-reads via getCell, which in turn calls engine.getValue (Adapton-
@@ -408,6 +451,15 @@ export const App = (): JSX.Element => {
               }}
               style={{ minWidth: 180 }}
             />
+            <button
+              type="button"
+              onClick={() => {
+                setShowFilterPanel((s) => !s);
+              }}
+              style={{ fontWeight: showFilterPanel ? 600 : 400 }}
+            >
+              Filters{columnFilters.length > 0 ? ` (${String(columnFilters.length)})` : ''}
+            </button>
           </>
         )}
 
@@ -491,6 +543,91 @@ export const App = (): JSX.Element => {
           </span>
         </div>
       </div>
+      {mode === 'ssrm' && showFilterPanel && (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            padding: '10px 16px',
+            background: 'var(--panel)',
+            borderBottom: '1px solid var(--border)',
+            fontSize: 12,
+          }}
+        >
+          {columnFilters.length === 0 && (
+            <div style={{ color: 'var(--muted)' }}>
+              No column filters. Click <strong>Add filter</strong> to narrow with typed comparisons.
+            </div>
+          )}
+          {columnFilters.map((rule) => {
+            const opMeta = FILTER_OPS.find((o) => o.op === rule.op);
+            return (
+              <div
+                key={rule.id}
+                style={{ display: 'flex', gap: 6, alignItems: 'center' }}
+              >
+                <select
+                  value={rule.columnId}
+                  onChange={(e) => {
+                    updateColumnFilter(rule.id, { columnId: e.target.value });
+                  }}
+                >
+                  {SSRM_COLUMNS.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.displayName ?? c.id}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={rule.op}
+                  onChange={(e) => {
+                    updateColumnFilter(rule.id, { op: e.target.value as FilterOp });
+                  }}
+                >
+                  {FILTER_OPS.map((o) => (
+                    <option key={o.op} value={o.op}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  placeholder={isUnaryOp(rule.op) ? '(no value)' : 'value'}
+                  value={rule.value}
+                  disabled={isUnaryOp(rule.op)}
+                  onChange={(e) => {
+                    updateColumnFilter(rule.id, { value: e.target.value });
+                  }}
+                  style={{
+                    flex: '0 1 240px',
+                    opacity: isUnaryOp(rule.op) || opMeta ? 1 : 0.5,
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    removeColumnFilter(rule.id);
+                  }}
+                  aria-label="remove filter"
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={addColumnFilter}>
+              + Add filter
+            </button>
+            {columnFilters.length > 0 && (
+              <button type="button" onClick={clearAllColumnFilters}>
+                Clear all
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
         <div
           ref={ref}
