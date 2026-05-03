@@ -35,8 +35,41 @@ export interface FrameStats {
 }
 
 export interface FrameSample {
+  /** Frame end timestamp (performance.now). */
   ts: number;
+  /** ms inside render(). */
   drawDurationMs: number;
+  /** Pixels scrolled since the previous frame (absolute). */
+  scrollDelta: number;
+  /** Cells drawn this frame. */
+  cells: number;
+}
+
+export interface MetricsSnapshot {
+  /** Wall-clock window covered by this snapshot, ms. */
+  readonly windowMs: number;
+  /** Number of frames recorded in the window. */
+  readonly frameCount: number;
+  /** Average FPS over the window. */
+  readonly fpsAvg: number;
+  /** Frame-interval percentiles (ms between frames). Lower is better. */
+  readonly intervalMsP50: number;
+  readonly intervalMsP95: number;
+  readonly intervalMsP99: number;
+  /** Draw-duration percentiles. */
+  readonly drawMsP50: number;
+  readonly drawMsP95: number;
+  readonly drawMsP99: number;
+  /** Long-frame counts (frames whose interval exceeded the threshold). */
+  readonly longFramesGt16: number;
+  readonly longFramesGt33: number;
+  readonly longFramesGt50: number;
+  /** Total scroll distance covered, px. */
+  readonly scrollPxTotal: number;
+  /** Mean cells drawn per frame. */
+  readonly cellsPerFrameAvg: number;
+  /** Memory snapshot if Chromium exposes it. */
+  readonly heapUsedBytes?: number;
 }
 
 export class CanvasGrid {
@@ -65,9 +98,16 @@ export class CanvasGrid {
   private needsRender = true;
   private destroyed = false;
 
-  private readonly frameSamples: FrameSample[] = [];
+  /**
+   * Circular buffer of recent frames. ~30 s of samples at 60 FPS = 1800
+   * entries; we cap to 4096 to be safe at high refresh rates.
+   */
+  private readonly frameBufferCap = 4096;
+  private readonly frameBuffer: FrameSample[] = [];
+  private frameBufferHead = 0;
   private lastFrameTs = 0;
   private velocity = 0;
+  private debugLog = false;
 
   private cumulativeColumnWidths: Float32Array;
   private totalColumnsWidth: number;
@@ -126,6 +166,13 @@ export class CanvasGrid {
 
     this.handleResize();
     this.scheduleRender();
+
+    // Optional verbose console logging when ?debug=1 is in the URL.
+    try {
+      this.debugLog = new URLSearchParams(window.location.search).get('debug') === '1';
+    } catch {
+      this.debugLog = false;
+    }
   }
 
   setData(data: SyntheticDataset): void {
@@ -225,6 +272,7 @@ export class CanvasGrid {
   private tick = (ts: number): void => {
     this.rafHandle = null;
     if (this.destroyed) return;
+    const scrollDelta = Math.abs(this.scrollTop - this.lastRenderedScrollTop);
     if (
       this.needsRender ||
       this.scrollTop !== this.lastRenderedScrollTop ||
@@ -233,8 +281,8 @@ export class CanvasGrid {
       const t0 = performance.now();
       const stats = this.render();
       const t1 = performance.now();
-      this.recordFrame(ts, t1 - t0);
-      this.onFrame?.({ ...stats, drawDurationMs: t1 - t0, fps: this.computeFps() });
+      this.recordFrame(ts, t1 - t0, scrollDelta, stats.drawCellsPerFrame);
+      this.onFrame?.({ ...stats, drawDurationMs: t1 - t0, fps: this.computeRollingFps() });
       this.lastRenderedScrollTop = this.scrollTop;
       this.lastRenderedScrollLeft = this.scrollLeft;
       this.needsRender = false;
@@ -244,22 +292,149 @@ export class CanvasGrid {
     }
   };
 
-  private recordFrame(ts: number, drawDurationMs: number): void {
-    this.frameSamples.push({ ts, drawDurationMs });
-    while (this.frameSamples.length > 0 && ts - (this.frameSamples[0]?.ts ?? 0) > 1000) {
-      this.frameSamples.shift();
+  private recordFrame(
+    ts: number,
+    drawDurationMs: number,
+    scrollDelta: number,
+    cells: number,
+  ): void {
+    const sample: FrameSample = { ts, drawDurationMs, scrollDelta, cells };
+    if (this.frameBuffer.length < this.frameBufferCap) {
+      this.frameBuffer.push(sample);
+    } else {
+      this.frameBuffer[this.frameBufferHead] = sample;
+      this.frameBufferHead = (this.frameBufferHead + 1) % this.frameBufferCap;
     }
     this.lastFrameTs = ts;
+    if (this.debugLog && drawDurationMs > 16) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[onegrid] long frame ${drawDurationMs.toFixed(1)}ms (cells=${cells}, dy=${scrollDelta.toFixed(0)}px)`,
+      );
+    }
   }
 
-  private computeFps(): number {
-    if (this.frameSamples.length < 2) return 0;
-    const first = this.frameSamples[0];
-    const last = this.frameSamples[this.frameSamples.length - 1];
+  private framesInOrder(): FrameSample[] {
+    if (this.frameBuffer.length < this.frameBufferCap) return this.frameBuffer.slice();
+    return [
+      ...this.frameBuffer.slice(this.frameBufferHead),
+      ...this.frameBuffer.slice(0, this.frameBufferHead),
+    ];
+  }
+
+  private computeRollingFps(): number {
+    // Last 1 s window for the live UI meter — same semantics as before.
+    const frames = this.framesInOrder();
+    if (frames.length < 2) return 0;
+    const cutoff = (frames[frames.length - 1]?.ts ?? 0) - 1000;
+    let i = frames.length - 1;
+    while (i > 0 && (frames[i - 1]?.ts ?? 0) >= cutoff) i--;
+    const window = frames.slice(i);
+    if (window.length < 2) return 0;
+    const first = window[0];
+    const last = window[window.length - 1];
     if (!first || !last) return 0;
     const elapsed = last.ts - first.ts;
     if (elapsed <= 0) return 0;
-    return Math.round((this.frameSamples.length - 1) / (elapsed / 1000));
+    return Math.round((window.length - 1) / (elapsed / 1000));
+  }
+
+  /**
+   * Snapshot the entire frame buffer with percentiles. Cheap to call ad-hoc
+   * (it's O(n log n) sort over up to 4k samples). Designed for benchmark
+   * harnesses to read after a scripted interaction.
+   */
+  getMetricsSnapshot(): MetricsSnapshot {
+    const frames = this.framesInOrder();
+    const frameCount = frames.length;
+    if (frameCount === 0) {
+      return {
+        windowMs: 0,
+        frameCount: 0,
+        fpsAvg: 0,
+        intervalMsP50: 0,
+        intervalMsP95: 0,
+        intervalMsP99: 0,
+        drawMsP50: 0,
+        drawMsP95: 0,
+        drawMsP99: 0,
+        longFramesGt16: 0,
+        longFramesGt33: 0,
+        longFramesGt50: 0,
+        scrollPxTotal: 0,
+        cellsPerFrameAvg: 0,
+      };
+    }
+    const first = frames[0]!;
+    const last = frames[frameCount - 1]!;
+    const windowMs = last.ts - first.ts;
+
+    const intervals: number[] = [];
+    let scrollPxTotal = 0;
+    let cellsTotal = 0;
+    let long16 = 0;
+    let long33 = 0;
+    let long50 = 0;
+    for (let i = 1; i < frameCount; i++) {
+      const cur = frames[i]!;
+      const prev = frames[i - 1]!;
+      const dt = cur.ts - prev.ts;
+      intervals.push(dt);
+      if (dt > 16.7) long16++;
+      if (dt > 33.4) long33++;
+      if (dt > 50) long50++;
+      scrollPxTotal += cur.scrollDelta;
+      cellsTotal += cur.cells;
+    }
+    cellsTotal += first.cells;
+
+    const draws = frames.map((f) => f.drawDurationMs);
+
+    const fpsAvg =
+      windowMs > 0 ? Math.round(((frameCount - 1) / windowMs) * 1000 * 10) / 10 : 0;
+
+    const heap =
+      typeof performance !== 'undefined' &&
+      'memory' in performance &&
+      typeof (performance as PerformanceWithMemory).memory?.usedJSHeapSize === 'number'
+        ? (performance as PerformanceWithMemory).memory!.usedJSHeapSize
+        : undefined;
+
+    const result: MetricsSnapshot = {
+      windowMs: Math.round(windowMs),
+      frameCount,
+      fpsAvg,
+      intervalMsP50: percentile(intervals, 0.5),
+      intervalMsP95: percentile(intervals, 0.95),
+      intervalMsP99: percentile(intervals, 0.99),
+      drawMsP50: percentile(draws, 0.5),
+      drawMsP95: percentile(draws, 0.95),
+      drawMsP99: percentile(draws, 0.99),
+      longFramesGt16: long16,
+      longFramesGt33: long33,
+      longFramesGt50: long50,
+      scrollPxTotal: Math.round(scrollPxTotal),
+      cellsPerFrameAvg: Math.round(cellsTotal / frameCount),
+      ...(heap !== undefined ? { heapUsedBytes: heap } : {}),
+    };
+    return result;
+  }
+
+  /** Reset the metrics buffer. Call at the start of a benchmark scenario. */
+  resetMetrics(): void {
+    this.frameBuffer.length = 0;
+    this.frameBufferHead = 0;
+  }
+
+  /** Imperative API for tests: scroll the grid by N pixels. */
+  scrollBy(deltaY: number): void {
+    this.scrollHost.scrollBy({ top: deltaY });
+  }
+
+  /** Imperative API for tests: scroll the grid to a row index. */
+  scrollToRow(rowIndex: number): void {
+    const top = this.fenwick.prefixSum(Math.max(0, Math.min(rowIndex, this.data.numRows - 1)));
+    this.scrollHost.scrollTo({ top });
   }
 
   // ---------------------------------------------------------------------------
@@ -455,6 +630,21 @@ export class CanvasGrid {
     rows.push('</tbody></table>');
     this.a11yMount.innerHTML = rows.join('');
   }
+}
+
+interface PerformanceWithMemory extends Performance {
+  readonly memory?: {
+    readonly usedJSHeapSize: number;
+    readonly totalJSHeapSize: number;
+    readonly jsHeapSizeLimit: number;
+  };
+}
+
+function percentile(sortedSrc: ReadonlyArray<number>, p: number): number {
+  if (sortedSrc.length === 0) return 0;
+  const sorted = [...sortedSrc].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor(p * (sorted.length - 1))));
+  return Math.round((sorted[idx] ?? 0) * 100) / 100;
 }
 
 function escapeHtml(s: string): string {

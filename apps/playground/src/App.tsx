@@ -1,6 +1,18 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import { CanvasGrid, type FrameStats } from './spike/CanvasGrid';
+import { CanvasGrid, type FrameStats, type MetricsSnapshot } from './spike/CanvasGrid';
 import { generateSynthetic } from './spike/synthetic';
+
+declare global {
+  interface Window {
+    __onegrid?: {
+      getMetrics: () => MetricsSnapshot;
+      reset: () => void;
+      scrollBy: (deltaY: number) => void;
+      scrollToRow: (rowIndex: number) => void;
+      setRows: (n: number) => void;
+    };
+  }
+}
 
 const ROW_OPTIONS = [1_000, 10_000, 100_000, 1_000_000, 10_000_000] as const;
 
@@ -24,14 +36,40 @@ export const App = (): JSX.Element => {
     const grid = new CanvasGrid({
       host: hostRef.current,
       data: dataset,
-      onFrame: (s) => setStats(s),
+      onFrame: (s) => {
+        setStats(s);
+      },
     });
     gridRef.current = grid;
+    window.__onegrid = {
+      getMetrics: () => grid.getMetricsSnapshot(),
+      reset: () => {
+        grid.resetMetrics();
+      },
+      scrollBy: (dy) => {
+        grid.scrollBy(dy);
+      },
+      scrollToRow: (i) => {
+        grid.scrollToRow(i);
+      },
+      setRows: (n) => {
+        setNumRows(n as (typeof ROW_OPTIONS)[number]);
+      },
+    };
     return () => {
       grid.destroy();
       gridRef.current = null;
+      delete window.__onegrid;
     };
   }, [dataset]);
+
+  const copyMetrics = (): void => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const snap = grid.getMetricsSnapshot();
+    void navigator.clipboard.writeText(JSON.stringify(snap, null, 2));
+    console.log('[onegrid] metrics snapshot', snap);
+  };
 
   return (
     <div className="app">
@@ -51,6 +89,12 @@ export const App = (): JSX.Element => {
           </select>
         </label>
         <span style={{ color: 'var(--muted)' }}>generate: {genMs} ms</span>
+        <button type="button" onClick={copyMetrics}>
+          Copy metrics
+        </button>
+        <button type="button" onClick={() => gridRef.current?.resetMetrics()}>
+          Reset
+        </button>
         <div className="meter">
           <span>
             FPS <strong>{stats?.fps ?? 0}</strong>
