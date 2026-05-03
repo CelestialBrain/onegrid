@@ -18,6 +18,10 @@ out
 *.tsbuildinfo
 .vite
 
+# Playwright/bench outputs — churn every run, not source-of-truth.
+playwright-report/
+test-results/
+
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
