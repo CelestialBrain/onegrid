@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
 import {
   useOneGrid,
   type ColumnDef,
+  type FilterModel,
   type FrameStats,
   type MetricsSnapshot,
   type RowSource,
@@ -10,6 +11,7 @@ import {
 import { downloadCsv, downloadXlsx, type ExportColumn } from '@onegrid/export';
 import { generateSynthetic } from './lib/synthetic';
 import { connectSsrm, SSRM_COLUMNS, type SsrmConnection } from './lib/ssrm';
+import { buildQuickFilter } from './lib/filter';
 
 const ROW_OPTIONS = [1_000, 10_000, 100_000, 1_000_000, 10_000_000] as const;
 
@@ -30,6 +32,8 @@ declare global {
       setRows: (n: number) => void;
       setSort: (sort: SortModel) => void;
       getSort: () => SortModel;
+      setFilter: (query: string) => void;
+      getFilter: () => string;
     };
   }
 }
@@ -58,6 +62,7 @@ export const App = (): JSX.Element => {
   const [genMs, setGenMs] = useState<number>(0);
   const [stats, setStats] = useState<FrameStats | null>(null);
   const [sort, setSort] = useState<SortModel>([]);
+  const [filterQuery, setFilterQuery] = useState<string>('');
   // Capture shiftKey at click-time inside the canvas; the Grid's onHeaderClick
   // doesn't pass the event, so we read it from the latest pointer state.
   const [shiftDown, setShiftDown] = useState(false);
@@ -174,6 +179,17 @@ export const App = (): JSX.Element => {
     }
   }, [sort, grid, mode, ssrm]);
 
+  // Quick filter wiring. SSRM mode forwards the FilterModel; the row source
+  // invalidates blocks and the next response carries the new totalRowCount
+  // (e.g. 1M → 50k after a narrowing filter).
+  useEffect(() => {
+    if (mode !== 'ssrm' || !ssrm) return;
+    const columnIds = SSRM_COLUMNS.map((c) => c.id);
+    const filter: FilterModel = buildQuickFilter(filterQuery, columnIds);
+    ssrm.handle.setFilter(filter);
+    grid?.scrollToRow(0);
+  }, [filterQuery, mode, ssrm, grid]);
+
   useEffect(() => {
     if (!grid) return;
     window.__onegrid = {
@@ -194,6 +210,10 @@ export const App = (): JSX.Element => {
         setSort(s);
       },
       getSort: () => sort,
+      setFilter: (q) => {
+        setFilterQuery(q);
+      },
+      getFilter: () => filterQuery,
     };
     return () => {
       delete window.__onegrid;
@@ -298,13 +318,24 @@ export const App = (): JSX.Element => {
         )}
 
         {mode === 'ssrm' && (
-          <span style={{ color: 'var(--muted)' }}>
-            {ssrmStatus === 'connecting' && 'connecting…'}
-            {ssrmStatus === 'connected' && ssrm
-              ? `${ssrm.numRows.toLocaleString()} rows · cache ${String(ssrm.handle.getCacheSize())} blocks`
-              : ''}
-            {ssrmStatus === 'error' && 'connect failed (start: pnpm dev:server)'}
-          </span>
+          <>
+            <span style={{ color: 'var(--muted)' }}>
+              {ssrmStatus === 'connecting' && 'connecting…'}
+              {ssrmStatus === 'connected' && ssrm
+                ? `${safeRowSource.numRows.toLocaleString()} rows · cache ${String(ssrm.handle.getCacheSize())} blocks`
+                : ''}
+              {ssrmStatus === 'error' && 'connect failed (start: pnpm dev:server)'}
+            </span>
+            <input
+              type="search"
+              placeholder="Quick filter…"
+              value={filterQuery}
+              onChange={(e) => {
+                setFilterQuery(e.target.value);
+              }}
+              style={{ minWidth: 180 }}
+            />
+          </>
         )}
 
         <button type="button" onClick={copyMetrics}>

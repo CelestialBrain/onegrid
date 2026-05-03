@@ -94,6 +94,13 @@ export function createSsrmRowSource(
       .then((res) => {
         const rows = ensureJsonRows(res);
         blocks.set(blockIndex, { rows });
+        // Server-authoritative row count: when the result set narrows
+        // (e.g. filter applied) the response carries the new total. The
+        // renderer reads currentNumRows via the handle's numRows getter
+        // and resizes its scroll spacer on the next render frame.
+        if (res.totalRowCount !== undefined && res.totalRowCount !== currentNumRows) {
+          currentNumRows = res.totalRowCount;
+        }
         options.onUpdate?.();
       })
       .catch(() => {
