@@ -171,20 +171,45 @@ each release lands a noticeable surface improvement *and* a hard-to-copy
 capability.
 
 ### v0.0.6 — "actually editable"
+
 Polish on what just shipped + the editing experience users expect.
-- Editor variants (dropdown, date picker, large text, autocomplete, multi-select chips)
-- Cell editor validation (sync + async)
-- IME composition-aware editor commit
-- Custom cell renderers (React/Vue/Svelte/Solid)
-- Set filter
-- Floating filters
+Detailed implementation patterns (architecture, edge cases, test
+strategy, code surface, citations) are in
+**[docs/implementation/v0.0.6.md](docs/implementation/v0.0.6.md)**.
+
+Implementation order — each item builds on the previous so the
+critical path is *not* the order they appeared in the original
+roadmap; it's the order in which retrofits would be most painful:
+
+1. **Accessibility conformance suite (CI-gated)** — first, because
+   ARIA grid semantics (`aria-rowindex`/`aria-colindex`/
+   `aria-activedescendant`) underlie every other surface and are
+   nearly impossible to retrofit later.
+2. **IME composition-aware editor commit** — second, because the
+   editor depends on it; `keyCode === 229` paths are silent in
+   English-locale CI and surface only in CJKT production use.
+3. **Cell editor validation (sync + async)** — sits on top of (1)
+   and (2); reuses the live-region work from the a11y suite.
+4. **Custom cell renderers (React/Vue/Svelte/Solid pool)** — once
+   editing is stable. The renderer pool is the most complex non-a11y
+   subsystem; deferring lets adapter teams parallelise.
+5. **Tooltip system** — depends on a11y `aria-describedby` plumbing
+   and is needed by validation error UI.
+6. **Floating filters** + **Set filter** — paired; the toolbar a11y
+   plumbing is shared, and set-filter UX needs the floating row to
+   live in.
+7. **Editor variants** (dropdown, date picker, large text,
+   autocomplete, multi-select chips) — composes onto the validated
+   editor pipeline.
+8. **`@onegrid/migrate` CLI** — last. Migration value is proportional
+   to API stability; shipping it before 1–7 settle would force the
+   migrator to rewrite itself.
+
+Side-quests that ship anywhere in v0.0.6 (no ordering dependency):
 - Header text wrap
 - Light theme + density variants
-- Tooltip system
 - Loading / no-rows / skeleton overlays
 - Schema introspection helper for adapters
-- `@onegrid/migrate` CLI (initial: AG-Grid-style and TanStack-style column definitions)
-- Accessibility conformance suite (CI-gated)
 
 ### v0.0.7 — "hierarchical"
 Tree data + nested grids = the "inner tables" milestone.
