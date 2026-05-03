@@ -121,6 +121,12 @@ export class Grid {
   private readonly statusBarEnabled: boolean;
   private statusBarEl: HTMLDivElement | null = null;
 
+  // Row grouping.
+  private readonly getRowMeta:
+    | ((rowIndex: number) => import('./types').RowMeta | null | undefined)
+    | undefined;
+  private readonly onToggleGroup: ((path: string) => void) | undefined;
+
   constructor(options: GridOptions) {
     this.host = options.host;
     this.columns = options.columns;
@@ -154,6 +160,10 @@ export class Grid {
     this.pinnedRowHeight = options.pinnedRowHeight ?? 28;
     this.columnGroups = options.columnGroups;
     this.statusBarEnabled = options.statusBar === true;
+
+    // Row grouping.
+    this.getRowMeta = options.getRowMeta;
+    this.onToggleGroup = options.onToggleGroup;
     if (options.expanded) {
       this.expanded = new Set(options.expanded);
     }
@@ -634,6 +644,31 @@ export class Grid {
         }
       }
       return;
+    }
+
+    // Group chevron click: detect when the click falls in a group row
+    // and is within that row's chevron zone (depth-aware). Higher
+    // priority than master-detail chevron / cell selection.
+    if (this.getRowMeta && this.onToggleGroup && localY >= dataTop) {
+      const yInLayout = localY - dataTop + this.scrollTop;
+      if (yInLayout >= 0) {
+        const groupRow = this.fenwick.indexAtOffset(yInLayout);
+        if (groupRow >= 0 && groupRow < this.rowSource.numRows) {
+          const meta = this.getRowMeta(groupRow);
+          if (meta && meta.kind === 'group') {
+            const hitMin = meta.depth * 16 + 4;
+            const hitMax = hitMin + 24 + (meta.label ? 200 : 0);
+            if (localX >= hitMin && localX < hitMax) {
+              this.onToggleGroup(meta.path);
+              this.suppressSelectionUntilUp = true;
+              return;
+            }
+            // Click anywhere else in a group row → no-op (don't start
+            // a selection on synthetic group rows).
+            return;
+          }
+        }
+      }
     }
 
     // Master-detail chevron click: leftmost `chevronWidth` pixels of any
@@ -1296,6 +1331,20 @@ export class Grid {
 
     for (let row = start; row <= end; row++) {
       const h = this.fenwick.get(row);
+      const meta = this.getRowMeta?.(row);
+
+      if (meta && meta.kind === 'group') {
+        // Paint group-row band (only on the non-frozen pass to avoid
+        // double-painting; the frozen-band caller passes colStart=0
+        // and colEnd=frozenColumnCount, so we detect that case).
+        const isFrozenPass = colStart === 0 && colEnd === this.frozenColumnCount;
+        if (!isFrozenPass) {
+          this.drawGroupRow(meta, y, h, horizontalOffset);
+          drawn++;
+        }
+        y += h;
+        continue;
+      }
 
       ctx.fillStyle = row % 2 === 0 ? theme.background : theme.altRowBackground;
       ctx.fillRect(0, y, this.viewportWidth, h);
@@ -1351,6 +1400,82 @@ export class Grid {
     }
 
     return drawn;
+  }
+
+  /** Paint a group-row band: full-width accent, indent + chevron + label
+   *  + count, then aggregate values laid out at the natural column
+   *  positions (so they line up with their data columns). */
+  private drawGroupRow(
+    meta: import('./types').RowGroupMeta,
+    y: number,
+    h: number,
+    horizontalOffset: number,
+  ): void {
+    const ctx = this.ctx;
+    const theme = this.theme;
+    const indent = meta.depth * 16 + 8;
+    const chevronX = indent;
+
+    ctx.fillStyle = '#1b1f26';
+    ctx.fillRect(0, y, this.viewportWidth, h);
+    ctx.strokeStyle = theme.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, y + h - 0.5);
+    ctx.lineTo(this.viewportWidth, y + h - 0.5);
+    ctx.stroke();
+
+    // Chevron + label live in the leftmost band, anchored at the
+    // viewport's left edge regardless of horizontal scroll.
+    ctx.fillStyle = theme.mutedText;
+    ctx.font = `${String(theme.fontSize)}px ${theme.fontFamily}`;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(meta.expanded ? '\u25BC' : '\u25B6', chevronX, y + h / 2 + 1);
+
+    const labelX = chevronX + 14;
+    ctx.fillStyle = theme.text;
+    ctx.font = `600 ${String(theme.fontSize)}px ${theme.fontFamily}`;
+    const label =
+      meta.count !== undefined ? `${meta.label}  (${String(meta.count)})` : meta.label;
+    ctx.fillText(label, labelX, y + h / 2 + 1);
+
+    // Per-column aggregate values use the column's own format() so dollar
+    // amounts, percentages etc. render consistently with data rows.
+    if (meta.aggregates) {
+      ctx.font = `${String(theme.fontSize)}px ${theme.fontFamily}`;
+      ctx.fillStyle = theme.mutedText;
+      let x = -horizontalOffset;
+      for (let i = 0; i < this.columns.length; i++) {
+        const column = this.columns[i];
+        if (!column) continue;
+        const w = column.width;
+        const isFrozen = i < this.frozenColumnCount;
+        const cellX = isFrozen
+          ? (this.cumulativeColumnWidths[i] ?? 0)
+          : x +
+            this.frozenWidth +
+            ((this.cumulativeColumnWidths[i] ?? 0) -
+              (this.cumulativeColumnWidths[this.frozenColumnCount] ?? 0));
+        if (cellX + w < 0 || cellX > this.viewportWidth) {
+          x = isFrozen ? x : x;
+          continue;
+        }
+        const agg = meta.aggregates[column.id];
+        if (agg !== undefined && agg !== null && agg !== '') {
+          // Skip painting in the leftmost label band so we don't overlap
+          // the chevron/label.
+          const labelEnd = labelX + ctx.measureText(label).width + 12;
+          if (cellX < labelEnd) continue;
+          const text = column.format ? column.format(agg, -1) : String(agg);
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(cellX + 8, y, w - 16, h);
+          ctx.clip();
+          ctx.fillText(text, cellX + 12, y + h / 2 + 1);
+          ctx.restore();
+        }
+      }
+    }
   }
 
   private drawHeader(): void {

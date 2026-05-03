@@ -15,6 +15,13 @@ import {
   materializeSynthetic,
   type MaterializedSyntheticDataset,
 } from './lib/synthetic';
+import {
+  groupRows,
+  flattenGroupTree,
+  pathKey,
+  type FlatGroupEntry,
+} from '@onegrid/data';
+import type { RowMeta } from '@onegrid/core';
 import { connectSsrm, SSRM_COLUMNS, type SsrmConnection } from './lib/ssrm';
 import {
   connectDuckDb,
@@ -250,6 +257,71 @@ export const App = (): JSX.Element => {
     };
   }, [mode]);
 
+  // ----- Row grouping (memory mode only) -----
+  const [groupByColumn, setGroupByColumn] = useState<'none' | 'status'>('none');
+  const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(() => new Set());
+
+  const groupedFlat = useMemo<FlatGroupEntry[] | null>(() => {
+    if (groupByColumn === 'none') return null;
+    if (mode !== 'memory' || !memoryDataset?.materialized) return null;
+    const root = groupRows(
+      memoryDataset.table,
+      { columns: [groupByColumn], openKeys: [] },
+      {
+        aggregations: [
+          { fn: 'sum', columnId: 'revenue', alias: 'revenue' },
+          { fn: 'avg', columnId: 'score', alias: 'score' },
+          { fn: 'count', columnId: 'rowIndex', alias: '__count' },
+        ],
+      },
+    );
+    return flattenGroupTree(root, openGroups);
+  }, [groupByColumn, mode, memoryDataset, openGroups]);
+
+  const groupedRowSource = useMemo<RowSource | null>(() => {
+    if (!groupedFlat || !memoryDataset?.materialized) return null;
+    const flat = groupedFlat;
+    const ds = memoryDataset;
+    return {
+      numRows: flat.length,
+      getCell: (rowIndex: number, columnId: string) => {
+        const entry = flat[rowIndex];
+        if (!entry) return null;
+        if (entry.kind === 'row') return ds.rowSource.getCell(entry.rowIndex, columnId);
+        return null;
+      },
+    };
+  }, [groupedFlat, memoryDataset]);
+
+  const getRowMeta = useCallback(
+    (rowIndex: number): RowMeta | null => {
+      if (!groupedFlat) return null;
+      const entry = groupedFlat[rowIndex];
+      if (!entry || entry.kind !== 'group') return null;
+      const node = entry.node;
+      const path = pathKey(node.path);
+      return {
+        kind: 'group',
+        depth: entry.depth,
+        label: String(node.key ?? '(blank)'),
+        path,
+        expanded: openGroups.has(path),
+        count: node.rowCount,
+        aggregates: node.aggregates as Record<string, unknown>,
+      };
+    },
+    [groupedFlat, openGroups],
+  );
+
+  const handleToggleGroup = useCallback((path: string) => {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
+
   const dataReady =
     mode === 'memory'
       ? memoryDataset !== null
@@ -273,9 +345,9 @@ export const App = (): JSX.Element => {
   const safeRowSource: RowSource = !dataReady
     ? EMPTY_ROW_SOURCE
     : mode === 'memory'
-      ? // Use the sorted/filtered view when available; fall back to the
-        // lazy rowSource for 10M-row mode (no materialization).
-        memoryView?.rowSource ?? memoryDataset!.rowSource
+      ? // Grouped > sorted/filtered view > lazy fallback. The grouped
+        // wrapper takes precedence so group headers appear in render order.
+        groupedRowSource ?? memoryView?.rowSource ?? memoryDataset!.rowSource
       : mode === 'ssrm'
         ? ssrm!.rowSource
         : mode === 'duckdb'
@@ -488,6 +560,7 @@ export const App = (): JSX.Element => {
     ...(editable !== undefined ? { editable } : {}),
     ...(pinnedBottom ? { pinnedBottomRowSource: pinnedBottom } : {}),
     ...(columnGroups ? { columnGroups } : {}),
+    ...(groupedFlat ? { getRowMeta, onToggleGroup: handleToggleGroup } : {}),
     statusBar: true,
     onCellEdit: handleCellEdit,
     onPaste: handlePaste,
@@ -781,6 +854,19 @@ export const App = (): JSX.Element => {
                 >
                   Filters{columnFilters.length > 0 ? ` (${String(columnFilters.length)})` : ''}
                 </button>
+                <label style={{ color: 'var(--muted)', fontSize: 12 }}>
+                  Group by{' '}
+                  <select
+                    value={groupByColumn}
+                    onChange={(e) => {
+                      setGroupByColumn(e.target.value as 'none' | 'status');
+                      setOpenGroups(new Set());
+                    }}
+                  >
+                    <option value="none">none</option>
+                    <option value="status">status</option>
+                  </select>
+                </label>
               </>
             )}
           </>

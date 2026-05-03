@@ -18,11 +18,14 @@ export type { OneGridProps } from './one-grid';
 // Re-export core types so adapter consumers don't need to import @onegrid/core directly.
 export type {
   ColumnDef,
+  ColumnGroupDef,
   FrameStats,
   Grid,
   GridOptions,
   GridTheme,
   MetricsSnapshot,
+  RowGroupMeta,
+  RowMeta,
   RowSource,
 } from '@onegrid/core';
 

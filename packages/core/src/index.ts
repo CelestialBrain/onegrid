@@ -18,10 +18,13 @@ export {
 } from './types';
 export type {
   ColumnDef,
+  ColumnGroupDef,
   FrameStats,
   GridOptions,
   GridTheme,
   MetricsSnapshot,
+  RowGroupMeta,
+  RowMeta,
   RowSource,
 } from './types';
 

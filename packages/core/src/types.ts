@@ -198,6 +198,20 @@ export interface GridOptions {
    *  selection: count plus min/max/sum/avg for numeric cells. Default
    *  false. */
   readonly statusBar?: boolean;
+
+  // ---- Row grouping ----
+
+  /** Per-row metadata hook. Return a RowGroupMeta to render the row as
+   *  a group header (with chevron, indent, label, count, aggregates).
+   *  Return null/undefined for normal data rows. The renderer calls
+   *  this once per visible row per frame, so keep it cheap (typically
+   *  a Map lookup keyed on rowIndex). */
+  readonly getRowMeta?: (rowIndex: number) => RowMeta | null | undefined;
+
+  /** Fires when the user clicks a group's chevron. Receives the
+   *  RowGroupMeta.path so the caller can flip its expansion state and
+   *  rebuild the wrapped RowSource. */
+  readonly onToggleGroup?: (path: string) => void;
 }
 
 export interface ColumnGroupDef {
@@ -208,3 +222,26 @@ export interface ColumnGroupDef {
   /** Optional band background. */
   readonly background?: string;
 }
+
+/**
+ * Per-row hint that switches how the renderer paints a row. Returned
+ * from `GridOptions.getRowMeta(rowIndex)`. Null/undefined means the row
+ * is a normal data row (default rendering).
+ */
+export interface RowGroupMeta {
+  readonly kind: 'group';
+  /** Nesting level (0 = top-level group). Used for left indent. */
+  readonly depth: number;
+  /** Group label drawn in the row's left side. */
+  readonly label: string;
+  /** Stable id used by `onToggleGroup` to identify the group. */
+  readonly path: string;
+  /** Whether this group is currently expanded (children visible). */
+  readonly expanded: boolean;
+  /** Number of rows under this group. Drawn next to the label. */
+  readonly count?: number;
+  /** Aggregate values per column, drawn in the row's column slots. */
+  readonly aggregates?: Record<string, unknown>;
+}
+
+export type RowMeta = RowGroupMeta;
