@@ -45,11 +45,12 @@ All under a single MIT license.
 
 ---
 
-## Architecture
+## Architecture & research
 
-The full architecture report — rendering strategy, data structures, dependency tracking, SSRM design, accessibility, benchmarks, source code references — lives in [RESEARCH.md](RESEARCH.md).
-
-The load-bearing schema (`@onegrid/protocol`) is the contract every other package depends on. Read it first: [packages/protocol/src/index.ts](packages/protocol/src/index.ts).
+- **[RESEARCH.md](RESEARCH.md)** — May 2026 architecture brief: rendering strategy, data structures, dependency tracking, SSRM design, accessibility, benchmarks, source references.
+- **[docs/feature-matrix.md](docs/feature-matrix.md)** — Cross-library feature matrix across 19 grid libraries (AG Grid, TanStack Table, Glide, Handsontable, MUI X, Perspective, Quadratic, SlickGrid, RevoGrid, Tabulator, Grid.js, plus 8 commercial). Identifies the table-stakes features oneGrid v1 must ship, the premium features that become MIT moats, and the universal gaps no one handles well.
+- **[docs/grids/](docs/grids/)** — Per-library deep dives feeding the matrix.
+- **[packages/protocol/src/index.ts](packages/protocol/src/index.ts)** — Load-bearing schema. The contract every other package depends on.
 
 ---
 
