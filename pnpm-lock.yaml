@@ -77,6 +77,9 @@ importers:
       '@onegrid/ssrm':
         specifier: workspace:*
         version: link:../../packages/ssrm
+      '@onegrid/webgpu':
+        specifier: workspace:*
+        version: link:../../packages/webgpu
       react:
         specifier: ^19.0.0
         version: 19.2.5
@@ -282,6 +285,16 @@ importers:
       '@onegrid/protocol':
         specifier: workspace:*
         version: link:../protocol
+
+  packages/webgpu:
+    dependencies:
+      '@onegrid/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      '@webgpu/types':
+        specifier: ^0.1.69
+        version: 0.1.69
 
 packages:
 
@@ -1200,6 +1213,9 @@ packages:
 
   '@vue/shared@3.5.33':
     resolution: {integrity: sha512-5vR2QIlmaLG77Ygd4pMP6+SGQ5yox9VhtnbDWTy9DzMzdmeLxZ1QqxrywEZ9sa1AVubfIJyaCG3ytyWU81ufcQ==}
+
+  '@webgpu/types@0.1.69':
+    resolution: {integrity: sha512-RPmm6kgRbI8e98zSD3RVACvnuktIja5+yLgDAkTmxLr90BEwdTXRQWNLF3ETTTyH/8mKhznZuN5AveXYFEsMGQ==}
 
   acorn-jsx@5.3.2:
     resolution: {integrity: sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==}
@@ -3556,6 +3572,8 @@ snapshots:
       vue: 3.5.33(typescript@5.9.3)
 
   '@vue/shared@3.5.33': {}
+
+  '@webgpu/types@0.1.69': {}
 
   acorn-jsx@5.3.2(acorn@8.16.0):
     dependencies:

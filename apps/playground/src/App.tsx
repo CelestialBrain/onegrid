@@ -23,6 +23,12 @@ import {
   type FlatGroupEntry,
   type PivotedTable,
 } from '@onegrid/data';
+import {
+  webgpuAvailable,
+  getGpuInfo,
+  gpuSumFloat32,
+  cpuSumFloat32,
+} from '@onegrid/webgpu';
 import type { RowMeta } from '@onegrid/core';
 import { connectSsrm, SSRM_COLUMNS, type SsrmConnection } from './lib/ssrm';
 import {
@@ -258,6 +264,38 @@ export const App = (): JSX.Element => {
       canceled = true;
     };
   }, [mode]);
+
+  // ----- WebGPU benchmark -----
+  const [gpuStatus, setGpuStatus] = useState<string>(
+    webgpuAvailable() ? 'WebGPU available' : 'WebGPU unavailable',
+  );
+  const runGpuBench = useCallback(async (): Promise<void> => {
+    setGpuStatus('benchmarking…');
+    try {
+      const info = await getGpuInfo();
+      const N = 4_000_000;
+      const data = new Float32Array(N);
+      for (let i = 0; i < N; i++) data[i] = Math.random();
+
+      const t0 = performance.now();
+      const cpuSum = cpuSumFloat32(data);
+      const cpuMs = performance.now() - t0;
+
+      const t1 = performance.now();
+      const gpuSum = await gpuSumFloat32(data);
+      const gpuMs = performance.now() - t1;
+
+      const speedup = (cpuMs / gpuMs).toFixed(1);
+      const errPct = (Math.abs(cpuSum - gpuSum) / cpuSum * 100).toFixed(3);
+      setGpuStatus(
+        `${info?.description ?? 'GPU'}  ·  ${N.toLocaleString()} f32  ·  ` +
+          `cpu ${cpuMs.toFixed(0)}ms  ·  gpu ${gpuMs.toFixed(0)}ms  ·  ` +
+          `${speedup}× speedup  ·  ${errPct}% Δ`,
+      );
+    } catch (err) {
+      setGpuStatus(`error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, []);
 
   // ----- Pivot mode -----
   // Pivot rebuilds a materialized synthetic dataset (so all groupings have
@@ -1012,6 +1050,17 @@ export const App = (): JSX.Element => {
             </span>
           </>
         )}
+
+        <button
+          type="button"
+          onClick={() => {
+            void runGpuBench();
+          }}
+          title={gpuStatus}
+        >
+          GPU bench
+        </button>
+        <span style={{ color: 'var(--muted)', fontSize: 11 }}>{gpuStatus}</span>
 
         <button type="button" onClick={copyMetrics}>
           Copy metrics
