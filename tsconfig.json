@@ -3,22 +3,5 @@
   "compilerOptions": {
     "noEmit": true
   },
-  "files": [],
-  "references": [
-    { "path": "./packages/protocol" },
-    { "path": "./packages/data" },
-    { "path": "./packages/core" },
-    { "path": "./packages/ssrm" },
-    { "path": "./packages/formula" },
-    { "path": "./packages/duckdb" },
-    { "path": "./packages/onegrid" },
-    { "path": "./packages/adapters/react" },
-    { "path": "./packages/adapters/vue" },
-    { "path": "./packages/adapters/svelte" },
-    { "path": "./packages/adapters/solid" },
-    { "path": "./packages/adapters/angular" },
-    { "path": "./packages/adapters/wc" },
-    { "path": "./packages/adapters/drizzle" },
-    { "path": "./packages/adapters/kysely" }
-  ]
+  "include": ["packages/**/src/**/*", "apps/**/src/**/*"]
 }

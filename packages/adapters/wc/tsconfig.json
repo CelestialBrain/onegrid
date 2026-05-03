@@ -4,9 +4,5 @@
     "outDir": "./dist",
     "rootDir": "./src"
   },
-  "include": ["src/**/*"],
-  "references": [
-    { "path": "../../protocol" },
-    { "path": "../../core" }
-  ]
+  "include": ["src/**/*"]
 }
