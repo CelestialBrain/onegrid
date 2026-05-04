@@ -116,6 +116,11 @@ export class Grid {
   private editingRow: number | null = null;
   private editingCol: number | null = null;
   private editorEl: HTMLInputElement | null = null;
+  // IME composition state. Authoritative: gated on composition events,
+  // not on KeyboardEvent.isComposing (UA dispatch order varies and the
+  // 229 keydown sentinel is unreliable on Android Chrome where it fires
+  // for *all* soft-keyboard input).
+  private editorIsComposing = false;
 
   // Pinned rows + column groups + status bar.
   private readonly pinnedTopRowSource: RowSource | undefined;
@@ -903,6 +908,12 @@ export class Grid {
         'z-index:5;';
       input.addEventListener('keydown', this.handleEditorKeyDown);
       input.addEventListener('blur', this.handleEditorBlur);
+      // IME state machine: tracks composition lifecycle so Enter/Tab
+      // commits can wait until the user picks a candidate. Composition
+      // events are the authoritative source — KeyboardEvent.isComposing
+      // and keyCode===229 are advisory only.
+      input.addEventListener('compositionstart', this.handleCompositionStart);
+      input.addEventListener('compositionend', this.handleCompositionEnd);
       this.host.appendChild(input);
       this.editorEl = input;
     }
@@ -1007,7 +1018,33 @@ export class Grid {
     return { left, top: rowTop, width: colWidth, height: rowHeight };
   }
 
+  /** Flip the IME state to composing. Called when the user starts a
+   *  multi-keystroke input (Pinyin, Kana, Hangul, dead-key sequences).
+   *  While composing, Enter/Tab/Escape do not commit/cancel — they're
+   *  consumed by the IME to pick or dismiss candidates. */
+  private handleCompositionStart = (): void => {
+    this.editorIsComposing = true;
+  };
+
+  /** Composition ended — the IME has produced a final value. Re-enable
+   *  commit shortcuts. Note: `compositionend` may fire *before* the
+   *  final keydown of the trigger key in some Chromium versions, so we
+   *  also defensively check `e.isComposing` inside handleEditorKeyDown. */
+  private handleCompositionEnd = (): void => {
+    this.editorIsComposing = false;
+  };
+
   private handleEditorKeyDown = (e: KeyboardEvent): void => {
+    // Authoritative IME guard. Block all commit / navigation shortcuts
+    // while composing. Defensive secondary check on KeyboardEvent props
+    // (`isComposing` and the 229 sentinel) catches the narrow window
+    // where compositionend hasn't fired yet but the IME is still active.
+    // keyCode is deprecated but still emitted by every browser; 229 is
+    // the well-known IME-active sentinel and there is no replacement.
+    const keyCode = (e as KeyboardEvent & { keyCode: number }).keyCode;
+    if (this.editorIsComposing || e.isComposing || keyCode === 229) {
+      return;
+    }
     if (e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();

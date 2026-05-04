@@ -312,6 +312,89 @@ describe('Grid · cell editing', () => {
     });
   });
 
+  it('Enter does not commit while IME composition is active', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const edits: Array<{ row: number; col: string; n: string }> = [];
+    const grid = new Grid({
+      host,
+      columns: COLUMNS,
+      rowSource: rowSource(50),
+      rowHeight: 24,
+      editable: true,
+      onCellEdit: (row, col, n) => {
+        edits.push({ row, col, n });
+      },
+    });
+    grid.beginEdit(0, 0);
+    const input = host.querySelector('input') as HTMLInputElement;
+    expect(input).not.toBeNull();
+
+    // Start composition (e.g. user typed first Pinyin keystroke).
+    input.dispatchEvent(new CompositionEvent('compositionstart'));
+    input.value = 'n';
+
+    // Enter while composing — IME would pick a candidate, NOT commit.
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(edits).toHaveLength(0);
+    expect(grid.isEditing()).toBe(true);
+
+    // Composition ends → final value lands.
+    input.dispatchEvent(new CompositionEvent('compositionend', { data: '你' }));
+    input.value = '你';
+
+    // Now Enter commits.
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(edits).toEqual([{ row: 0, col: 'a', n: '你' }]);
+
+    grid.destroy();
+    document.body.removeChild(host);
+  });
+
+  it('Escape during IME composition does not cancel the edit', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const grid = new Grid({
+      host,
+      columns: COLUMNS,
+      rowSource: rowSource(50),
+      rowHeight: 24,
+      editable: true,
+    });
+    grid.beginEdit(1, 1);
+    const input = host.querySelector('input') as HTMLInputElement;
+    input.dispatchEvent(new CompositionEvent('compositionstart'));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(grid.isEditing()).toBe(true);
+    grid.destroy();
+    document.body.removeChild(host);
+  });
+
+  it('keyCode===229 (Android soft keyboard) is treated as composing', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const edits: string[] = [];
+    const grid = new Grid({
+      host,
+      columns: COLUMNS,
+      rowSource: rowSource(50),
+      rowHeight: 24,
+      editable: true,
+      onCellEdit: (_r, _c, n) => edits.push(n),
+    });
+    grid.beginEdit(0, 0);
+    const input = host.querySelector('input') as HTMLInputElement;
+    // Android Chrome dispatches all soft-keyboard input as keyCode=229
+    // with key="Unidentified". Enter should be ignored.
+    input.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', keyCode: 229, bubbles: true }),
+    );
+    expect(edits).toHaveLength(0);
+    expect(grid.isEditing()).toBe(true);
+    grid.destroy();
+    document.body.removeChild(host);
+  });
+
   it('beginEdit with initialText replaces value (type-ahead)', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
