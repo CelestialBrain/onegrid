@@ -283,6 +283,20 @@ export interface GridOptions {
    *  false. */
   readonly statusBar?: boolean;
 
+  // ---- Floating filter row ----
+
+  /** Render a per-column filter input row pinned just below the
+   *  column headers. Each visible column gets a `<input>` aligned
+   *  with its band; typing fires `onFloatingFilterChange`. Default
+   *  false. */
+  readonly floatingFilters?: boolean;
+
+  /** Called when a floating filter input changes. The grid does not
+   *  apply the filter itself — the consumer translates the value to
+   *  whatever FilterModel makes sense for that column (substring,
+   *  numeric range, etc.) and threads it through the data source. */
+  readonly onFloatingFilterChange?: (columnId: string, value: string) => void;
+
   // ---- Row grouping ----
 
   /** Per-row metadata hook. Return a RowGroupMeta to render the row as

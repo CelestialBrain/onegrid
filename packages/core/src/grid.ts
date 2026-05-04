@@ -42,6 +42,7 @@ interface FrameSample {
 
 const STATUS_BAR_HEIGHT = 24;
 const COLUMN_GROUP_BAND_HEIGHT = 24;
+const FLOATING_FILTER_ROW_HEIGHT = 28;
 
 interface PerformanceWithMemory extends Performance {
   readonly memory?: {
@@ -152,6 +153,16 @@ export class Grid {
   private tooltipShowTimer: ReturnType<typeof setTimeout> | null = null;
   private tooltipHoveredKey: string | null = null;
 
+  // Floating filter row: a sticky DOM band below the column headers
+  // with one <input> per column. Mounted only when `floatingFilters`
+  // is enabled.
+  private readonly floatingFiltersEnabled: boolean;
+  private readonly onFloatingFilterChange:
+    | ((columnId: string, value: string) => void)
+    | undefined;
+  private floatingFilterBandEl: HTMLDivElement | null = null;
+  private readonly floatingFilterInputs = new Map<string, HTMLInputElement>();
+
   // Pinned rows + column groups + status bar.
   private readonly pinnedTopRowSource: RowSource | undefined;
   private readonly pinnedBottomRowSource: RowSource | undefined;
@@ -204,6 +215,10 @@ export class Grid {
     // Row grouping.
     this.getRowMeta = options.getRowMeta;
     this.onToggleGroup = options.onToggleGroup;
+
+    // Floating filter row.
+    this.floatingFiltersEnabled = options.floatingFilters === true;
+    this.onFloatingFilterChange = options.onFloatingFilterChange;
     if (options.expanded) {
       this.expanded = new Set(options.expanded);
     }
@@ -283,6 +298,22 @@ export class Grid {
         'position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:2;';
       this.host.appendChild(this.cellOverlayEl);
       this.rendererPool = new RendererPool(this.cellOverlayEl);
+    }
+
+    // Floating filter row: a DOM band below the header with one
+    // <input role="searchbox"> per column. Mounted only when enabled.
+    if (this.floatingFiltersEnabled) {
+      const band = document.createElement('div');
+      band.setAttribute('role', 'toolbar');
+      band.setAttribute('aria-label', 'Column filters');
+      band.setAttribute('aria-controls', this.gridId);
+      band.style.cssText =
+        `position:absolute;left:0;right:0;height:${String(FLOATING_FILTER_ROW_HEIGHT)}px;` +
+        `background:${this.theme.headerBackground};border-bottom:1px solid #2a2f37;` +
+        'z-index:4;display:flex;overflow:hidden;';
+      this.host.appendChild(band);
+      this.floatingFilterBandEl = band;
+      this.buildFloatingFilterInputs();
     }
 
     // Tooltip: a shared element re-targeted per hovered cell. Mounted
@@ -515,6 +546,9 @@ export class Grid {
     }
     this.tooltipEl?.remove();
     this.tooltipEl = null;
+    this.floatingFilterBandEl?.remove();
+    this.floatingFilterBandEl = null;
+    this.floatingFilterInputs.clear();
     this.statusBarEl?.remove();
     this.statusBarEl = null;
     this.mountedDetails.clear();
@@ -1031,10 +1065,80 @@ export class Grid {
   }
 
   /** Total header band height — base header plus column-group band when
-   *  groups are present. Cell-positioning math below uses this instead
-   *  of the raw `headerHeight`. */
+   *  groups are present, plus the floating filter row when enabled.
+   *  Cell-positioning math below uses this instead of the raw
+   *  `headerHeight`. */
   private fullHeaderHeight(): number {
-    return this.headerHeight + this.columnGroupBandHeight();
+    return (
+      this.headerHeight +
+      this.columnGroupBandHeight() +
+      this.floatingFilterRowHeight()
+    );
+  }
+
+  private floatingFilterRowHeight(): number {
+    return this.floatingFiltersEnabled ? FLOATING_FILTER_ROW_HEIGHT : 0;
+  }
+
+  /** Create one <input> per column inside the filter band. Inputs
+   *  are kept around for the grid's lifetime — only their positions
+   *  update on scroll/resize. Wires onChange → onFloatingFilterChange. */
+  private buildFloatingFilterInputs(): void {
+    if (!this.floatingFilterBandEl) return;
+    for (const column of this.columns) {
+      const input = document.createElement('input');
+      input.type = 'search';
+      input.placeholder = column.displayName ?? column.id;
+      input.setAttribute('aria-label', `Filter ${column.displayName ?? column.id}`);
+      input.style.cssText =
+        'position:absolute;box-sizing:border-box;margin:0;padding:0 6px;' +
+        'border:1px solid #2a2f37;background:#0b0d10;color:#e7e9ec;' +
+        `font-family:${this.theme.fontFamily};font-size:${String(this.theme.fontSize - 1)}px;` +
+        'border-radius:3px;outline:none;height:22px;top:3px;';
+      input.addEventListener('input', () => {
+        this.onFloatingFilterChange?.(column.id, input.value);
+      });
+      // Stop keydown propagation so arrow keys / Enter don't bubble
+      // up to the grid's selection / commit handlers.
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Escape') {
+          input.value = '';
+          this.onFloatingFilterChange?.(column.id, '');
+        }
+      });
+      this.floatingFilterBandEl.appendChild(input);
+      this.floatingFilterInputs.set(column.id, input);
+    }
+  }
+
+  /** Position the band + each input over its column. Called from
+   *  tick() so the layout stays in sync with horizontal scroll. The
+   *  frozen-column band is left for a follow-up commit. */
+  private repositionFloatingFilters(): void {
+    if (!this.floatingFilterBandEl) return;
+    const top = this.headerHeight + this.columnGroupBandHeight();
+    this.floatingFilterBandEl.style.top = `${String(top)}px`;
+    for (let col = 0; col < this.columns.length; col++) {
+      const column = this.columns[col];
+      if (!column) continue;
+      const input = this.floatingFilterInputs.get(column.id);
+      if (!input) continue;
+      const isFrozen = col < this.frozenColumnCount;
+      const colLeft = this.cumulativeColumnWidths[col] ?? 0;
+      const colWidth = (this.cumulativeColumnWidths[col + 1] ?? colLeft) - colLeft;
+      let left: number;
+      if (isFrozen) {
+        left = colLeft;
+      } else {
+        const frozenEnd = this.cumulativeColumnWidths[this.frozenColumnCount] ?? 0;
+        left = this.frozenWidth + (colLeft - frozenEnd) - this.scrollLeft;
+      }
+      input.style.left = `${String(left + 4)}px`;
+      input.style.width = `${String(Math.max(0, colWidth - 8))}px`;
+      input.style.display =
+        left + colWidth < this.frozenWidth || left > this.viewportWidth ? 'none' : 'block';
+    }
   }
 
   private pinnedTopBandHeight(): number {
@@ -1473,6 +1577,7 @@ export class Grid {
       this.needsRender = false;
       // Track the cell editor with the latest layout. Cheap when not editing.
       if (this.isEditing()) this.repositionEditor();
+      if (this.floatingFilterBandEl) this.repositionFloatingFilters();
     }
     if (!this.destroyed) {
       this.rafHandle = requestAnimationFrame(this.tick);

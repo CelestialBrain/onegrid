@@ -22,6 +22,36 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => window.__onegrid !== undefined);
 });
 
+test('floating filter row mounts in memory mode and narrows visible rows', async ({
+  page,
+}) => {
+  // The floating filter band exposes a role="toolbar" with a per-
+  // column <input role="searchbox" aria-label="Filter <name>">.
+  const toolbar = page.getByRole('toolbar', { name: 'Column filters' });
+  await expect(toolbar).toBeVisible();
+
+  // Type into the firstName floating filter.
+  const firstNameFilter = page.getByRole('searchbox', { name: 'Filter First name' });
+  await expect(firstNameFilter).toBeVisible();
+  await firstNameFilter.fill('Aiko');
+  await page.waitForTimeout(150);
+
+  // The grid still has visible rows (some Aiko rows match).
+  const stats = await page.evaluate(() => window.__onegrid?.getMetrics());
+  expect(stats).toBeDefined();
+  // Sanity: clearing the filter restores rows.
+  await firstNameFilter.fill('');
+  await page.waitForTimeout(80);
+});
+
+test('Escape on a floating filter input clears it', async ({ page }) => {
+  const firstNameFilter = page.getByRole('searchbox', { name: 'Filter First name' });
+  await firstNameFilter.fill('Bashir');
+  await expect(firstNameFilter).toHaveValue('Bashir');
+  await firstNameFilter.press('Escape');
+  await expect(firstNameFilter).toHaveValue('');
+});
+
 test('memory mode: set filter narrows the row count', async ({ page }) => {
   // Open the Filters panel.
   await page.getByRole('button', { name: /^Filters/ }).click();

@@ -295,6 +295,22 @@ export const App = (): JSX.Element => {
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   /** When non-null, a set-filter popover is open for this rule id. */
   const [setFilterOpenFor, setSetFilterOpenFor] = useState<string | null>(null);
+  /** Per-column substring filters from the floating filter row. */
+  const [floatingFilters, setFloatingFilters] = useState<Record<string, string>>({});
+
+  const handleFloatingFilterChange = useCallback(
+    (columnId: string, value: string) => {
+      setFloatingFilters((prev) => {
+        if (value === '') {
+          const next = { ...prev };
+          delete next[columnId];
+          return next;
+        }
+        return { ...prev, [columnId]: value };
+      });
+    },
+    [],
+  );
   // Capture shiftKey at click-time inside the canvas; the Grid's onHeaderClick
   // doesn't pass the event, so we read it from the latest pointer state.
   const [shiftDown, setShiftDown] = useState(false);
@@ -341,17 +357,39 @@ export const App = (): JSX.Element => {
   const memoryView = useMemo(() => {
     if (!memoryDataset || !memoryDataset.materialized) return null;
     const t0 = performance.now();
-    const filterModel =
-      buildColumnFilter(columnFilters) ??
-      (filterQuery ? buildQuickFilter(filterQuery, memoryDataset.columns.map((c) => c.id)) : null);
+    // Compose three filter sources: explicit column rules, the quick
+    // filter, and per-column floating filters (substring contains).
+    const explicit = buildColumnFilter(columnFilters);
+    const quick = filterQuery
+      ? buildQuickFilter(filterQuery, memoryDataset.columns.map((c) => c.id))
+      : null;
+    const floating: FilterModel | null = (() => {
+      const entries = Object.entries(floatingFilters).filter(([, v]) => v !== '');
+      if (entries.length === 0) return null;
+      const comparisons = entries.map(([columnId, value]) => ({
+        type: 'comparison' as const,
+        columnId,
+        op: 'contains' as const,
+        value,
+        caseSensitive: false,
+      }));
+      return comparisons.length === 1
+        ? comparisons[0]!
+        : { type: 'logical' as const, op: 'and' as const, filters: comparisons };
+    })();
+    const all = [explicit, quick, floating].filter((f): f is NonNullable<typeof f> => f !== null);
+    const filterModel: FilterModel =
+      all.length === 0 ? null : all.length === 1 ? all[0]! : { type: 'logical', op: 'and', filters: all };
     const view = buildMemoryView(memoryDataset.table, sort, filterModel);
     const t1 = performance.now();
     if (view.permutation) {
       // eslint-disable-next-line no-console
-      console.log(`[onegrid] memory sort+filter: ${(t1 - t0).toFixed(1)}ms · ${String(view.numRows)} rows`);
+      console.log(
+        `[onegrid] memory sort+filter: ${(t1 - t0).toFixed(1)}ms · ${String(view.numRows)} rows`,
+      );
     }
     return view;
-  }, [memoryDataset, sort, columnFilters, filterQuery]);
+  }, [memoryDataset, sort, columnFilters, filterQuery, floatingFilters]);
 
   // ----- ssrm connection -----
   const [ssrm, setSsrm] = useState<SsrmConnection | null>(null);
@@ -851,6 +889,12 @@ export const App = (): JSX.Element => {
     ...(pinnedBottom ? { pinnedBottomRowSource: pinnedBottom } : {}),
     ...(columnGroups ? { columnGroups } : {}),
     ...(groupedFlat ? { getRowMeta, onToggleGroup: handleToggleGroup } : {}),
+    ...(mode === 'memory'
+      ? {
+          floatingFilters: true,
+          onFloatingFilterChange: handleFloatingFilterChange,
+        }
+      : {}),
     statusBar: true,
     onCellEdit: handleCellEdit,
     onPaste: handlePaste,

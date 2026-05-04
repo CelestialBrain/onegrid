@@ -43,15 +43,24 @@ export function useOneGrid(options: UseOneGridOptions): UseOneGridReturn {
       instance.destroy();
       setGrid(null);
     };
+    // Intentionally NOT depending on rowSource / rowHeight — those swap
+    // imperatively via the effect below to preserve in-grid DOM state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     options.columns,
-    options.rowSource,
-    options.rowHeight,
     options.headerHeight,
     options.frozenColumnCount,
     options.theme,
   ]);
+
+  // Swap the row source / row heights without remounting. setRowSource
+  // resets scroll + Fenwick + caches without touching the canvas, the
+  // a11y shadow, the editor, or the floating filter inputs.
+  useEffect(() => {
+    if (!grid) return;
+    grid.setRowSource(options.rowSource, options.rowHeight);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grid, options.rowSource, options.rowHeight]);
 
   return { ref, grid };
 }
