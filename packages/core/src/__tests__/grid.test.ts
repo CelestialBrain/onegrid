@@ -572,6 +572,46 @@ describe('Grid · cell editing', () => {
     document.body.removeChild(host);
   });
 
+  it('mounts a tooltip element when a column has a tooltip provider', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const cols: ColumnDef[] = [
+      { id: 'a', width: 100, displayName: 'A' },
+      {
+        id: 'b',
+        width: 200,
+        displayName: 'B',
+        tooltip: (v) => `tip:${String(v)}`,
+      },
+    ];
+    const grid = new Grid({
+      host,
+      columns: cols,
+      rowSource: rowSource(50),
+      rowHeight: 24,
+    });
+    const tip = host.querySelector('[role="tooltip"]') as HTMLElement;
+    expect(tip).not.toBeNull();
+    expect((tip as HTMLElement).style.display).toBe('none'); // hidden by default
+    grid.destroy();
+    expect(host.querySelector('[role="tooltip"]')).toBeNull();
+    document.body.removeChild(host);
+  });
+
+  it('does not mount a tooltip element when no column has a tooltip provider', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const grid = new Grid({
+      host,
+      columns: COLUMNS,
+      rowSource: rowSource(50),
+      rowHeight: 24,
+    });
+    expect(host.querySelector('[role="tooltip"]')).toBeNull();
+    grid.destroy();
+    document.body.removeChild(host);
+  });
+
   it('beginEdit with initialText replaces value (type-ahead)', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

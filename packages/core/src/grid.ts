@@ -144,6 +144,14 @@ export class Grid {
   // same cell coordinate reuses its element across frames (no flicker).
   private activeRendererCells = new Map<string, HTMLElement>();
 
+  // Tooltip state: a single shared <div role="tooltip"> that gets
+  // re-targeted per cell, with hover-delay + Escape dismiss following
+  // WCAG 1.4.13 (content on hover/focus). One element instead of one
+  // per cell keeps DOM allocation flat regardless of dataset size.
+  private tooltipEl: HTMLDivElement | null = null;
+  private tooltipShowTimer: ReturnType<typeof setTimeout> | null = null;
+  private tooltipHoveredKey: string | null = null;
+
   // Pinned rows + column groups + status bar.
   private readonly pinnedTopRowSource: RowSource | undefined;
   private readonly pinnedBottomRowSource: RowSource | undefined;
@@ -277,6 +285,22 @@ export class Grid {
       this.rendererPool = new RendererPool(this.cellOverlayEl);
     }
 
+    // Tooltip: a shared element re-targeted per hovered cell. Mounted
+    // only when at least one column has a tooltip provider.
+    if (this.columns.some((c) => c.tooltip)) {
+      const tip = document.createElement('div');
+      tip.setAttribute('role', 'tooltip');
+      tip.style.cssText =
+        'position:absolute;display:none;box-sizing:border-box;' +
+        'background:#1b1f26;color:#e7e9ec;border:1px solid #2a2f37;' +
+        'padding:6px 10px;border-radius:4px;max-width:320px;' +
+        `font-family:${this.theme.fontFamily};font-size:${String(this.theme.fontSize - 1)}px;` +
+        'line-height:1.35;pointer-events:none;z-index:10;' +
+        'box-shadow:0 4px 12px rgba(0,0,0,0.4);';
+      this.host.appendChild(tip);
+      this.tooltipEl = tip;
+    }
+
     // Status bar: a single absolute-positioned div pinned to the host's
     // bottom edge. The render loop writes its text content; layout never
     // shifts because the canvas already accounts for statusBarHeight().
@@ -301,6 +325,7 @@ export class Grid {
     this.scrollHost.addEventListener('scroll', this.handleScroll, { passive: true });
     this.scrollHost.addEventListener('pointerdown', this.handlePointerDown);
     this.scrollHost.addEventListener('pointermove', this.handlePointerMove);
+    this.scrollHost.addEventListener('pointerleave', this.handlePointerLeave);
     this.scrollHost.addEventListener('dblclick', this.handleDoubleClick);
     window.addEventListener('pointerup', this.handlePointerUp);
     window.addEventListener('keydown', this.handleKeyDown);
@@ -456,6 +481,7 @@ export class Grid {
     this.scrollHost.removeEventListener('scroll', this.handleScroll);
     this.scrollHost.removeEventListener('pointerdown', this.handlePointerDown);
     this.scrollHost.removeEventListener('pointermove', this.handlePointerMove);
+    this.scrollHost.removeEventListener('pointerleave', this.handlePointerLeave);
     this.scrollHost.removeEventListener('dblclick', this.handleDoubleClick);
     window.removeEventListener('pointerup', this.handlePointerUp);
     window.removeEventListener('keydown', this.handleKeyDown);
@@ -483,6 +509,12 @@ export class Grid {
     this.cellOverlayEl?.remove();
     this.cellOverlayEl = null;
     this.activeRendererCells.clear();
+    if (this.tooltipShowTimer !== null) {
+      clearTimeout(this.tooltipShowTimer);
+      this.tooltipShowTimer = null;
+    }
+    this.tooltipEl?.remove();
+    this.tooltipEl = null;
     this.statusBarEl?.remove();
     this.statusBarEl = null;
     this.mountedDetails.clear();
@@ -613,11 +645,22 @@ export class Grid {
     this.velocity = Math.abs(newTop - this.scrollTop);
     this.scrollTop = newTop;
     this.scrollLeft = newLeft;
+    // Tooltip dismiss on scroll: anchored content makes no sense once
+    // its anchor moves under the pointer.
+    if (this.tooltipEl) this.hideTooltip();
     this.scheduleRender();
   };
 
   private handleKeyDown = (e: KeyboardEvent): void => {
     if (document.activeElement !== this.scrollHost) return;
+
+    // Escape dismisses any showing tooltip — WCAG 1.4.13 dismissable
+    // requirement for content-on-hover.
+    if (e.key === 'Escape' && this.tooltipEl?.style.display === 'block') {
+      this.hideTooltip();
+      e.preventDefault();
+      return;
+    }
 
     // Ctrl/Cmd + C → copy selection as TSV.
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c') {
@@ -811,18 +854,119 @@ export class Grid {
   }
 
   private handlePointerMove = (e: PointerEvent): void => {
-    if (!this.isPointerDragging) return;
-    const cell = this.cellAtClient(e.clientX, e.clientY);
-    if (!cell) return;
-    this.selection.extendActiveRange(cell);
-    this.notifySelectionChange();
-    this.scheduleRender();
+    if (this.isPointerDragging) {
+      const cell = this.cellAtClient(e.clientX, e.clientY);
+      if (cell) {
+        this.selection.extendActiveRange(cell);
+        this.notifySelectionChange();
+        this.scheduleRender();
+      }
+    }
+    // Tooltip hover-tracking is independent of dragging — track on
+    // every move when at least one column has a tooltip provider.
+    if (this.tooltipEl) this.handleTooltipPointerMove(e);
   };
 
   private handlePointerUp = (): void => {
     this.isPointerDragging = false;
     this.suppressSelectionUntilUp = false;
   };
+
+  private handlePointerLeave = (): void => {
+    this.hideTooltip();
+  };
+
+  // -------------------------------------------------------------------------
+  // Tooltip
+  // -------------------------------------------------------------------------
+
+  /** Hover tracking for tooltips. Schedules a delayed show on enter,
+   *  cancels on leave to a different cell. WCAG 1.4.13 says content
+   *  on hover must be dismissable, hoverable, persistent — we honor
+   *  dismiss (Escape, scroll, leave) and persistence (the tooltip
+   *  stays until the user moves elsewhere); hoverable is moot since
+   *  pointer-events:none makes the tooltip itself non-interactive. */
+  private handleTooltipPointerMove(e: PointerEvent): void {
+    const cell = this.cellAtClient(e.clientX, e.clientY);
+    if (!cell) {
+      this.hideTooltip();
+      return;
+    }
+    const column = this.columns[cell.col];
+    if (!column?.tooltip) {
+      this.hideTooltip();
+      return;
+    }
+    const key = `${String(cell.row)}:${String(cell.col)}`;
+    if (this.tooltipHoveredKey === key) return; // same cell, no work
+    // Moved to a different cell — hide any currently-shown tooltip
+    // and reset the timer for the new target.
+    if (this.tooltipEl && this.tooltipEl.style.display === 'block') {
+      this.tooltipEl.style.display = 'none';
+    }
+    if (this.tooltipShowTimer !== null) clearTimeout(this.tooltipShowTimer);
+    this.tooltipHoveredKey = key;
+    // 500ms hover delay matches platform conventions (Windows + macOS
+    // tooltip systems both default to ~500ms).
+    this.tooltipShowTimer = setTimeout(() => {
+      this.showTooltipFor(cell.row, cell.col);
+    }, 500);
+  }
+
+  /** Render tooltip content for (row, col) and position it. */
+  private showTooltipFor(row: number, col: number): void {
+    if (!this.tooltipEl) return;
+    const column = this.columns[col];
+    if (!column?.tooltip) return;
+    const value = this.rowSource.getCell(row, column.id);
+    const content = column.tooltip(value, row);
+    if (content === null || content === undefined || content === '') {
+      this.tooltipEl.style.display = 'none';
+      return;
+    }
+    // Wipe + set fresh content.
+    while (this.tooltipEl.firstChild) this.tooltipEl.firstChild.remove();
+    if (typeof content === 'string') {
+      this.tooltipEl.textContent = content;
+    } else {
+      this.tooltipEl.appendChild(content);
+    }
+    this.positionTooltip(row, col);
+  }
+
+  /** Place the tooltip below the cell, flipping above if no room. */
+  private positionTooltip(row: number, col: number): void {
+    if (!this.tooltipEl) return;
+    const rect = this.cellViewportRect(row, col);
+    if (!rect) {
+      this.tooltipEl.style.display = 'none';
+      return;
+    }
+    this.tooltipEl.style.display = 'block';
+    // Measure the tooltip after content is set.
+    const tipRect = this.tooltipEl.getBoundingClientRect();
+    const gap = 6;
+    let top = rect.top + rect.height + gap;
+    if (top + tipRect.height > this.viewportHeight) {
+      top = rect.top - tipRect.height - gap;
+    }
+    let left = rect.left;
+    if (left + tipRect.width > this.viewportWidth) {
+      left = Math.max(4, this.viewportWidth - tipRect.width - 4);
+    }
+    this.tooltipEl.style.left = `${String(left)}px`;
+    this.tooltipEl.style.top = `${String(Math.max(4, top))}px`;
+  }
+
+  private hideTooltip(): void {
+    if (!this.tooltipEl) return;
+    if (this.tooltipShowTimer !== null) {
+      clearTimeout(this.tooltipShowTimer);
+      this.tooltipShowTimer = null;
+    }
+    this.tooltipEl.style.display = 'none';
+    this.tooltipHoveredKey = null;
+  }
 
   private cellAtClient(clientX: number, clientY: number): CellPosition | null {
     const rect = this.host.getBoundingClientRect();

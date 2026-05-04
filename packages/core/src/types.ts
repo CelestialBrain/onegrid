@@ -38,6 +38,16 @@ export interface ColumnDef<TValue = unknown> {
    *  is preserved across scroll — only on-screen cells are mounted,
    *  off-screen cells return to the pool with their state reset. */
   readonly renderer?: CellRenderer;
+  /** Optional tooltip content for cells in this column. String content
+   *  renders as plain text; HTMLElement content renders as-is (use for
+   *  rich tooltips like multi-line summaries or status indicators).
+   *  Returning null/undefined suppresses the tooltip for that cell.
+   *  Tooltips appear after a hover delay and dismiss on pointer-leave,
+   *  Escape, or scroll. */
+  readonly tooltip?: (
+    value: TValue,
+    rowIndex: number,
+  ) => string | HTMLElement | null | undefined;
 }
 
 /** Per-cell render context handed to a CellRenderer's mount/update/

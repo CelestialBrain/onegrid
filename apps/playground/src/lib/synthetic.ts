@@ -301,6 +301,12 @@ export function materializeSynthetic(numRows: number): MaterializedSyntheticData
       width: 170,
       displayName: 'Updated',
       format: (v) => String(v ?? ''),
+      // Hover tooltip: show the full timestamp + the row index it
+      // belongs to. Demonstrates the WCAG 1.4.13 hover-tooltip path.
+      tooltip: (v, rowIndex) => {
+        if (v === null || v === undefined) return null;
+        return `Row ${String(rowIndex + 1)} · last updated ${String(v)}`;
+      },
     },
   ];
 
