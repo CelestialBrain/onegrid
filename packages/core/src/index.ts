@@ -17,6 +17,8 @@ export {
   DEFAULT_THEME,
 } from './types';
 export type {
+  CellRenderContext,
+  CellRenderer,
   ColumnDef,
   ColumnGroupDef,
   FrameStats,
@@ -26,6 +28,8 @@ export type {
   RowGroupMeta,
   RowMeta,
   RowSource,
+  ValidationContext,
+  ValidationResult,
 } from './types';
 
 import { Grid } from './grid';

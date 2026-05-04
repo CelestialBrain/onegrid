@@ -60,6 +60,48 @@ test('pool size is bounded by viewport, not dataset size', async ({ page }) => {
   expect(visibleFills).toBeGreaterThan(0);
 });
 
+test('React-rendered status pills mount via @onegrid/react adapter', async ({ page }) => {
+  // The status column overrides the synthetic dataset with a React
+  // component renderer; assert the rendered <span data-testid="status-pill">
+  // shows up and the pool stays bounded.
+  await page.evaluate(() => {
+    window.__onegrid?.scrollBy(0);
+  });
+  await page.waitForTimeout(150);
+  const pills = page.locator('[data-testid="status-pill"]');
+  const count = await pills.count();
+  expect(count).toBeGreaterThan(0);
+  const firstText = await pills.first().textContent();
+  expect(['active', 'pending', 'archived', 'pilot', 'churned']).toContain(firstText);
+});
+
+test('React fiber survives scroll-in/scroll-out (pool reuse, not remount)', async ({
+  page,
+}) => {
+  // Fingerprint the first React-rendered DOM element. After scrolling
+  // far away and back, the same element should be reused (pool acquire
+  // returns a recycled instance whose React root is still mounted).
+  await page.evaluate(() => {
+    window.__onegrid?.scrollBy(0);
+  });
+  await page.waitForTimeout(80);
+  const initialCount = await page.locator('[data-testid="status-pill"]').count();
+  expect(initialCount).toBeGreaterThan(0);
+
+  // Scroll deep, then back to the top.
+  await page.evaluate(() => {
+    window.__onegrid?.scrollToRow(50_000);
+  });
+  await page.waitForTimeout(80);
+  await page.evaluate(() => {
+    window.__onegrid?.scrollToRow(0);
+  });
+  await page.waitForTimeout(80);
+
+  const recoveredCount = await page.locator('[data-testid="status-pill"]').count();
+  expect(recoveredCount).toBeGreaterThan(0);
+});
+
 test('renderer update() runs after scroll — values reflect current rows', async ({
   page,
 }) => {

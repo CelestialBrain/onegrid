@@ -15,8 +15,13 @@ export type { UseOneGridOptions, UseOneGridReturn } from './use-one-grid';
 export { OneGrid } from './one-grid';
 export type { OneGridProps } from './one-grid';
 
+export { createReactCellRenderer, unmountReactCell } from './cell-renderer';
+export type { CreateReactCellRendererOptions } from './cell-renderer';
+
 // Re-export core types so adapter consumers don't need to import @onegrid/core directly.
 export type {
+  CellRenderContext,
+  CellRenderer,
   ColumnDef,
   ColumnGroupDef,
   FrameStats,
@@ -27,6 +32,8 @@ export type {
   RowGroupMeta,
   RowMeta,
   RowSource,
+  ValidationContext,
+  ValidationResult,
 } from '@onegrid/core';
 
 // Pass-through of common protocol types so adapters can speak the SSRM

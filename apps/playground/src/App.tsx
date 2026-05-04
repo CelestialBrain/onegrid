@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
 import {
+  createReactCellRenderer,
   useOneGrid,
+  type CellRenderContext,
   type ColumnDef,
   type FilterModel,
   type FrameStats,
@@ -54,6 +56,54 @@ import {
 } from './lib/formula-mode';
 
 const ROW_OPTIONS = [1_000, 10_000, 100_000, 1_000_000, 10_000_000] as const;
+
+const STATUS_PILL_BG: Record<string, string> = {
+  active: '#1f3a2a',
+  pending: '#3a2f17',
+  archived: '#2a2f37',
+  pilot: '#1d2c44',
+  churned: '#3a1818',
+};
+const STATUS_PILL_FG: Record<string, string> = {
+  active: '#62d68a',
+  pending: '#f4c768',
+  archived: '#a5b1c2',
+  pilot: '#6ea8fe',
+  churned: '#ff8a8a',
+};
+
+/**
+ * React-based cell renderer for the status column. Renders a colored
+ * pill via React state — exercises the framework adapter end-to-end:
+ * the React fiber survives scroll-in/scroll-out (the DOM element is
+ * pooled, the fiber is not unmounted).
+ */
+function StatusPillCell({ value }: CellRenderContext): JSX.Element {
+  const v = typeof value === 'string' ? value : '';
+  return (
+    <span
+      data-testid="status-pill"
+      style={{
+        display: 'inline-block',
+        padding: '2px 10px',
+        borderRadius: 999,
+        fontSize: 11,
+        fontWeight: 600,
+        background: STATUS_PILL_BG[v] ?? '#2a2f37',
+        color: STATUS_PILL_FG[v] ?? '#a5b1c2',
+        textTransform: 'uppercase',
+        letterSpacing: 0.4,
+      }}
+    >
+      {v}
+    </span>
+  );
+}
+
+const statusPillRenderer = createReactCellRenderer({
+  id: 'status-pill-react',
+  component: StatusPillCell,
+});
 
 type Mode = 'memory' | 'ssrm' | 'formula' | 'duckdb' | 'pivot';
 
@@ -421,10 +471,21 @@ export const App = (): JSX.Element => {
 
   // Module-level stable fallbacks so useOneGrid's effect doesn't re-fire
   // every render while we're waiting for the async data source.
+  // Memory-mode columns with the React pill renderer overlaid on
+  // the status column. Memoized so the array identity is stable —
+  // useOneGrid uses `options.columns` as a dep, and a fresh array
+  // each render would constantly remount the Grid.
+  const memoryColumnsWithRenderer = useMemo(() => {
+    if (!memoryDataset) return null;
+    return memoryDataset.columns.map((c) =>
+      c.id === 'status' ? { ...c, renderer: statusPillRenderer } : c,
+    );
+  }, [memoryDataset]);
+
   const safeColumns: ReadonlyArray<ColumnDef> = !dataReady
     ? EMPTY_COLUMNS
     : mode === 'memory'
-      ? memoryDataset!.columns
+      ? memoryColumnsWithRenderer ?? memoryDataset!.columns
       : mode === 'ssrm'
         ? SSRM_COLUMNS
         : mode === 'duckdb'
