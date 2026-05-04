@@ -42,3 +42,6 @@ export type {
 
 export { pivot } from './pivot';
 export type { PivotedTable } from './pivot';
+
+export { enumerateDistinct, enumerateDistinctChunked } from './distinct';
+export type { DistinctValue, EnumerateDistinctOptions } from './distinct';

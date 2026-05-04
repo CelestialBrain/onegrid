@@ -18,10 +18,12 @@ import {
   type MaterializedSyntheticDataset,
 } from './lib/synthetic';
 import {
+  enumerateDistinct,
   groupRows,
   flattenGroupTree,
   pathKey,
   pivot,
+  type DistinctValue,
   type FlatGroupEntry,
   type PivotedTable,
 } from '@onegrid/data';
@@ -42,6 +44,7 @@ import {
   FILTER_OPS,
   buildColumnFilter,
   buildQuickFilter,
+  isSetOp,
   isUnaryOp,
   newFilterRule,
   type FilterOp,
@@ -105,6 +108,138 @@ const statusPillRenderer = createReactCellRenderer({
   component: StatusPillCell,
 });
 
+interface SetFilterPopoverProps {
+  readonly distinct: ReadonlyArray<DistinctValue>;
+  readonly selected: ReadonlyArray<string>;
+  readonly onApply: (values: ReadonlyArray<string>) => void;
+  readonly onClose: () => void;
+}
+
+/**
+ * Distinct-values checkbox popover backing the `in` / `notIn` filter
+ * ops. Shows count per value and a search box that narrows the list.
+ * Locale-aware comparison via the default Collator so "Café"/"Cafe"
+ * collation surprises don't ship.
+ */
+function SetFilterPopover({
+  distinct,
+  selected,
+  onApply,
+  onClose,
+}: SetFilterPopoverProps): JSX.Element {
+  const [search, setSearch] = useState('');
+  const [draft, setDraft] = useState<ReadonlySet<string>>(() => new Set(selected));
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return distinct;
+    return distinct.filter((d) =>
+      String(d.value ?? '').toLowerCase().includes(q),
+    );
+  }, [distinct, search]);
+
+  const allSelected = filtered.length > 0 && filtered.every((d) => draft.has(String(d.value ?? '')));
+
+  return (
+    <div
+      role="dialog"
+      aria-label="Pick values"
+      style={{
+        position: 'absolute',
+        zIndex: 50,
+        background: 'var(--panel)',
+        border: '1px solid var(--border)',
+        borderRadius: 6,
+        padding: 8,
+        minWidth: 240,
+        maxHeight: 360,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+      }}
+    >
+      <input
+        type="search"
+        placeholder="Search values…"
+        value={search}
+        onChange={(e) => {
+          setSearch(e.target.value);
+        }}
+        autoFocus
+      />
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+        <input
+          type="checkbox"
+          checked={allSelected}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            setDraft((prev) => {
+              const next = new Set(prev);
+              for (const d of filtered) {
+                if (checked) next.add(String(d.value ?? ''));
+                else next.delete(String(d.value ?? ''));
+              }
+              return next;
+            });
+          }}
+        />
+        Select all{filtered.length !== distinct.length ? ' (filtered)' : ''}
+      </label>
+      <div
+        data-testid="set-filter-list"
+        style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}
+      >
+        {filtered.map((d) => {
+          const key = String(d.value ?? '');
+          return (
+            <label
+              key={key}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 12,
+                padding: '2px 4px',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={draft.has(key)}
+                onChange={(e) => {
+                  setDraft((prev) => {
+                    const next = new Set(prev);
+                    if (e.target.checked) next.add(key);
+                    else next.delete(key);
+                    return next;
+                  });
+                }}
+              />
+              <span style={{ flex: 1, fontFamily: 'ui-monospace, monospace' }}>{key || '(blank)'}</span>
+              <span style={{ color: 'var(--muted)', fontSize: 11 }}>{d.count.toLocaleString()}</span>
+            </label>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+        <button type="button" onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            onApply(Array.from(draft));
+            onClose();
+          }}
+          style={{ fontWeight: 600 }}
+        >
+          Apply ({draft.size})
+        </button>
+      </div>
+    </div>
+  );
+}
+
 type Mode = 'memory' | 'ssrm' | 'formula' | 'duckdb' | 'pivot';
 
 // Stable references so useOneGrid's effect doesn't re-fire while waiting
@@ -158,6 +293,8 @@ export const App = (): JSX.Element => {
   const [filterQuery, setFilterQuery] = useState<string>('');
   const [columnFilters, setColumnFilters] = useState<ReadonlyArray<FilterRule>>([]);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
+  /** When non-null, a set-filter popover is open for this rule id. */
+  const [setFilterOpenFor, setSetFilterOpenFor] = useState<string | null>(null);
   // Capture shiftKey at click-time inside the canvas; the Grid's onHeaderClick
   // doesn't pass the event, so we read it from the latest pointer state.
   const [shiftDown, setShiftDown] = useState(false);
@@ -797,9 +934,14 @@ export const App = (): JSX.Element => {
   }, [editTick, grid, mode]);
 
   const addColumnFilter = useCallback(() => {
-    const firstColumn = SSRM_COLUMNS[0]?.id ?? 'firstName';
+    // Default to the first non-rowIndex column of the active mode so
+    // adding a filter doesn't pre-select a useless column.
+    const firstColumn =
+      safeColumns.find((c) => c.id !== 'rowIndex')?.id ??
+      safeColumns[0]?.id ??
+      'firstName';
     setColumnFilters((prev) => [...prev, newFilterRule(firstColumn)]);
-  }, []);
+  }, [safeColumns]);
 
   const updateColumnFilter = useCallback(
     (id: string, patch: Partial<FilterRule>): void => {
@@ -1165,7 +1307,7 @@ export const App = (): JSX.Element => {
           </span>
         </div>
       </div>
-      {mode === 'ssrm' && showFilterPanel && (
+      {(mode === 'ssrm' || mode === 'memory') && showFilterPanel && (
         <div
           style={{
             display: 'flex',
@@ -1195,7 +1337,7 @@ export const App = (): JSX.Element => {
                     updateColumnFilter(rule.id, { columnId: e.target.value });
                   }}
                 >
-                  {SSRM_COLUMNS.map((c) => (
+                  {safeColumns.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.displayName ?? c.id}
                     </option>
@@ -1213,19 +1355,84 @@ export const App = (): JSX.Element => {
                     </option>
                   ))}
                 </select>
-                <input
-                  type="text"
-                  placeholder={isUnaryOp(rule.op) ? '(no value)' : 'value'}
-                  value={rule.value}
-                  disabled={isUnaryOp(rule.op)}
-                  onChange={(e) => {
-                    updateColumnFilter(rule.id, { value: e.target.value });
-                  }}
-                  style={{
-                    flex: '0 1 240px',
-                    opacity: isUnaryOp(rule.op) || opMeta ? 1 : 0.5,
-                  }}
-                />
+                {isSetOp(rule.op) ? (
+                  <div style={{ position: 'relative', flex: '0 1 240px' }}>
+                    <button
+                      type="button"
+                      data-testid="set-filter-trigger"
+                      onClick={() => {
+                        setSetFilterOpenFor(
+                          setFilterOpenFor === rule.id ? null : rule.id,
+                        );
+                      }}
+                      style={{ width: '100%', textAlign: 'left' }}
+                    >
+                      {rule.values && rule.values.length > 0
+                        ? `${String(rule.values.length)} value${rule.values.length === 1 ? '' : 's'} picked`
+                        : 'Pick values…'}
+                    </button>
+                    {setFilterOpenFor === rule.id &&
+                      mode === 'memory' &&
+                      memoryDataset?.materialized && (
+                        <SetFilterPopover
+                          distinct={enumerateDistinct(memoryDataset.table, rule.columnId, {
+                            limit: 1000,
+                          })}
+                          selected={rule.values ?? []}
+                          onApply={(values) => {
+                            updateColumnFilter(rule.id, { values });
+                          }}
+                          onClose={() => {
+                            setSetFilterOpenFor(null);
+                          }}
+                        />
+                      )}
+                    {setFilterOpenFor === rule.id && mode !== 'memory' && (
+                      <div
+                        role="dialog"
+                        style={{
+                          position: 'absolute',
+                          zIndex: 50,
+                          background: 'var(--panel)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 6,
+                          padding: 12,
+                          color: 'var(--muted)',
+                          fontSize: 12,
+                          maxWidth: 280,
+                        }}
+                      >
+                        Set filter values are enumerated locally. SSRM /
+                        DuckDB / Pivot modes need server-side distinct;
+                        coming in a follow-up commit.
+                        <div style={{ marginTop: 8 }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSetFilterOpenFor(null);
+                            }}
+                          >
+                            Close
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    placeholder={isUnaryOp(rule.op) ? '(no value)' : 'value'}
+                    value={rule.value}
+                    disabled={isUnaryOp(rule.op)}
+                    onChange={(e) => {
+                      updateColumnFilter(rule.id, { value: e.target.value });
+                    }}
+                    style={{
+                      flex: '0 1 240px',
+                      opacity: isUnaryOp(rule.op) || opMeta ? 1 : 0.5,
+                    }}
+                  />
+                )}
                 <button
                   type="button"
                   onClick={() => {

@@ -53,6 +53,8 @@ export type FilterOp =
   | 'contains'
   | 'startsWith'
   | 'endsWith'
+  | 'in'
+  | 'notIn'
   | 'isNull'
   | 'isNotNull';
 
@@ -61,11 +63,13 @@ export interface FilterRule {
   readonly id: string;
   readonly columnId: string;
   readonly op: FilterOp;
-  /** Empty string for unary ops (isNull/isNotNull). */
+  /** Empty string for unary ops (isNull/isNotNull) and set ops. */
   readonly value: string;
+  /** Selected values for set-membership ops (in/notIn). */
+  readonly values?: ReadonlyArray<string>;
 }
 
-export const FILTER_OPS: ReadonlyArray<{ op: FilterOp; label: string; unary?: boolean }> = [
+export const FILTER_OPS: ReadonlyArray<{ op: FilterOp; label: string; unary?: boolean; set?: boolean }> = [
   { op: 'eq', label: '=' },
   { op: 'neq', label: '≠' },
   { op: 'lt', label: '<' },
@@ -75,14 +79,21 @@ export const FILTER_OPS: ReadonlyArray<{ op: FilterOp; label: string; unary?: bo
   { op: 'contains', label: 'contains' },
   { op: 'startsWith', label: 'starts with' },
   { op: 'endsWith', label: 'ends with' },
+  { op: 'in', label: 'in (set)', set: true },
+  { op: 'notIn', label: 'not in (set)', set: true },
   { op: 'isNull', label: 'is empty', unary: true },
   { op: 'isNotNull', label: 'is not empty', unary: true },
 ];
 
 const UNARY_OPS = new Set<FilterOp>(['isNull', 'isNotNull']);
+const SET_OPS = new Set<FilterOp>(['in', 'notIn']);
 
 export function isUnaryOp(op: FilterOp): boolean {
   return UNARY_OPS.has(op);
+}
+
+export function isSetOp(op: FilterOp): boolean {
+  return SET_OPS.has(op);
 }
 
 /**
@@ -102,7 +113,11 @@ function coerceValue(raw: string): unknown {
 }
 
 export function buildColumnFilter(rules: ReadonlyArray<FilterRule>): FilterModel {
-  const valid = rules.filter((r) => isUnaryOp(r.op) || r.value !== '');
+  const valid = rules.filter((r) => {
+    if (isUnaryOp(r.op)) return true;
+    if (isSetOp(r.op)) return (r.values?.length ?? 0) > 0;
+    return r.value !== '';
+  });
   if (valid.length === 0) return null;
 
   const comparisons = valid.map((rule) => {
@@ -111,6 +126,14 @@ export function buildColumnFilter(rules: ReadonlyArray<FilterRule>): FilterModel
         type: 'comparison' as const,
         columnId: rule.columnId,
         op: rule.op,
+      };
+    }
+    if (isSetOp(rule.op)) {
+      return {
+        type: 'comparison' as const,
+        columnId: rule.columnId,
+        op: rule.op,
+        values: (rule.values ?? []).map(coerceValue),
       };
     }
     return {
