@@ -119,6 +119,9 @@ export class Grid {
   private editingRow: number | null = null;
   private editingCol: number | null = null;
   private editorEl: HTMLInputElement | null = null;
+  /** Active custom-editor instance for the current edit session. Null
+   *  when the default text input is in use OR when not editing. */
+  private editorInstance: import('./types').CellEditorInstance | null = null;
   // IME composition state. Authoritative: gated on composition events,
   // not on KeyboardEvent.isComposing (UA dispatch order varies and the
   // 229 keydown sentinel is unreliable on Android Chrome where it fires
@@ -525,6 +528,9 @@ export class Grid {
     this.detailLayer?.remove();
     this.editorEl?.remove();
     this.editorEl = null;
+    this.editorInstance?.destroy?.();
+    this.editorInstance?.element.remove();
+    this.editorInstance = null;
     this.editorErrorEl?.remove();
     this.editorErrorEl = null;
     this.editorAsyncAbort?.abort();
@@ -1196,6 +1202,33 @@ export class Grid {
     this.editingRow = row;
     this.editingCol = col;
 
+    // Custom editor variant: mount a fresh instance per edit session.
+    // Variants compose onto the existing pipeline — Enter/Tab commit,
+    // Escape cancels, validators run on commit, IME state machine
+    // gates the Enter/Escape via the instance's keydown bubble.
+    if (column.editor) {
+      const value = this.rowSource.getCell(row, column.id);
+      const displayText = column.format ? column.format(value, row) : String(value ?? '');
+      const instance = column.editor.mount({
+        value,
+        rowIndex: row,
+        columnId: column.id,
+        displayText,
+        ...(initialText !== undefined ? { initialText } : {}),
+      });
+      instance.element.style.position = 'absolute';
+      instance.element.style.zIndex = '5';
+      instance.element.addEventListener('keydown', this.handleEditorKeyDown);
+      instance.element.addEventListener('blur', this.handleEditorBlur, true);
+      this.host.appendChild(instance.element);
+      this.editorInstance = instance;
+      this.editorHasTyped = initialText !== undefined;
+      this.repositionEditor();
+      instance.focus();
+      this.onBeginEdit?.(row, column.id);
+      return;
+    }
+
     if (!this.editorEl) {
       const input = document.createElement('input');
       input.type = 'text';
@@ -1268,11 +1301,12 @@ export class Grid {
    *  await the resolution. The grid does not write the value back
    *  itself; the consumer is expected to update its row source. */
   commitEdit(): void | Promise<void> {
-    if (!this.isEditing() || !this.editorEl) return;
+    if (!this.isEditing()) return;
+    if (!this.editorEl && !this.editorInstance) return;
     const row = this.editingRow!;
     const col = this.editingCol!;
     const column = this.columns[col];
-    const newValue = this.editorEl.value;
+    const newValue = this.readEditorValue();
 
     if (column?.validate) {
       const result = this.runValidator('commit');
@@ -1287,11 +1321,17 @@ export class Grid {
     this.finalizeCommit(row, column, newValue);
   }
 
+  /** Read the current edit value from whichever editor is active. */
+  private readEditorValue(): string {
+    if (this.editorInstance) return this.editorInstance.getValue();
+    return this.editorEl?.value ?? '';
+  }
+
   private finalizeCommit(row: number, column: ColumnDef | undefined, newValue: string): void {
-    if (!this.editorEl) return;
+    if (this.editorEl) this.editorEl.style.display = 'none';
+    if (this.editorInstance) this.tearDownEditorInstance();
     this.editingRow = null;
     this.editingCol = null;
-    this.editorEl.style.display = 'none';
     this.clearEditorError();
     if (this.editorInputDebounce !== null) {
       clearTimeout(this.editorInputDebounce);
@@ -1306,10 +1346,12 @@ export class Grid {
   }
 
   cancelEdit(): void {
-    if (!this.isEditing() || !this.editorEl) return;
+    if (!this.isEditing()) return;
+    if (!this.editorEl && !this.editorInstance) return;
     this.editingRow = null;
     this.editingCol = null;
-    this.editorEl.style.display = 'none';
+    if (this.editorEl) this.editorEl.style.display = 'none';
+    if (this.editorInstance) this.tearDownEditorInstance();
     this.clearEditorError();
     this.editorAsyncAbort?.abort();
     this.editorAsyncAbort = null;
@@ -1321,23 +1363,35 @@ export class Grid {
     this.scheduleRender();
   }
 
+  /** Detach + destroy the active custom editor instance. The default
+   *  text editor is pooled (kept across sessions for perf); custom
+   *  variants always teardown so framework state doesn't leak. */
+  private tearDownEditorInstance(): void {
+    if (!this.editorInstance) return;
+    this.editorInstance.destroy?.();
+    this.editorInstance.element.remove();
+    this.editorInstance = null;
+  }
+
   /** Position the editor over the editing cell. Called from beginEdit
    *  and from tick() so the editor tracks scroll. If the cell is
    *  scrolled offscreen we hide the editor (display:none) but keep the
    *  pending value — re-shown when the cell scrolls back in. */
   private repositionEditor(): void {
-    if (!this.editorEl || this.editingRow === null || this.editingCol === null) return;
+    if (this.editingRow === null || this.editingCol === null) return;
+    const activeEl: HTMLElement | null = this.editorInstance?.element ?? this.editorEl;
+    if (!activeEl) return;
     const rect = this.cellViewportRect(this.editingRow, this.editingCol);
     if (!rect) {
-      this.editorEl.style.display = 'none';
+      activeEl.style.display = 'none';
       if (this.editorErrorEl) this.editorErrorEl.style.display = 'none';
       return;
     }
-    this.editorEl.style.display = 'block';
-    this.editorEl.style.left = `${String(rect.left)}px`;
-    this.editorEl.style.top = `${String(rect.top)}px`;
-    this.editorEl.style.width = `${String(rect.width)}px`;
-    this.editorEl.style.height = `${String(rect.height)}px`;
+    activeEl.style.display = 'block';
+    activeEl.style.left = `${String(rect.left)}px`;
+    activeEl.style.top = `${String(rect.top)}px`;
+    activeEl.style.width = `${String(rect.width)}px`;
+    activeEl.style.height = `${String(rect.height)}px`;
     // Anchor error bubble below the editor; only show if there's a
     // current error message (textContent set in applyValidationResult).
     if (this.editorErrorEl && this.editorErrorEl.textContent) {

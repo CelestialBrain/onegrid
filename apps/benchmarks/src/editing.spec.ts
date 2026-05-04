@@ -113,6 +113,30 @@ test('sync validator rejection keeps the editor open + sets aria-invalid + shows
   await page.keyboard.press('Escape');
 });
 
+test('select editor variant: status column opens a dropdown', async ({ page }) => {
+  // Status column has a React pill renderer whose pointer-events:auto
+  // intercepts direct hover/click — drive via keyboard instead.
+  // Click into firstName (plain canvas column, no renderer) to focus
+  // the grid + select a cell, then arrow-right to reach status.
+  const grid = page.locator('[role="grid"]').first();
+  await grid.click({ position: { x: 150, y: 120 } });
+  // First name → last name → revenue → status (3 right arrows).
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  // F2 opens the editor at the active cell.
+  await page.keyboard.press('F2');
+
+  const select = page.locator('select.status-dropdown, select').filter({ hasText: 'active' }).first();
+  await expect(select).toBeVisible();
+
+  // Pick a different option and Enter to commit.
+  await select.selectOption('churned');
+  await page.keyboard.press('Enter');
+  // Custom editors tear down on commit.
+  await expect(select).toBeHidden();
+});
+
 test('keyCode=229 (Android soft keyboard) is treated as IME — Enter does not commit', async ({
   page,
 }) => {

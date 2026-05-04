@@ -38,6 +38,11 @@ export interface ColumnDef<TValue = unknown> {
    *  is preserved across scroll — only on-screen cells are mounted,
    *  off-screen cells return to the pool with their state reset. */
   readonly renderer?: CellRenderer;
+  /** Custom editor variant. Default: a single-line text input. Use
+   *  this to swap in a `<select>` dropdown, date picker, large-text
+   *  textarea, autocomplete, multi-select, or any custom widget that
+   *  implements the `CellEditor` interface. */
+  readonly editor?: CellEditor;
   /** Optional tooltip content for cells in this column. String content
    *  renders as plain text; HTMLElement content renders as-is (use for
    *  rich tooltips like multi-line summaries or status indicators).
@@ -86,6 +91,60 @@ export interface CellRenderer {
   readonly mount: (context: CellRenderContext) => HTMLElement;
   readonly update: (el: HTMLElement, context: CellRenderContext) => void;
   readonly reset?: (el: HTMLElement) => void;
+}
+
+/**
+ * Per-edit context handed to a CellEditor's mount() hook. Same shape
+ * as the renderer context plus the initial text (for type-ahead) and
+ * the formatted display text the user was looking at before they
+ * started editing.
+ */
+export interface CellEditContext {
+  readonly value: unknown;
+  readonly rowIndex: number;
+  readonly columnId: string;
+  readonly displayText: string;
+  /** Set when the editor was opened by typing a printable key on a
+   *  selected cell. Editors may want to use this as the initial value
+   *  instead of `displayText`. */
+  readonly initialText?: string;
+}
+
+/**
+ * Custom cell editor variant.
+ *
+ * Variants compose onto the existing validated editor pipeline: the
+ * grid handles positioning, focus management, IME composition, paste,
+ * Escape-to-cancel, Enter-to-commit, and validator dispatch. The
+ * variant just describes how to build + read the input widget.
+ *
+ * Examples (shipped as helpers in @onegrid/core/editing):
+ *   createSelectEditor({ options })         — <select>
+ *   createDateEditor()                      — <input type="date">
+ *   createTextareaEditor()                  — multi-line <textarea>
+ *
+ * Lifecycle:
+ *   1. mount() — called once per beginEdit. Return a fresh instance.
+ *   2. instance.focus() — called by the grid after positioning.
+ *   3. instance.getValue() — called on commit to extract the string.
+ *   4. instance.destroy?.() — called when the editor closes (commit
+ *      or cancel). The grid removes the element itself; this is for
+ *      listener cleanup or framework root unmount.
+ */
+export interface CellEditor {
+  readonly id: string;
+  readonly mount: (context: CellEditContext) => CellEditorInstance;
+}
+
+export interface CellEditorInstance {
+  /** Root DOM element the grid will position over the cell. */
+  readonly element: HTMLElement;
+  /** Read the current edit value as a string for commit. */
+  readonly getValue: () => string;
+  /** Focus the inner widget. Called by the grid after mount. */
+  readonly focus: () => void;
+  /** Optional teardown — listeners, framework roots, etc. */
+  readonly destroy?: () => void;
 }
 
 export interface ValidationContext {

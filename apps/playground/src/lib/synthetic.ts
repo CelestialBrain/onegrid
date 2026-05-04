@@ -31,6 +31,7 @@ import {
   type ColumnInput,
   type ColumnTable,
 } from '@onegrid/data';
+import { createSelectEditor } from '@onegrid/core';
 import type { ColumnDef, FilterModel, RowSource, SortModel } from '@onegrid/react';
 
 export interface SyntheticDataset {
@@ -240,6 +241,13 @@ export function materializeSynthetic(numRows: number): MaterializedSyntheticData
         }
         return { ok: true };
       },
+      // Use a <select> dropdown instead of free-form text — the
+      // validator's job becomes redundant, but it stays as a defense
+      // against external setRowSource pushing invalid values.
+      editor: createSelectEditor({
+        id: 'status-dropdown',
+        options: STATUSES.map((s) => ({ value: s, label: s })),
+      }),
     },
     {
       id: 'score',

@@ -612,6 +612,62 @@ describe('Grid · cell editing', () => {
     document.body.removeChild(host);
   });
 
+  it('mounts a custom editor variant when ColumnDef.editor is set', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    const editorCalls: string[] = [];
+    const cols: ColumnDef[] = [
+      { id: 'a', width: 100, displayName: 'A' },
+      {
+        id: 'b',
+        width: 200,
+        displayName: 'B',
+        editor: {
+          id: 'test-select',
+          mount: (ctx) => {
+            const sel = document.createElement('select');
+            sel.className = 'test-editor';
+            for (const v of ['x', 'y', 'z']) {
+              const o = document.createElement('option');
+              o.value = v;
+              sel.appendChild(o);
+            }
+            sel.value = String(ctx.value ?? 'x');
+            return {
+              element: sel,
+              getValue: () => sel.value,
+              focus: () => {
+                editorCalls.push('focus');
+                sel.focus();
+              },
+            };
+          },
+        },
+      },
+    ];
+    const grid = new Grid({
+      host,
+      columns: cols,
+      rowSource: rowSource(50),
+      rowHeight: 24,
+      editable: true,
+      onCellEdit: (_r, _c, n) => editorCalls.push(`commit:${n}`),
+    });
+    grid.beginEdit(0, 1);
+    const sel = host.querySelector('select.test-editor') as HTMLSelectElement;
+    expect(sel).not.toBeNull();
+    expect(editorCalls).toContain('focus');
+    sel.value = 'y';
+    grid.commitEdit();
+    expect(editorCalls).toContain('commit:y');
+    // Custom editors are torn down on commit (default editor is pooled).
+    expect(host.querySelector('select.test-editor')).toBeNull();
+    grid.destroy();
+    document.body.removeChild(host);
+  });
+
   it('beginEdit with initialText replaces value (type-ahead)', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

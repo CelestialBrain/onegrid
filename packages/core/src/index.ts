@@ -17,6 +17,9 @@ export {
   DEFAULT_THEME,
 } from './types';
 export type {
+  CellEditContext,
+  CellEditor,
+  CellEditorInstance,
   CellRenderContext,
   CellRenderer,
   ColumnDef,
@@ -31,6 +34,12 @@ export type {
   ValidationContext,
   ValidationResult,
 } from './types';
+
+export {
+  createSelectEditor,
+  createDateEditor,
+  createTextareaEditor,
+} from './editing/variants';
 
 import { Grid } from './grid';
 import type { GridOptions } from './types';
