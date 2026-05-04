@@ -16,6 +16,7 @@
 // =============================================================================
 
 import { FenwickHeights } from '@onegrid/data';
+import { ariaCellId } from '@onegrid/a11y';
 import {
   DEFAULT_THEME,
   type ColumnDef,
@@ -27,6 +28,8 @@ import {
 } from './types';
 import { SelectionModel, type CellPosition, type SelectionSnapshot } from './selection';
 import type { SortModel } from '@onegrid/protocol';
+
+let nextGridSequence = 0;
 
 interface FrameSample {
   ts: number;
@@ -46,6 +49,7 @@ interface PerformanceWithMemory extends Performance {
 
 export class Grid {
   private readonly host: HTMLElement;
+  private readonly gridId: string;
   private readonly columns: ReadonlyArray<ColumnDef>;
   private rowSource: RowSource;
   private fenwick: FenwickHeights;
@@ -129,6 +133,7 @@ export class Grid {
 
   constructor(options: GridOptions) {
     this.host = options.host;
+    this.gridId = `onegrid-${String(++nextGridSequence)}`;
     this.columns = options.columns;
     this.rowSource = options.rowSource;
     this.headerHeight = options.headerHeight ?? 32;
@@ -199,9 +204,13 @@ export class Grid {
     this.scrollHost.style.overflow = 'auto';
     this.scrollHost.style.outline = 'none';
     this.scrollHost.tabIndex = 0;
+    this.scrollHost.id = this.gridId;
     this.scrollHost.setAttribute('role', 'grid');
     this.scrollHost.setAttribute('aria-rowcount', String(this.rowSource.numRows));
     this.scrollHost.setAttribute('aria-colcount', String(this.columns.length));
+    // Range selection is supported, so screen readers should announce
+    // the grid as multi-selectable per WAI-ARIA 1.2 grid semantics.
+    this.scrollHost.setAttribute('aria-multiselectable', 'true');
 
     this.scrollSpacer = document.createElement('div');
     this.scrollSpacer.style.position = 'relative';
@@ -488,7 +497,24 @@ export class Grid {
   }
 
   private notifySelectionChange(): void {
+    this.updateActiveDescendant();
     this.onSelectionChange?.(this.selection.snapshot());
+  }
+
+  /** Mirror the active cell into `aria-activedescendant` on the grid root.
+   *  The id resolves to a `<td role="gridcell">` in the a11y shadow; the
+   *  shadow expands its render window to include the active row so the
+   *  attribute always points at a live DOM node. */
+  private updateActiveDescendant(): void {
+    const active = this.selection.active;
+    if (!active) {
+      this.scrollHost.removeAttribute('aria-activedescendant');
+      return;
+    }
+    this.scrollHost.setAttribute(
+      'aria-activedescendant',
+      ariaCellId(this.gridId, active.row, active.col),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -1810,22 +1836,36 @@ export class Grid {
   // ---------------------------------------------------------------------------
 
   private updateAccessibilityShadow(start: number, end: number): void {
-    const max = Math.min(end, start + 80);
+    // Cap shadow size for performance, but always include the active
+    // row so `aria-activedescendant` resolves to a live <td>.
+    let firstRow = start;
+    let lastRow = Math.min(end, start + 80);
+    const active = this.selection.active;
+    if (active && (active.row < firstRow || active.row > lastRow)) {
+      // Re-anchor to a window centered on the active row.
+      firstRow = Math.max(0, active.row - 40);
+      lastRow = Math.min(this.rowSource.numRows - 1, active.row + 40);
+    }
+
     const rows: string[] = [];
     rows.push('<table role="grid"><thead><tr role="row">');
     for (const col of this.columns) {
       rows.push(`<th role="columnheader">${escapeHtml(col.displayName ?? col.id)}</th>`);
     }
     rows.push('</tr></thead><tbody>');
-    for (let r = start; r <= max; r++) {
+    for (let r = firstRow; r <= lastRow; r++) {
       rows.push(`<tr role="row" aria-rowindex="${String(r + 2)}">`);
       for (let c = 0; c < this.columns.length; c++) {
         const col = this.columns[c];
         if (!col) continue;
         const value = this.rowSource.getCell(r, col.id);
         const text = col.format ? col.format(value, r) : String(value ?? '');
+        const id = ariaCellId(this.gridId, r, c);
+        const isActive = active && active.row === r && active.col === c;
         rows.push(
-          `<td role="gridcell" aria-colindex="${String(c + 1)}" tabindex="-1">${escapeHtml(text)}</td>`,
+          `<td id="${id}" role="gridcell" aria-colindex="${String(c + 1)}" tabindex="-1"${
+            isActive ? ' aria-selected="true"' : ''
+          }>${escapeHtml(text)}</td>`,
         );
       }
       rows.push('</tr>');

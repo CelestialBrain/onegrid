@@ -264,6 +264,54 @@ describe('Grid · cell editing', () => {
     document.body.removeChild(host);
   });
 
+  it('mounts ARIA grid semantics with a stable gridId and multi-selectable flag', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const grid = new Grid({
+      host,
+      columns: COLUMNS,
+      rowSource: rowSource(50),
+      rowHeight: 24,
+    });
+    const scrollHost = host.querySelector('[role="grid"]') as HTMLElement;
+    expect(scrollHost).not.toBeNull();
+    expect(scrollHost.id).toMatch(/^onegrid-\d+$/);
+    expect(scrollHost.getAttribute('aria-rowcount')).toBe('50');
+    expect(scrollHost.getAttribute('aria-colcount')).toBe('2');
+    expect(scrollHost.getAttribute('aria-multiselectable')).toBe('true');
+    grid.destroy();
+    document.body.removeChild(host);
+  });
+
+  it('aria-activedescendant tracks the active cell and resolves to a live <td id>', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const grid = new Grid({
+      host,
+      columns: COLUMNS,
+      rowSource: rowSource(200),
+      rowHeight: 24,
+    });
+    grid.selectCell({ row: 7, col: 1 });
+    // Force a render so the shadow is repopulated.
+    grid.refresh();
+    // Wait one rAF tick (set-timeout in our stub) so render() runs.
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        const scrollHost = host.querySelector('[role="grid"]') as HTMLElement;
+        const activeId = scrollHost.getAttribute('aria-activedescendant');
+        expect(activeId).toMatch(/^onegrid-\d+-r7-c1$/);
+        const cell = host.querySelector(`#${activeId}`) as HTMLElement;
+        expect(cell).not.toBeNull();
+        expect(cell.getAttribute('role')).toBe('gridcell');
+        expect(cell.getAttribute('aria-selected')).toBe('true');
+        grid.destroy();
+        document.body.removeChild(host);
+        resolve();
+      }, 5);
+    });
+  });
+
   it('beginEdit with initialText replaces value (type-ahead)', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

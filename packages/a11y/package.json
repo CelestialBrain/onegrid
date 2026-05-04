@@ -1,7 +1,7 @@
 {
-  "name": "@onegrid/core",
+  "name": "@onegrid/a11y",
   "version": "0.0.5",
-  "description": "oneGrid core engine: canvas renderer, accessibility shadow DOM, signals, layout, selection.",
+  "description": "Accessibility utilities for oneGrid: live regions, roving tabindex, ARIA grid pattern helpers. Framework-agnostic and DOM-only.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -25,11 +25,6 @@
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src"
-  },
-  "dependencies": {
-    "@onegrid/protocol": "workspace:*",
-    "@onegrid/data": "workspace:*",
-    "@onegrid/a11y": "workspace:*"
   },
   "devDependencies": {
     "jsdom": "^25.0.0"
