@@ -312,6 +312,140 @@ describe('Grid · cell editing', () => {
     });
   });
 
+  it('sync validator rejection keeps the editor open and announces the message', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const edits: string[] = [];
+    const cols: ColumnDef[] = [
+      { id: 'a', width: 100, displayName: 'A' },
+      {
+        id: 'b',
+        width: 200,
+        displayName: 'B',
+        validate: (v) =>
+          v.length < 3
+            ? { ok: false, message: 'must be at least 3 chars' }
+            : { ok: true },
+      },
+    ];
+    const grid = new Grid({
+      host,
+      columns: cols,
+      rowSource: rowSource(50),
+      rowHeight: 24,
+      editable: true,
+      onCellEdit: (_r, _c, n) => edits.push(n),
+    });
+    grid.beginEdit(0, 1);
+    const input = host.querySelector('input') as HTMLInputElement;
+    input.value = 'hi'; // too short
+    grid.commitEdit();
+    expect(edits).toHaveLength(0);
+    expect(grid.isEditing()).toBe(true);
+    expect(input.getAttribute('aria-invalid')).toBeNull(); // not yet typed
+    grid.destroy();
+    document.body.removeChild(host);
+  });
+
+  it('async validator rejection (Promise) keeps the editor open', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const edits: string[] = [];
+    const cols: ColumnDef[] = [
+      { id: 'a', width: 100, displayName: 'A' },
+      {
+        id: 'b',
+        width: 200,
+        displayName: 'B',
+        validate: async (v) =>
+          v === 'taken'
+            ? { ok: false, message: 'already taken' }
+            : { ok: true },
+      },
+    ];
+    const grid = new Grid({
+      host,
+      columns: cols,
+      rowSource: rowSource(50),
+      rowHeight: 24,
+      editable: true,
+      onCellEdit: (_r, _c, n) => edits.push(n),
+    });
+    grid.beginEdit(0, 1);
+    const input = host.querySelector('input') as HTMLInputElement;
+    input.value = 'taken';
+    const result = grid.commitEdit();
+    expect(result).toBeInstanceOf(Promise);
+    await result;
+    expect(edits).toHaveLength(0);
+    expect(grid.isEditing()).toBe(true);
+    grid.destroy();
+    document.body.removeChild(host);
+  });
+
+  it('async validator success commits the edit', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const edits: string[] = [];
+    const cols: ColumnDef[] = [
+      { id: 'a', width: 100, displayName: 'A' },
+      {
+        id: 'b',
+        width: 200,
+        displayName: 'B',
+        validate: async () => ({ ok: true }),
+      },
+    ];
+    const grid = new Grid({
+      host,
+      columns: cols,
+      rowSource: rowSource(50),
+      rowHeight: 24,
+      editable: true,
+      onCellEdit: (_r, _c, n) => edits.push(n),
+    });
+    grid.beginEdit(0, 1);
+    const input = host.querySelector('input') as HTMLInputElement;
+    input.value = 'fine';
+    await grid.commitEdit();
+    expect(edits).toEqual(['fine']);
+    grid.destroy();
+    document.body.removeChild(host);
+  });
+
+  it('input-phase validator does not run while composing (skips partial codepoints)', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let validatorCalls = 0;
+    const cols: ColumnDef[] = [
+      {
+        id: 'a',
+        width: 100,
+        displayName: 'A',
+        validate: () => {
+          validatorCalls++;
+          return { ok: true };
+        },
+      },
+    ];
+    const grid = new Grid({
+      host,
+      columns: cols,
+      rowSource: rowSource(50),
+      rowHeight: 24,
+      editable: true,
+    });
+    grid.beginEdit(0, 0);
+    const input = host.querySelector('input') as HTMLInputElement;
+    // Start composition, dispatch input — validator must NOT run.
+    input.dispatchEvent(new CompositionEvent('compositionstart'));
+    input.value = 'n';
+    input.dispatchEvent(new InputEvent('input'));
+    expect(validatorCalls).toBe(0);
+    grid.destroy();
+    document.body.removeChild(host);
+  });
+
   it('Enter does not commit while IME composition is active', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

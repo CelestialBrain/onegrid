@@ -22,7 +22,36 @@ export interface ColumnDef<TValue = unknown> {
   readonly color?: (value: TValue, rowIndex: number) => string | undefined;
   /** Optional per-cell background color. */
   readonly background?: (value: TValue, rowIndex: number) => string | undefined;
+  /** Optional editor validator. Sync result keeps editor instant on
+   *  every input keystroke; async result is awaited at commit time
+   *  with AbortController so a fast-typing user never sees stale
+   *  validation. Rejection keeps the editor open and announces the
+   *  message via the live region. */
+  readonly validate?: (
+    value: string,
+    context: ValidationContext,
+  ) => ValidationResult | Promise<ValidationResult>;
 }
+
+export interface ValidationContext {
+  readonly rowIndex: number;
+  readonly columnId: string;
+  /** Phase the validator is being invoked in. `input` runs on every
+   *  keystroke (debounced); `commit` runs when the user attempts to
+   *  finalize the edit. Async validators may want to skip `input`
+   *  and only run on `commit` to avoid unnecessary network traffic. */
+  readonly phase: 'input' | 'commit';
+}
+
+export type ValidationResult =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      /** Human-readable error message rendered in the editor's
+       *  error bubble and announced via aria-live. */
+      readonly message: string;
+      readonly severity?: 'error' | 'warning';
+    };
 
 /**
  * Synchronous random-access row reader. The renderer calls `getCell` once per

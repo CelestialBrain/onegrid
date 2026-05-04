@@ -216,6 +216,14 @@ export function materializeSynthetic(numRows: number): MaterializedSyntheticData
       width: 130,
       displayName: 'Revenue',
       format: (v) => (typeof v === 'number' ? `$${v.toFixed(2)}` : ''),
+      // Sync validator: revenue must parse as a finite non-negative number.
+      validate: (raw) => {
+        const trimmed = raw.trim().replace(/^\$/, '');
+        const n = Number(trimmed);
+        if (!Number.isFinite(n)) return { ok: false, message: 'Revenue must be a number' };
+        if (n < 0) return { ok: false, message: 'Revenue cannot be negative' };
+        return { ok: true };
+      },
     },
     {
       id: 'status',
@@ -224,12 +232,26 @@ export function materializeSynthetic(numRows: number): MaterializedSyntheticData
       format: (v) => String(v ?? ''),
       color: (v) =>
         typeof v === 'string' ? STATUS_COLORS[v as (typeof STATUSES)[number]] : undefined,
+      // Sync validator: status must be one of the known set.
+      validate: (raw) => {
+        const v = raw.trim();
+        if (!STATUSES.includes(v as (typeof STATUSES)[number])) {
+          return { ok: false, message: `Status must be one of: ${STATUSES.join(', ')}` };
+        }
+        return { ok: true };
+      },
     },
     {
       id: 'score',
       width: 90,
       displayName: 'Score',
       format: (v) => String(v ?? ''),
+      validate: (raw) => {
+        const n = Number(raw.trim());
+        if (!Number.isInteger(n)) return { ok: false, message: 'Score must be an integer' };
+        if (n < 0 || n > 100) return { ok: false, message: 'Score must be 0–100' };
+        return { ok: true };
+      },
     },
     {
       id: 'updatedAt',

@@ -16,7 +16,7 @@
 // =============================================================================
 
 import { FenwickHeights } from '@onegrid/data';
-import { ariaCellId } from '@onegrid/a11y';
+import { ariaCellId, LiveAnnouncer } from '@onegrid/a11y';
 import {
   DEFAULT_THEME,
   type ColumnDef,
@@ -25,6 +25,7 @@ import {
   type GridTheme,
   type MetricsSnapshot,
   type RowSource,
+  type ValidationResult,
 } from './types';
 import { SelectionModel, type CellPosition, type SelectionSnapshot } from './selection';
 import type { SortModel } from '@onegrid/protocol';
@@ -121,6 +122,16 @@ export class Grid {
   // 229 keydown sentinel is unreliable on Android Chrome where it fires
   // for *all* soft-keyboard input).
   private editorIsComposing = false;
+
+  // Validation state. The error bubble is a single shared element that
+  // moves with the editor; aria-invalid + aria-errormessage on the
+  // editor input link to it. The live announcer is the screen-reader
+  // fallback (NVDA + VoiceOver under-support aria-errormessage).
+  private editorErrorEl: HTMLDivElement | null = null;
+  private editorInputDebounce: ReturnType<typeof setTimeout> | null = null;
+  private editorAsyncAbort: AbortController | null = null;
+  private editorHasTyped = false;
+  private liveAnnouncer: LiveAnnouncer | null = null;
 
   // Pinned rows + column groups + status bar.
   private readonly pinnedTopRowSource: RowSource | undefined;
@@ -432,6 +443,16 @@ export class Grid {
     this.detailLayer?.remove();
     this.editorEl?.remove();
     this.editorEl = null;
+    this.editorErrorEl?.remove();
+    this.editorErrorEl = null;
+    this.editorAsyncAbort?.abort();
+    this.editorAsyncAbort = null;
+    if (this.editorInputDebounce !== null) {
+      clearTimeout(this.editorInputDebounce);
+      this.editorInputDebounce = null;
+    }
+    this.liveAnnouncer?.destroy();
+    this.liveAnnouncer = null;
     this.statusBarEl?.remove();
     this.statusBarEl = null;
     this.mountedDetails.clear();
@@ -908,6 +929,7 @@ export class Grid {
         'z-index:5;';
       input.addEventListener('keydown', this.handleEditorKeyDown);
       input.addEventListener('blur', this.handleEditorBlur);
+      input.addEventListener('input', this.handleEditorInput);
       // IME state machine: tracks composition lifecycle so Enter/Tab
       // commits can wait until the user picks a candidate. Composition
       // events are the authoritative source — KeyboardEvent.isComposing
@@ -916,7 +938,32 @@ export class Grid {
       input.addEventListener('compositionend', this.handleCompositionEnd);
       this.host.appendChild(input);
       this.editorEl = input;
+
+      // Error bubble: a single shared element pinned just below the
+      // editor. aria-invalid + aria-errormessage on the input link to
+      // its id so AT can find the message via the W3C-spec'd path.
+      const err = document.createElement('div');
+      err.id = `${this.gridId}-editor-error`;
+      err.setAttribute('aria-live', 'polite');
+      err.style.cssText =
+        'position:absolute;box-sizing:border-box;padding:4px 8px;' +
+        'background:#3a1818;color:#ff8a8a;border:1px solid #e56f6f;' +
+        `font-family:${this.theme.fontFamily};font-size:${String(this.theme.fontSize - 1)}px;` +
+        'border-radius:4px;z-index:6;display:none;pointer-events:none;' +
+        'max-width:320px;line-height:1.3;';
+      this.host.appendChild(err);
+      this.editorErrorEl = err;
+      input.setAttribute('aria-errormessage', err.id);
+
+      // LiveAnnouncer is the screen-reader fallback. Mounted lazily on
+      // first edit so non-editable grids don't pay the DOM cost.
+      this.liveAnnouncer = new LiveAnnouncer(this.host);
     }
+    // Reset per-edit-session state. Type-ahead counts as user-typed
+    // (the keystroke that opened the editor IS user input), so we
+    // set the flag when initialText was supplied.
+    this.editorHasTyped = initialText !== undefined;
+    this.clearEditorError();
 
     if (initialText !== undefined) {
       this.editorEl.value = initialText;
@@ -937,19 +984,41 @@ export class Grid {
   }
 
   /** Commit the current edit and notify via onCellEdit. No-op when not
-   *  editing. The grid does not write the value back itself; the
-   *  consumer is expected to update its row source. */
-  commitEdit(): void {
+   *  editing. Runs the column validator first; rejection keeps the
+   *  editor open with the error message visible (reject-and-keep-open
+   *  pattern). For async validators, returns a Promise so callers can
+   *  await the resolution. The grid does not write the value back
+   *  itself; the consumer is expected to update its row source. */
+  commitEdit(): void | Promise<void> {
     if (!this.isEditing() || !this.editorEl) return;
     const row = this.editingRow!;
     const col = this.editingCol!;
     const column = this.columns[col];
     const newValue = this.editorEl.value;
 
+    if (column?.validate) {
+      const result = this.runValidator('commit');
+      if (result instanceof Promise) {
+        return result.then((r) => {
+          if (!r.ok) return; // Reject-and-keep-open
+          this.finalizeCommit(row, column, newValue);
+        });
+      }
+      if (!result.ok) return; // Reject-and-keep-open
+    }
+    this.finalizeCommit(row, column, newValue);
+  }
+
+  private finalizeCommit(row: number, column: ColumnDef | undefined, newValue: string): void {
+    if (!this.editorEl) return;
     this.editingRow = null;
     this.editingCol = null;
     this.editorEl.style.display = 'none';
-
+    this.clearEditorError();
+    if (this.editorInputDebounce !== null) {
+      clearTimeout(this.editorInputDebounce);
+      this.editorInputDebounce = null;
+    }
     if (column) {
       const oldValue = this.rowSource.getCell(row, column.id);
       this.onCellEdit?.(row, column.id, newValue, oldValue);
@@ -963,6 +1032,13 @@ export class Grid {
     this.editingRow = null;
     this.editingCol = null;
     this.editorEl.style.display = 'none';
+    this.clearEditorError();
+    this.editorAsyncAbort?.abort();
+    this.editorAsyncAbort = null;
+    if (this.editorInputDebounce !== null) {
+      clearTimeout(this.editorInputDebounce);
+      this.editorInputDebounce = null;
+    }
     this.scrollHost.focus();
     this.scheduleRender();
   }
@@ -976,6 +1052,7 @@ export class Grid {
     const rect = this.cellViewportRect(this.editingRow, this.editingCol);
     if (!rect) {
       this.editorEl.style.display = 'none';
+      if (this.editorErrorEl) this.editorErrorEl.style.display = 'none';
       return;
     }
     this.editorEl.style.display = 'block';
@@ -983,6 +1060,13 @@ export class Grid {
     this.editorEl.style.top = `${String(rect.top)}px`;
     this.editorEl.style.width = `${String(rect.width)}px`;
     this.editorEl.style.height = `${String(rect.height)}px`;
+    // Anchor error bubble below the editor; only show if there's a
+    // current error message (textContent set in applyValidationResult).
+    if (this.editorErrorEl && this.editorErrorEl.textContent) {
+      this.editorErrorEl.style.left = `${String(rect.left)}px`;
+      this.editorErrorEl.style.top = `${String(rect.top + rect.height + 2)}px`;
+      this.editorErrorEl.style.display = 'block';
+    }
   }
 
   /** Viewport-relative bounding box for (row, col), accounting for
@@ -1084,6 +1168,80 @@ export class Grid {
   private handleEditorBlur = (): void => {
     if (this.isEditing()) this.commitEdit();
   };
+
+  /** Per-keystroke validator dispatch. Debounced ~100ms so we don't
+   *  re-run the validator on every character of fast typing. Skipped
+   *  while the IME is composing — partial codepoints would otherwise
+   *  be flagged as invalid mid-composition. Async validators are
+   *  intentionally NOT awaited here; their result is computed at
+   *  commit time, so input-phase only runs synchronous validators. */
+  private handleEditorInput = (): void => {
+    if (this.editorIsComposing) return;
+    this.editorHasTyped = true;
+    if (this.editorInputDebounce !== null) clearTimeout(this.editorInputDebounce);
+    this.editorInputDebounce = setTimeout(() => {
+      this.editorInputDebounce = null;
+      this.runValidator('input');
+    }, 100);
+  };
+
+  /** Run the active column's validator at the given phase. Sync results
+   *  apply immediately; promise results are wrapped with AbortController
+   *  so a fast-typing user never sees stale validation errors. */
+  private runValidator(phase: 'input' | 'commit'): ValidationResult | Promise<ValidationResult> {
+    if (this.editingRow === null || this.editingCol === null || !this.editorEl) {
+      return { ok: true };
+    }
+    const column = this.columns[this.editingCol];
+    if (!column?.validate) return { ok: true };
+
+    // Cancel any in-flight async validator from a previous keystroke.
+    this.editorAsyncAbort?.abort();
+    this.editorAsyncAbort = new AbortController();
+    const myAbort = this.editorAsyncAbort;
+
+    const result = column.validate(this.editorEl.value, {
+      rowIndex: this.editingRow,
+      columnId: column.id,
+      phase,
+    });
+
+    if (!(result instanceof Promise)) {
+      this.applyValidationResult(result);
+      return result;
+    }
+    return result.then((r) => {
+      // Drop the result if a newer keystroke superseded this one.
+      if (myAbort.signal.aborted) return r;
+      this.applyValidationResult(r);
+      return r;
+    });
+  }
+
+  private applyValidationResult(result: ValidationResult): void {
+    if (!this.editorEl || !this.editorErrorEl) return;
+    if (result.ok) {
+      this.clearEditorError();
+      return;
+    }
+    // aria-invalid is only set AFTER the user has typed — setting it on
+    // initial focus causes JAWS/VoiceOver to announce "invalid entry"
+    // before the user has had a chance to type anything.
+    if (this.editorHasTyped) {
+      this.editorEl.setAttribute('aria-invalid', 'true');
+    }
+    this.editorErrorEl.textContent = result.message;
+    this.editorErrorEl.style.display = 'block';
+    this.liveAnnouncer?.announce(result.message, 'polite');
+  }
+
+  private clearEditorError(): void {
+    if (this.editorEl) this.editorEl.removeAttribute('aria-invalid');
+    if (this.editorErrorEl) {
+      this.editorErrorEl.textContent = '';
+      this.editorErrorEl.style.display = 'none';
+    }
+  }
 
   private handleDoubleClick = (e: MouseEvent): void => {
     const cell = this.cellAtClient(e.clientX, e.clientY);

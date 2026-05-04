@@ -85,6 +85,34 @@ test('Enter does not commit while IME composition is active', async ({ page }) =
   await expect(editor).toBeHidden();
 });
 
+test('sync validator rejection keeps the editor open + sets aria-invalid + shows error bubble', async ({
+  page,
+}) => {
+  // The "revenue" column validates as a finite number. Memory-mode
+  // column widths: rowIndex 80, firstName 130, lastName 150, revenue
+  // 130 (cumulative 360–490), status 110, score 90, updatedAt 170.
+  // x=400 lands inside revenue.
+  const grid = page.locator('[role="grid"]').first();
+  await grid.click({ position: { x: 400, y: 160 } });
+  await page.keyboard.press('a'); // not a number
+
+  const editor = page.locator('input[type="text"]').first();
+  await expect(editor).toBeVisible();
+  await page.keyboard.press('Enter');
+  // Editor stays open; aria-invalid set; error bubble shows.
+  await expect(editor).toBeVisible();
+  await expect(editor).toHaveAttribute('aria-invalid', 'true');
+  // The error bubble has aria-live="polite" — find by id.
+  const errorId = await editor.getAttribute('aria-errormessage');
+  expect(errorId).not.toBeNull();
+  const bubble = page.locator(`#${errorId!}`);
+  await expect(bubble).toBeVisible();
+  await expect(bubble).toHaveText(/number|[Rr]evenue/);
+
+  // Recover: clear and type a valid value.
+  await page.keyboard.press('Escape');
+});
+
 test('keyCode=229 (Android soft keyboard) is treated as IME — Enter does not commit', async ({
   page,
 }) => {
