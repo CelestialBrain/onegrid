@@ -862,7 +862,7 @@ export const App = (): JSX.Element => {
       <div className="toolbar">
         <h1>oneGrid · v0.0.5</h1>
 
-        <div role="tablist" aria-label="data source mode">
+        <div role="group" aria-label="data source mode">
           <button
             type="button"
             onClick={() => {
