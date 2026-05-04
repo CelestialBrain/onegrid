@@ -38,8 +38,8 @@ application reaches for at some point.
 | Pivot tables | ✅ | |
 | CSV + XLSX export | ✅ | |
 | **Tree data** | 🔵 | Hierarchical row model, parent→child in the data itself |
-| **Set filter** | 🔵 | Distinct-values checkbox filter with counts |
-| **Floating filters** | 🔵 | Per-column inline filter row under the header |
+| Set filter (distinct-values checkbox + counts) | ✅ | `enumerateDistinct` in @onegrid/data + popover UI |
+| Floating filter row | ✅ | Per-column `<input role=searchbox>` band, sticky below header |
 | **Column tool panel / sidebar** | 🔵 | Drag-drop visibility, reorder, group/pivot/value drop zones |
 | **Context menu** | 🔵 | Right-click → copy/paste/export/filter/group |
 | **Drag-drop column reorder** | 🔵 | |
@@ -47,16 +47,16 @@ application reaches for at some point.
 | **Row + column span (merged cells)** | 🔵 | |
 | **Sticky group rows** | 🔵 | Group header pins while scrolling within |
 | **Loading / no-rows / skeleton overlays** | 🔵 | |
-| **Tooltip system** | 🔵 | Per-cell + per-header |
-| **Custom cell renderers** | 🔵 | React/Vue/Svelte/Solid component-per-cell, frame-rate-aware |
-| **Editor variants** | 🔵 | Dropdown, date picker, large text, custom editors |
+| Tooltip system | ✅ | Single shared `<div role=tooltip>` with hover delay + Escape/scroll dismiss |
+| Custom cell renderers | ✅ | Pool + overlay layer in core; React adapter shipped (Vue/Svelte/Solid follow-up) |
+| Editor variants | ✅ | `createSelectEditor` / `createDateEditor` / `createTextareaEditor` (autocomplete + multi-select chips follow-up) |
 | **Selection checkbox column** | 🔵 | |
 | **Range chart** | 🔵 | Select cells → embed a chart bound to the selection |
 | **Sparklines in cells** | 🔵 | |
 | **Undo/redo** | 🔵 | Transactional edit history |
 | **Light theme + density variants** | 🔵 | Currently one dark theme |
-| **IME composition-aware editor commit** | 🔵 | Gate Enter-commits on `event.isComposing === false` so CJK input methods aren't broken mid-composition |
-| **Cell editor validation** | 🔵 | Sync + async validators that reject + keep editor open with error styling |
+| IME composition-aware editor commit | ✅ | State machine on composition events + `keyCode===229` guard |
+| Cell editor validation | ✅ | Sync + async with `AbortController`; aria-invalid + aria-errormessage + LiveAnnouncer fallback |
 | **Range fill-handle** | 🔵 | Drag the bottom-right corner of a selection to extrapolate values (Excel-style series fill) |
 | **Multi-select cell type with chips** | 🔵 | Multi-value column type rendering chips per cell, with a popover editor |
 | **Column-group visibility manager** | 🔵 | Toggle whole header groups on/off in one action |
@@ -160,7 +160,7 @@ the data layer and rendering layer in a way commercial alternatives don't.
 | **MCP server for the grid** | 🟣 | Expose read/write/range/formula tools over the Model Context Protocol so LLMs can drive the grid as a first-class peer |
 | **DBSP-style derived view registration** | 🔵 | Public `defineView({ from, where, groupBy, agg })` API returning a live RowSource backed by incremental view maintenance |
 | **Salsa-style reactivity substrate** | 🔵 | On-demand memoization framework backing the formula engine, derived views, and the column tool panel — same pattern as `salsa-rs` |
-| **Accessibility conformance suite** | 🔵 | Playwright + axe + screen-reader harness gating CI against the W3C WAI-ARIA 1.2 grid pattern |
+| Accessibility conformance suite (CI-gated) | ✅ | `@onegrid/a11y` package + `aria-activedescendant` + 4 axe-core/WAI-ARIA Playwright specs in CI |
 | **Per-feature bundle slicing** | 🔵 | `bundle-budget.json` per package; CI fails on regressions so adopters can predict the cost of every feature flag |
 | **Range navigation history** | 🔵 | Browser-style back/forward stack within huge sheets — surprisingly absent across the field |
 
