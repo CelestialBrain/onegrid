@@ -529,6 +529,49 @@ describe('Grid · cell editing', () => {
     document.body.removeChild(host);
   });
 
+  it('mounts a custom cell renderer overlay when a column has a renderer', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    // jsdom returns 0×0 from getBoundingClientRect on un-laid-out
+    // elements; override so the grid believes it has a viewport and
+    // visible rows can be enumerated.
+    host.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    const pillCols: ColumnDef[] = [
+      { id: 'a', width: 100, displayName: 'A' },
+      {
+        id: 'b',
+        width: 200,
+        displayName: 'B',
+        renderer: {
+          id: 'pill',
+          mount: () => {
+            const el = document.createElement('span');
+            el.className = 'pill';
+            return el;
+          },
+          update: (el, ctx) => {
+            el.textContent = `cell-${String(ctx.rowIndex)}`;
+          },
+        },
+      },
+    ];
+    const grid = new Grid({
+      host,
+      columns: pillCols,
+      rowSource: rowSource(50),
+      rowHeight: 24,
+    });
+    // Wait for the rAF tick.
+    await new Promise((r) => setTimeout(r, 30));
+    const pills = host.querySelectorAll('.pill');
+    expect(pills.length).toBeGreaterThan(0);
+    expect((pills[0] as HTMLElement).textContent).toMatch(/^cell-\d+$/);
+    grid.destroy();
+    expect(host.children.length).toBe(0);
+    document.body.removeChild(host);
+  });
+
   it('beginEdit with initialText replaces value (type-ahead)', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

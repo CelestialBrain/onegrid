@@ -17,6 +17,7 @@
 
 import { FenwickHeights } from '@onegrid/data';
 import { ariaCellId, LiveAnnouncer } from '@onegrid/a11y';
+import { RendererPool } from './render/renderer-pool';
 import {
   DEFAULT_THEME,
   type ColumnDef,
@@ -132,6 +133,16 @@ export class Grid {
   private editorAsyncAbort: AbortController | null = null;
   private editorHasTyped = false;
   private liveAnnouncer: LiveAnnouncer | null = null;
+
+  // Custom cell renderer infrastructure. The overlay layer sits above
+  // the canvas and holds DOM nodes produced by ColumnDef.renderer. The
+  // pool keeps mounted instances alive across scroll so framework
+  // reactivity (React fiber, Svelte runes, etc.) survives.
+  private cellOverlayEl: HTMLDivElement | null = null;
+  private rendererPool: RendererPool | null = null;
+  // Active assignments keyed by `${rendererId}:${row}:${col}` so the
+  // same cell coordinate reuses its element across frames (no flicker).
+  private activeRendererCells = new Map<string, HTMLElement>();
 
   // Pinned rows + column groups + status bar.
   private readonly pinnedTopRowSource: RowSource | undefined;
@@ -250,6 +261,20 @@ export class Grid {
       this.detailLayer.style.cssText =
         'position:absolute;inset:0;pointer-events:none;overflow:hidden;';
       this.host.appendChild(this.detailLayer);
+    }
+
+    // Custom cell renderer overlay: a single layer sized to the host
+    // that holds DOM nodes produced by ColumnDef.renderer. pointer-events
+    // are inherited from each rendered cell so widgets can be interactive
+    // (checkboxes, dropdowns, sparklines), while the layer itself doesn't
+    // intercept grid scrolling. Mounted only when at least one column
+    // has a renderer — pure-canvas grids don't pay the DOM cost.
+    if (this.columns.some((c) => c.renderer)) {
+      this.cellOverlayEl = document.createElement('div');
+      this.cellOverlayEl.style.cssText =
+        'position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:2;';
+      this.host.appendChild(this.cellOverlayEl);
+      this.rendererPool = new RendererPool(this.cellOverlayEl);
     }
 
     // Status bar: a single absolute-positioned div pinned to the host's
@@ -453,6 +478,11 @@ export class Grid {
     }
     this.liveAnnouncer?.destroy();
     this.liveAnnouncer = null;
+    this.rendererPool?.destroy();
+    this.rendererPool = null;
+    this.cellOverlayEl?.remove();
+    this.cellOverlayEl = null;
+    this.activeRendererCells.clear();
     this.statusBarEl?.remove();
     this.statusBarEl = null;
     this.mountedDetails.clear();
@@ -1415,6 +1445,7 @@ export class Grid {
     );
     this.drawHeader();
     this.updateStatusBar();
+    if (this.rendererPool) this.syncCellOverlay(start, end);
     this.updateAccessibilityShadow(start, end);
 
     return {
@@ -1581,6 +1612,19 @@ export class Grid {
         const w = column.width;
 
         if (x + w >= 0 && x <= this.viewportWidth) {
+          // Custom-renderer columns: leave the cell blank so the DOM
+          // overlay paints the visual. Still draw the column divider
+          // so the grid lines stay continuous.
+          if (column.renderer) {
+            ctx.strokeStyle = theme.border;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x + w - 0.5, y);
+            ctx.lineTo(x + w - 0.5, y + h);
+            ctx.stroke();
+            x += w;
+            continue;
+          }
           const value = this.rowSource.getCell(row, column.id);
           const text = column.format ? column.format(value, row) : String(value ?? '');
           const fg = column.color?.(value, row) ?? theme.text;
@@ -2024,6 +2068,72 @@ export class Grid {
     if (this.velocity > 200) return 12;
     if (this.velocity > 50) return 6;
     return 2;
+  }
+
+  /**
+   * Mount / position / unmount custom-renderer DOM nodes for the visible
+   * window. Cells with `ColumnDef.renderer` set are NOT painted to the
+   * canvas — the canvas just paints the cell background — and the
+   * rendered DOM element from the pool fills in on top. Instances that
+   * scrolled out of view return to the pool with reset() called.
+   */
+  private syncCellOverlay(start: number, end: number): void {
+    if (!this.rendererPool || !this.cellOverlayEl) return;
+    const claimed: Map<string, Set<HTMLElement>> = new Map();
+    const nextActive = new Map<string, HTMLElement>();
+
+    for (let row = start; row <= end; row++) {
+      for (let col = 0; col < this.columns.length; col++) {
+        const column = this.columns[col];
+        if (!column?.renderer) continue;
+        const rect = this.cellViewportRect(row, col);
+        if (!rect) continue;
+
+        const renderer = column.renderer;
+        const key = `${renderer.id}:${String(row)}:${String(col)}`;
+        const value = this.rowSource.getCell(row, column.id);
+        const ctx = { value, rowIndex: row, columnId: column.id };
+
+        // Reuse the existing element for this cell coordinate if we had
+        // one last frame; otherwise acquire a new instance from the pool.
+        let el = this.activeRendererCells.get(key);
+        if (!el) {
+          const inst = this.rendererPool.acquire(renderer, ctx);
+          el = inst.el;
+          inst.lastCol = col;
+        }
+        el.style.position = 'absolute';
+        el.style.left = `${String(rect.left)}px`;
+        el.style.top = `${String(rect.top)}px`;
+        el.style.width = `${String(rect.width)}px`;
+        el.style.height = `${String(rect.height)}px`;
+        el.style.display = 'block';
+        el.style.pointerEvents = 'auto';
+        renderer.update(el, ctx);
+
+        nextActive.set(key, el);
+        let claimSet = claimed.get(renderer.id);
+        if (!claimSet) {
+          claimSet = new Set();
+          claimed.set(renderer.id, claimSet);
+        }
+        claimSet.add(el);
+      }
+    }
+
+    // Release everything that wasn't claimed this frame back to the
+    // pool. The pool calls reset() on each going-out instance.
+    const allRendererIds = new Set<string>();
+    for (const c of this.columns) if (c.renderer) allRendererIds.add(c.renderer.id);
+    for (const id of allRendererIds) {
+      const renderer = this.columns.find((c) => c.renderer?.id === id)?.renderer;
+      this.rendererPool.releaseUnclaimed(
+        id,
+        claimed.get(id) ?? new Set(),
+        renderer?.reset,
+      );
+    }
+    this.activeRendererCells = nextActive;
   }
 
   // ---------------------------------------------------------------------------

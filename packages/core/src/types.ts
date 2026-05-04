@@ -31,6 +31,51 @@ export interface ColumnDef<TValue = unknown> {
     value: string,
     context: ValidationContext,
   ) => ValidationResult | Promise<ValidationResult>;
+  /** Custom DOM-based cell renderer. When set, the canvas paints a
+   *  blank cell background and the rendered DOM element is positioned
+   *  in the overlay layer above the canvas. The grid pools instances
+   *  per renderer id so framework reactivity (React/Vue/Svelte/Solid)
+   *  is preserved across scroll — only on-screen cells are mounted,
+   *  off-screen cells return to the pool with their state reset. */
+  readonly renderer?: CellRenderer;
+}
+
+/** Per-cell render context handed to a CellRenderer's mount/update/
+ *  reset hooks. Same shape as the `format` / `color` callbacks but
+ *  with the rendered DOM element in scope so consumers can mutate it. */
+export interface CellRenderContext {
+  readonly value: unknown;
+  readonly rowIndex: number;
+  readonly columnId: string;
+}
+
+/**
+ * Custom cell renderer interface.
+ *
+ * Renderers are framework-agnostic and DOM-only at this layer. The
+ * core grid never instantiates React / Vue / Svelte / Solid components
+ * directly — framework adapters wrap their component-per-cell pattern
+ * in a CellRenderer and pass it through ColumnDef.renderer.
+ *
+ * Lifecycle:
+ *   1. mount()   — produce a fresh DOM node when the pool is empty
+ *                  for this renderer's id. Run once per pooled instance.
+ *   2. update()  — called every frame the cell is visible, with the
+ *                  current value/row/col. Should be cheap; do not
+ *                  re-create the framework root inside.
+ *   3. reset()   — called when the cell scrolls out of view and the
+ *                  instance returns to the pool. Clear focus, transient
+ *                  state, listeners that reference the previous cell.
+ */
+export interface CellRenderer {
+  /** Stable identifier — used as the pool key. Two renderers with the
+   *  same `id` share their pooled instances; with different ids each
+   *  has its own pool. Pick something descriptive: `"status-pill"`,
+   *  `"sparkline-line"`, etc. */
+  readonly id: string;
+  readonly mount: (context: CellRenderContext) => HTMLElement;
+  readonly update: (el: HTMLElement, context: CellRenderContext) => void;
+  readonly reset?: (el: HTMLElement) => void;
 }
 
 export interface ValidationContext {

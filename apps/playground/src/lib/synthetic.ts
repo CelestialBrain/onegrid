@@ -243,7 +243,7 @@ export function materializeSynthetic(numRows: number): MaterializedSyntheticData
     },
     {
       id: 'score',
-      width: 90,
+      width: 110,
       displayName: 'Score',
       format: (v) => String(v ?? ''),
       validate: (raw) => {
@@ -251,6 +251,49 @@ export function materializeSynthetic(numRows: number): MaterializedSyntheticData
         if (!Number.isInteger(n)) return { ok: false, message: 'Score must be an integer' };
         if (n < 0 || n > 100) return { ok: false, message: 'Score must be 0–100' };
         return { ok: true };
+      },
+      // Custom DOM renderer: a horizontal progress bar with the value
+      // overlaid as text. Demonstrates the pool / overlay mechanism —
+      // only on-screen rows have DOM nodes; everything else paints to
+      // the canvas. Pool size stays bounded by viewport height, not
+      // dataset size.
+      renderer: {
+        id: 'score-bar',
+        mount: () => {
+          const root = document.createElement('div');
+          root.style.cssText =
+            'box-sizing:border-box;padding:6px 10px;display:flex;align-items:center;' +
+            'gap:8px;font-family:ui-sans-serif,system-ui,sans-serif;font-size:12px;' +
+            'color:#e7e9ec;';
+
+          const track = document.createElement('div');
+          track.className = 'score-track';
+          track.style.cssText =
+            'flex:1;height:8px;background:#1c2027;border-radius:4px;overflow:hidden;';
+
+          const fill = document.createElement('div');
+          fill.className = 'score-fill';
+          fill.style.cssText = 'height:100%;background:#62d68a;transition:none;';
+          track.appendChild(fill);
+
+          const label = document.createElement('span');
+          label.className = 'score-label';
+          label.style.cssText = 'min-width:24px;text-align:right;color:#a5b1c2;';
+
+          root.appendChild(track);
+          root.appendChild(label);
+          return root;
+        },
+        update: (el, ctx) => {
+          const n = Number(ctx.value);
+          const pct = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0;
+          const fill = el.querySelector('.score-fill') as HTMLElement;
+          const label = el.querySelector('.score-label') as HTMLElement;
+          fill.style.width = `${String(pct)}%`;
+          // Color drifts from green → yellow → red as score drops.
+          fill.style.background = pct >= 70 ? '#62d68a' : pct >= 40 ? '#f4c768' : '#e56f6f';
+          label.textContent = String(Math.round(pct));
+        },
       },
     },
     {
