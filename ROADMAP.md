@@ -218,39 +218,36 @@ Tree data + nested grids = the "inner tables" milestone.
 Implementation order (critical path — hardest-to-retrofit first, same
 principle that drove v0.0.6 sequencing):
 
-1. **Tree data with lazy-load children** — the row-model abstraction
-   for hierarchy. Every other v0.0.7 item (nested grids, drag-drop,
-   sticky group rows, server-side tree) presumes this exists. Building
-   anything else first would force re-shaping its API later.
-2. **Nested grids inside detail panels** — recursive oneGrid-in-
-   oneGrid with focus + scroll containment. Builds directly on the
-   tree-data row model AND on the existing master-detail layer; the
-   inner grid lives in an outer detail panel.
-3. **Server-side tree expansion** — push tree expansion + lazy
-   children to the SSRM contract. Locking the protocol shape now
-   means future database adapters in v0.0.8 inherit a tree-aware
-   `BlockRequest` instead of needing a v0.0.8.1 protocol break.
-4. **Drag-drop reorder** (columns, rows, and within tree/group) — the
-   most-upvoted gap in the wider grid ecosystem. Touches selection,
-   tree data, and the renderer's hit-test plane; locking the API now
-   prevents the renderer-touching items below from re-doing pointer
-   plumbing.
-5. **Column tool panel / sidebar** with column-group visibility
-   manager — the host surface for drag-drop column reorder, group/
-   pivot/value drop zones, and visibility toggles. Slots into the
-   already-shipped `RovingTabindex` from `@onegrid/a11y`.
-6. **Context menu** — right-click → copy/paste/export/filter/group.
-   Reuses the column-tool-panel toolbar a11y pattern.
-7. **Sticky group rows + aggregation-aware group-row pin** — group
-   header pins while scrolling within. Smaller surface, slots onto
-   the existing row-grouping infrastructure once the renderer-touching
-   items above settle.
-8. **Range fill-handle** — drag the bottom-right corner of a
-   selection to extrapolate values. Composes on top of selection +
-   editing + tree data without architectural risk.
-9. **Selection checkbox column** — last because it's the smallest
-   independent piece; deferring lets the renderer-touching items
-   above iterate without breaking it.
+1. ✅ **Tree data with lazy-load children** — `flattenTree` /
+   `RowTreeMeta` row model in `@onegrid/data` + a `getRowMeta`
+   discriminated-union extension in core.
+2. ✅ **Nested grids inside detail panels** — `Grid.onDetailUnmount`
+   lifecycle hook, recursive `Grid` inside `getDetailContent`, full
+   destroy() on collapse / scroll-out / outer destroy.
+3. ✅ **Server-side tree expansion** — `BlockRequest.parentId` +
+   per-row `HierarchyEntry`, `createSsrmTreeSource` lazy children
+   fetcher, mock-server hierarchical dataset.
+4. ✅ **Drag-drop reorder** (columns) — header pointerdown →
+   drag-candidate → vertical drop indicator → in-place column
+   splice + `onColumnReorder` callback. Click-vs-drag disambiguated
+   at the 6px threshold. (Row + tree/group reorder is a v0.0.8
+   follow-up.)
+5. ✅ **Column tool panel / sidebar** — `<ColumnToolPanel>` React
+   component with show/hide checkboxes + within-panel drag-drop;
+   `Grid.setColumns()` / `Grid.getColumns()` imperative API.
+6. ✅ **Context menu** — `ContextMenuTarget` discriminated union
+   (cell / header / empty), native menu suppressed, consumer renders
+   their own popover.
+7. ✅ **Sticky group rows + aggregation-aware group-row pin** —
+   `drawStickyGroupRow` re-renders the topmost ancestor group at
+   the data band top when scrolled past, with aggregates intact.
+8. ✅ **Range fill-handle** — bottom-right handle, dashed-outline
+   drag preview, `onFillHandle(source, fill)` callback so the
+   consumer applies the data policy.
+9. ✅ **Selection checkbox column** — `createSelectionCheckboxColumn`
+   factory + `<SelectAllCheckbox>` tri-state widget; renderer-pool
+   cells subscribe to a module-scoped store via
+   `useSyncExternalStore` so toggles repaint without a Grid remount.
 
 Side-quests with no ordering dependency (ship anywhere in v0.0.7):
 - Aggregation-aware group-row pin tuning
