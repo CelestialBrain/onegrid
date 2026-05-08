@@ -1,0 +1,42 @@
+{
+  "name": "@onegrid/migrate",
+  "version": "0.0.5",
+  "description": "Codemod CLI that translates other grids' column definitions to oneGrid ColumnDef. Clean-room — translators are written only against publicly-described configuration shapes.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "onegrid-migrate": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "commander": "^12.0.0",
+    "jscodeshift": "^17.0.0"
+  },
+  "devDependencies": {
+    "@types/jscodeshift": "^0.12.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

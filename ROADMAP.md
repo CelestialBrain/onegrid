@@ -156,7 +156,7 @@ the data layer and rendering layer in a way commercial alternatives don't.
 | **Function library expansion** | 🔵 | Target ≥400 built-in functions across categories: lookup (VLOOKUP/INDEX/MATCH/XLOOKUP), statistical, financial, text, logical, date/time |
 | **Conditional formatting** | 🔵 | Per-cell rules driven by the formula engine; rule editor in the column tool panel |
 | **Schema introspection** | 🔵 | Auto-derive `ColumnDef[]` from a database/ORM schema |
-| **`@onegrid/migrate` CLI** | 🔵 | Codemod that translates other grids' column definitions to oneGrid configs; per-source migration playbook docs with feature-coverage matrix |
+| `@onegrid/migrate` CLI | ✅ | jscodeshift-based codemod with AG-Grid + TanStack transformers, golden-file fixtures, `--write` / `--dry-run` modes; ambiguous translations get inline TODO comments. Source mappings carry SOURCE: <public-url> provenance per the clean-room rule. |
 | **MCP server for the grid** | 🟣 | Expose read/write/range/formula tools over the Model Context Protocol so LLMs can drive the grid as a first-class peer |
 | **DBSP-style derived view registration** | 🔵 | Public `defineView({ from, where, groupBy, agg })` API returning a live RowSource backed by incremental view maintenance |
 | **Salsa-style reactivity substrate** | 🔵 | On-demand memoization framework backing the formula engine, derived views, and the column tool panel — same pattern as `salsa-rs` |
