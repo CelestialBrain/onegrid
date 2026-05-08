@@ -188,6 +188,22 @@ export class Grid {
   private readonly onToggleGroup: ((path: string) => void) | undefined;
   private readonly stickyGroupRowsEnabled: boolean;
 
+  // Fill handle (drag-extend selection). Drag state is null when the
+  // user isn't actively dragging the handle.
+  private readonly fillHandleEnabled: boolean;
+  private readonly onFillHandle:
+    | ((
+        source: { rowStart: number; rowEnd: number; colStart: number; colEnd: number },
+        fill: { rowStart: number; rowEnd: number; colStart: number; colEnd: number },
+      ) => void)
+    | undefined;
+  private fillHandleSize = 6;
+  private fillDragState: {
+    source: import('./selection').NormalizedRange;
+    targetRow: number;
+    targetCol: number;
+  } | null = null;
+
   // Context menu — observers only. The Grid resolves the target
   // (cell / header / empty), prevents the native menu, and forwards
   // the payload. Rendering the menu is the consumer's responsibility.
@@ -261,6 +277,8 @@ export class Grid {
     // compute. Consumers can opt-out by passing `false`.
     this.stickyGroupRowsEnabled =
       options.stickyGroupRows ?? options.getRowMeta !== undefined;
+    this.fillHandleEnabled = options.enableFillHandle ?? false;
+    this.onFillHandle = options.onFillHandle;
 
     // Floating filter row.
     this.floatingFiltersEnabled = options.floatingFilters === true;
@@ -942,6 +960,51 @@ export class Grid {
       }
     }
 
+    // Fill-handle drag start: if the click lands on the small square
+    // at the bottom-right corner of the active selection, capture
+    // the source range and enter fill-drag mode. Pointer capture so
+    // the move/up tracking continues outside the host.
+    if (this.fillHandleEnabled && !this.selection.isEmpty()) {
+      const ranges = this.selection.normalizedRanges();
+      const last = ranges[ranges.length - 1];
+      if (last) {
+        const c = Math.min(last.colEnd, this.columns.length - 1);
+        const isFrozen = c < this.frozenColumnCount;
+        const handleRightX = isFrozen
+          ? (this.cumulativeColumnWidths[c + 1] ?? 0)
+          : this.frozenWidth +
+            ((this.cumulativeColumnWidths[c + 1] ?? 0) -
+              (this.cumulativeColumnWidths[this.frozenColumnCount] ?? 0)) -
+            this.scrollLeft;
+        const handleBottomY =
+          this.dataBandTop() +
+          this.fenwick.prefixSum(last.rowEnd) -
+          this.scrollTop +
+          this.fenwick.get(last.rowEnd);
+        const s = this.fillHandleSize + 2; // +2px tolerance
+        if (
+          localX >= handleRightX - s &&
+          localX <= handleRightX + 2 &&
+          localY >= handleBottomY - s &&
+          localY <= handleBottomY + 2
+        ) {
+          this.fillDragState = {
+            source: last,
+            targetRow: last.rowEnd,
+            targetCol: last.colEnd,
+          };
+          this.suppressSelectionUntilUp = true;
+          try {
+            this.scrollHost.setPointerCapture(e.pointerId);
+          } catch {
+            // ignore — global pointerup still fires.
+          }
+          this.scheduleRender();
+          return;
+        }
+      }
+    }
+
     // Master-detail chevron click: leftmost `chevronWidth` pixels of any
     // row toggle that row's expansion. Higher priority than cell selection.
     if (
@@ -1020,6 +1083,25 @@ export class Grid {
     if (this.dragActiveColumn !== null) {
       this.updateDragIndicator(e.clientX);
     }
+    // Fill-handle drag tracking: convert cursor → cell, update
+    // target, redraw the dashed preview.
+    if (this.fillDragState) {
+      const cell = this.cellAtClient(e.clientX, e.clientY);
+      if (cell) {
+        const next = {
+          ...this.fillDragState,
+          targetRow: cell.row,
+          targetCol: cell.col,
+        };
+        if (
+          next.targetRow !== this.fillDragState.targetRow ||
+          next.targetCol !== this.fillDragState.targetCol
+        ) {
+          this.fillDragState = next;
+          this.scheduleRender();
+        }
+      }
+    }
     // Tooltip hover-tracking is independent of dragging — track on
     // every move when at least one column has a tooltip provider.
     if (this.tooltipEl) this.handleTooltipPointerMove(e);
@@ -1028,6 +1110,57 @@ export class Grid {
   private handlePointerUp = (e: PointerEvent): void => {
     this.isPointerDragging = false;
     this.suppressSelectionUntilUp = false;
+    // Fill-handle drag finalize. Compute the *fill* rectangle
+    // (target minus source — the cells the user wants populated) and
+    // hand it to the consumer along with the original source range.
+    // Then extend the live selection to span source ∪ fill so the
+    // post-fill highlight reflects the user's commit.
+    if (this.fillDragState) {
+      const f = this.fillDragState;
+      this.fillDragState = null;
+      const sourceRect = {
+        rowStart: f.source.rowStart,
+        rowEnd: f.source.rowEnd,
+        colStart: f.source.colStart,
+        colEnd: f.source.colEnd,
+      };
+      const unionRowStart = Math.min(f.source.rowStart, f.targetRow);
+      const unionRowEnd = Math.max(f.source.rowEnd, f.targetRow);
+      const unionColStart = Math.min(f.source.colStart, f.targetCol);
+      const unionColEnd = Math.max(f.source.colEnd, f.targetCol);
+      // Fill rect = the union *minus* the source. For simplicity we
+      // pass the bounding union and let the consumer subtract the
+      // source — this is the same shape Excel reports.
+      const fillRect = {
+        rowStart: unionRowStart,
+        rowEnd: unionRowEnd,
+        colStart: unionColStart,
+        colEnd: unionColEnd,
+      };
+      // Only fire if the user actually dragged outside the source.
+      const grew =
+        unionRowStart !== sourceRect.rowStart ||
+        unionRowEnd !== sourceRect.rowEnd ||
+        unionColStart !== sourceRect.colStart ||
+        unionColEnd !== sourceRect.colEnd;
+      if (grew && this.onFillHandle) {
+        this.onFillHandle(sourceRect, fillRect);
+      }
+      // Extend the visible selection to the union so the fill is
+      // immediately highlighted.
+      if (grew) {
+        this.selection.startRange({ row: unionRowStart, col: unionColStart });
+        this.selection.extendActiveRange({ row: unionRowEnd, col: unionColEnd });
+        this.notifySelectionChange();
+      }
+      try {
+        this.scrollHost.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore.
+      }
+      this.scheduleRender();
+      return;
+    }
     // Column drag finalize. If a drag was active, splice columns + fire
     // onColumnReorder. If only a candidate was held (no movement), it
     // counts as a header click — fire onHeaderClick.
@@ -2126,6 +2259,72 @@ export class Grid {
       ctx.strokeStyle = '#6ea8fe';
       ctx.lineWidth = 2;
       ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    }
+
+    // Fill handle on the bottom-right of the *last* range (Excel/Sheets
+    // convention — when you have a multi-rect selection the handle
+    // attaches to the most recently anchored range).
+    if (this.fillHandleEnabled && ranges.length > 0) {
+      const last = ranges[ranges.length - 1]!;
+      if (last.rowEnd >= start && last.rowEnd <= end) {
+        const c = Math.min(last.colEnd, this.columns.length - 1);
+        const isFrozen = c < this.frozenColumnCount;
+        const x = isFrozen
+          ? (this.cumulativeColumnWidths[c + 1] ?? 0)
+          : this.frozenWidth +
+            ((this.cumulativeColumnWidths[c + 1] ?? 0) -
+              (this.cumulativeColumnWidths[this.frozenColumnCount] ?? 0)) -
+            this.scrollLeft;
+        const y =
+          this.dataBandTop() +
+          this.fenwick.prefixSum(last.rowEnd) -
+          this.scrollTop +
+          this.fenwick.get(last.rowEnd);
+        const s = this.fillHandleSize;
+        ctx.fillStyle = '#6ea8fe';
+        ctx.fillRect(x - s, y - s, s, s);
+      }
+    }
+
+    // Live fill-drag preview: a dashed outline of the union of the
+    // source range and the cells the cursor has dragged into.
+    if (this.fillDragState) {
+      const f = this.fillDragState;
+      const rowStart = Math.min(f.source.rowStart, f.targetRow);
+      const rowEnd = Math.max(f.source.rowEnd, f.targetRow);
+      const colStart = Math.min(f.source.colStart, f.targetCol);
+      const colEnd = Math.max(f.source.colEnd, f.targetCol);
+      if (rowEnd >= start && rowStart <= end) {
+        const cFrom = Math.max(colStart, 0);
+        const cTo = Math.min(colEnd, this.columns.length - 1);
+        const isFrozen = cFrom < this.frozenColumnCount;
+        const xLeft = isFrozen
+          ? (this.cumulativeColumnWidths[cFrom] ?? 0)
+          : this.frozenWidth +
+            ((this.cumulativeColumnWidths[cFrom] ?? 0) -
+              (this.cumulativeColumnWidths[this.frozenColumnCount] ?? 0)) -
+            this.scrollLeft;
+        const xRight =
+          cTo < this.frozenColumnCount
+            ? (this.cumulativeColumnWidths[cTo + 1] ?? 0)
+            : this.frozenWidth +
+              ((this.cumulativeColumnWidths[cTo + 1] ?? 0) -
+                (this.cumulativeColumnWidths[this.frozenColumnCount] ?? 0)) -
+              this.scrollLeft;
+        const yTop =
+          this.dataBandTop() +
+          (this.fenwick.prefixSum(Math.max(rowStart, start)) - this.scrollTop);
+        let yH = 0;
+        for (let r = Math.max(rowStart, start); r <= Math.min(rowEnd, end); r++) {
+          yH += this.fenwick.get(r);
+        }
+        ctx.save();
+        ctx.strokeStyle = '#6ea8fe';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(xLeft + 0.5, yTop + 0.5, xRight - xLeft - 1, yH - 1);
+        ctx.restore();
+      }
     }
   }
 

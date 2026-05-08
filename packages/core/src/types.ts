@@ -302,6 +302,27 @@ export interface GridOptions {
     columnId: string,
   ) => void;
 
+  // ---- Fill handle (drag-extend a selection) ----
+
+  /** Render a draggable fill handle (4×4 square) at the bottom-right
+   *  corner of the active selection. Dragging the handle extends the
+   *  range to the cells the user drags over; on drop, `onFillHandle`
+   *  fires with the source and target rectangles so the consumer can
+   *  copy / interpolate / pattern-fill the values themselves.
+   *  Default: false. */
+  readonly enableFillHandle?: boolean;
+
+  /** Fires when a fill-handle drag lands. `source` is the original
+   *  selection rectangle the user started from; `fill` is the cells
+   *  the drag extended into (NOT including the source — that's what
+   *  the consumer should copy from). The grid does NOT apply the
+   *  fill itself; the consumer owns the data and decides the policy
+   *  (copy, linear interpolation, sequence, etc.). */
+  readonly onFillHandle?: (
+    source: { rowStart: number; rowEnd: number; colStart: number; colEnd: number },
+    fill: { rowStart: number; rowEnd: number; colStart: number; colEnd: number },
+  ) => void;
+
   // ---- Sticky group rows ----
 
   /** Pin the topmost visible group ancestor's header to the top of

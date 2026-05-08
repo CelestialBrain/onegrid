@@ -1041,6 +1041,44 @@ export const App = (): JSX.Element => {
     ...(mode === 'memory' || mode === 'ssrm' || mode === 'duckdb'
       ? { enableColumnReorder: true }
       : {}),
+    ...(mode === 'memory' && memoryDataset?.materialized
+      ? {
+          enableFillHandle: true,
+          onFillHandle: (
+            source: { rowStart: number; rowEnd: number; colStart: number; colEnd: number },
+            fill: { rowStart: number; rowEnd: number; colStart: number; colEnd: number },
+          ): void => {
+            // Excel-style copy: the top-left cell of the source range
+            // is the seed; populate every cell in the fill rect that
+            // is OUTSIDE the source rect with the seed value, on a
+            // per-column basis (preserves the column's data type).
+            if (!memoryDataset.materialized) return;
+            for (let r = fill.rowStart; r <= fill.rowEnd; r++) {
+              for (let c = fill.colStart; c <= fill.colEnd; c++) {
+                const inSource =
+                  r >= source.rowStart &&
+                  r <= source.rowEnd &&
+                  c >= source.colStart &&
+                  c <= source.colEnd;
+                if (inSource) continue;
+                const seedRow = source.rowStart;
+                const colDef = memoryDataset.columns[c];
+                if (!colDef) continue;
+                const seedVal = memoryDataset.rowSource.getCell(
+                  visualToSourceRow(seedRow),
+                  colDef.id,
+                );
+                memoryDataset.writeCell(
+                  visualToSourceRow(r),
+                  colDef.id,
+                  String(seedVal ?? ''),
+                );
+              }
+            }
+            setEditTick((t) => t + 1);
+          },
+        }
+      : {}),
     onContextMenu: (target) => {
       setContextMenu(target);
     },
