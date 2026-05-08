@@ -30,8 +30,17 @@ import type {
   BlockRequest,
   BlockResponse,
   HierarchyEntry,
+  KeysetCursor,
   Schema,
 } from '@onegrid/protocol';
+import {
+  compareKeysetCursors,
+  cursorFromRow,
+  decodeKeysetCursor,
+  encodeKeysetCursor,
+  isLegacyOffsetCursor,
+  parseLegacyOffsetCursor,
+} from '@onegrid/ssrm';
 
 // -----------------------------------------------------------------------------
 // Synthetic dataset
@@ -93,23 +102,6 @@ const TABLE = createColumnTable(COLUMNS);
 const SCHEMA: Schema = TABLE.schema;
 
 console.log(`[onegrid:ssrm-mock] generated in ${String(Date.now() - t0)} ms.`);
-
-// -----------------------------------------------------------------------------
-// Cursor helpers
-// -----------------------------------------------------------------------------
-
-function parseOffsetCursor(cursor: string | null): number {
-  if (!cursor) return 0;
-  if (cursor.startsWith('offset:')) {
-    const n = Number(cursor.slice('offset:'.length));
-    return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
-  }
-  return 0;
-}
-
-function encodeOffsetCursor(offset: number): string {
-  return `offset:${String(offset)}`;
-}
 
 // -----------------------------------------------------------------------------
 // Block fetch
@@ -278,8 +270,21 @@ function fetchBlock(req: BlockRequest): BlockResponse<'json'> {
   }
 
   const totalRowCount = permutation.length;
-  const offset = parseOffsetCursor(req.cursor);
-  const start = req.direction === 'after' ? offset : Math.max(0, offset - req.limit);
+
+  // Resolve the request's cursor to a row offset in the permutation.
+  // Three input shapes are accepted:
+  //   1. null / undefined           → start of the result (no resume)
+  //   2. legacy `offset:N`          → SsrmRowSource's random-access path
+  //   3. canonical `ks:<base64>`    → keyset cursor; we scan the
+  //                                   permutation to find the first row
+  //                                   strictly greater than the cursor
+  //                                   under the active sort
+  //
+  // The response always emits canonical keyset cursors. SsrmRowSource
+  // ignores response cursors entirely (constructs its own offsets from
+  // blockIndex × blockSize), so emitting keyset is safe for it. Real
+  // adapters that round-trip cursors get the production-grade format.
+  const start = resolveStartOffset(req, permutation, totalRowCount);
   const end = Math.min(totalRowCount, start + req.limit);
 
   const rows: Record<string, unknown>[] = [];
@@ -292,16 +297,70 @@ function fetchBlock(req: BlockRequest): BlockResponse<'json'> {
     rows.push(row);
   }
 
-  const nextOffset = end < totalRowCount ? end : null;
-  const prevOffset = start > 0 ? start : null;
+  // Build the next-cursor from the *last row of this block* under the
+  // active sort. The id column is the canonical row id.
+  const nextCursor =
+    end < totalRowCount && rows.length > 0
+      ? encodeKeysetCursor(cursorFromRow(rows[rows.length - 1]!, req.sort, 'id'))
+      : null;
+  const prevCursor =
+    start > 0 && rows.length > 0
+      ? encodeKeysetCursor(cursorFromRow(rows[0]!, req.sort, 'id'))
+      : null;
 
   return {
     encoding: 'json',
     rows,
-    nextCursor: nextOffset === null ? null : encodeOffsetCursor(nextOffset),
-    prevCursor: prevOffset === null ? null : encodeOffsetCursor(prevOffset),
+    nextCursor,
+    prevCursor,
     totalRowCount,
   };
+}
+
+/**
+ * Translate the request cursor into the integer row offset within the
+ * sorted+filtered permutation. For legacy offset cursors the offset is
+ * literal; for keyset cursors we scan the permutation comparing each
+ * row's (sortValues, rowId) against the cursor under the active sort.
+ *
+ * Linear scan is fine for the mock (≤ 1M rows in memory, scan is
+ * single-digit ms). A real adapter would issue a `WHERE (sort_col, id)
+ * > (cursor.sortValues[0], cursor.rowId)` predicate and let the
+ * database's index do the seek.
+ */
+function resolveStartOffset(
+  req: BlockRequest,
+  permutation: Int32Array,
+  totalRowCount: number,
+): number {
+  if (req.cursor === null || req.cursor === undefined) return 0;
+  if (isLegacyOffsetCursor(req.cursor)) {
+    const offset = parseLegacyOffsetCursor(req.cursor);
+    return req.direction === 'after'
+      ? offset
+      : Math.max(0, offset - req.limit);
+  }
+  // Canonical keyset cursor.
+  let cursor: KeysetCursor;
+  try {
+    cursor = decodeKeysetCursor(req.cursor);
+  } catch {
+    // Unrecognized cursor format — fall back to start of result.
+    return 0;
+  }
+  // Linear scan — find the first row strictly greater than the cursor.
+  for (let i = 0; i < permutation.length; i++) {
+    const srcIdx = permutation[i] ?? 0;
+    const row: Record<string, unknown> = {};
+    for (const col of TABLE.schema) {
+      row[col.id] = TABLE.column(col.id).get(srcIdx);
+    }
+    const rowCursor = cursorFromRow(row, req.sort, 'id');
+    if (compareKeysetCursors(rowCursor, cursor, req.sort) > 0) {
+      return req.direction === 'after' ? i : Math.max(0, i - req.limit);
+    }
+  }
+  return totalRowCount;
 }
 
 // -----------------------------------------------------------------------------

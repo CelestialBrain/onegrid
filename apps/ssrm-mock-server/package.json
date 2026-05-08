@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@onegrid/data": "workspace:*",
-    "@onegrid/protocol": "workspace:*"
+    "@onegrid/protocol": "workspace:*",
+    "@onegrid/ssrm": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.19.0"

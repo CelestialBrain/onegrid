@@ -114,6 +114,9 @@ importers:
       '@onegrid/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@onegrid/ssrm':
+        specifier: workspace:*
+        version: link:../../packages/ssrm
     devDependencies:
       tsx:
         specifier: ^4.19.0

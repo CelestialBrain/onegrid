@@ -44,3 +44,12 @@ export type {
   SsrmTreeSourceOptions,
   SsrmTreeRowMeta,
 } from './tree-source';
+
+export {
+  encodeKeysetCursor,
+  decodeKeysetCursor,
+  cursorFromRow,
+  compareKeysetCursors,
+  isLegacyOffsetCursor,
+  parseLegacyOffsetCursor,
+} from './cursor';

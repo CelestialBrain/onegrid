@@ -25,16 +25,28 @@ export type ProtocolVersion = typeof PROTOCOL_VERSION;
  * Opaque cursor. The server defines its own format and bytes; the client only
  * ever round-trips the string back. This is the canonical cursor shape — keep
  * clients ignorant of internal encoding.
+ *
+ * The canonical wire encoding is the keyset cursor produced by
+ * `encodeKeysetCursor` in `@onegrid/ssrm`, which prefixes the payload with
+ * `ks:` so future cursor formats can ship behind a different prefix without
+ * breaking existing clients. The legacy `offset:N` encoding (used by
+ * `SsrmRowSource`'s synchronous random-access bridge and the v0.0.7 mock
+ * server) is supported during the v0.0.8 migration window via
+ * `parseLegacyOffsetCursor`; new database adapters should NOT emit it.
  */
 export type Cursor = string;
 
 /**
- * Optional structured shape for adapters that want a typed cursor. Adapters
- * SHOULD encode this as an opaque string before sending it across the wire.
+ * Structured cursor shape for keyset pagination. Adapters MUST encode this as
+ * an opaque string via `encodeKeysetCursor` from `@onegrid/ssrm` before
+ * sending it across the wire — that codec produces the canonical `ks:`-
+ * prefixed format described above.
  *
  * Keyset semantics: (sortValues, rowId) uniquely identifies a position in the
  * current sorted view. The tiebreaker rowId guarantees a stable resume point
- * across volatile data.
+ * across volatile data — without it, two rows whose sort values tie would
+ * collide and clients would skip or duplicate rows when paginating across an
+ * insertion or deletion.
  */
 export interface KeysetCursor {
   readonly sortValues: ReadonlyArray<unknown>;
