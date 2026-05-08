@@ -57,6 +57,8 @@ export function useOneGrid(options: UseOneGridOptions): UseOneGridReturn {
   getRowMetaRef.current = options.getRowMeta;
   const onToggleGroupRef = useRef(options.onToggleGroup);
   onToggleGroupRef.current = options.onToggleGroup;
+  const onColumnReorderRef = useRef(options.onColumnReorder);
+  onColumnReorderRef.current = options.onColumnReorder;
 
   useEffect(() => {
     if (!ref.current) return;
@@ -81,6 +83,8 @@ export function useOneGrid(options: UseOneGridOptions): UseOneGridReturn {
         onFloatingFilterChangeRef.current?.(col, val),
       getRowMeta: (row) => getRowMetaRef.current?.(row) ?? null,
       onToggleGroup: (path) => onToggleGroupRef.current?.(path),
+      onColumnReorder: (from, to, id) =>
+        onColumnReorderRef.current?.(from, to, id),
     });
     setGrid(instance);
     return () => {

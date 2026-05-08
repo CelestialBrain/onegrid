@@ -1029,6 +1029,14 @@ export const App = (): JSX.Element => {
           onFloatingFilterChange: handleFloatingFilterChange,
         }
       : {}),
+    // Column reorder is opt-in. Enable it in modes where the column
+    // set is stable enough that the grid's internal mutation won't be
+    // immediately overwritten by a fresh `columns` prop. The callback
+    // is intentionally side-effect-free here — the Grid owns the
+    // post-drag order.
+    ...(mode === 'memory' || mode === 'ssrm' || mode === 'duckdb'
+      ? { enableColumnReorder: true }
+      : {}),
     statusBar: true,
     onCellEdit: handleCellEdit,
     onPaste: handlePaste,

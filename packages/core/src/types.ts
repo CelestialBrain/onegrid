@@ -261,6 +261,24 @@ export interface GridOptions {
    *  filter menu, etc. Receives the columnId. */
   readonly onHeaderClick?: (columnId: string) => void;
 
+  // ---- Column reorder (drag-and-drop) ----
+
+  /** Allow dragging column headers left/right to reorder the columns
+   *  array. When enabled, the grid splices its internal column array
+   *  on drop and fires `onColumnReorder` so consumers can persist the
+   *  new order. Default: false. */
+  readonly enableColumnReorder?: boolean;
+
+  /** Fires when a drag-reorder lands. Indices are post-reorder
+   *  positions in the visible column array; the grid has already
+   *  applied the move internally. Consumers should mirror the change
+   *  in their own state so subsequent re-mounts see the same order. */
+  readonly onColumnReorder?: (
+    fromIndex: number,
+    toIndex: number,
+    columnId: string,
+  ) => void;
+
   // ---- Master-detail (expandable rows) ----
 
   /** Set of currently-expanded row indices. The renderer reserves

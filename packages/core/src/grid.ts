@@ -53,7 +53,11 @@ interface PerformanceWithMemory extends Performance {
 export class Grid {
   private readonly host: HTMLElement;
   private readonly gridId: string;
-  private readonly columns: ReadonlyArray<ColumnDef>;
+  // Mutable so the in-grid column drag-drop can splice live without
+  // forcing a full reconstruction (which would lose scroll/selection).
+  // Constructor copies the user's array, so the user's reference is
+  // not mutated.
+  private columns: ColumnDef[];
   private rowSource: RowSource;
   private fenwick: FenwickHeights;
   private readonly headerHeight: number;
@@ -183,10 +187,29 @@ export class Grid {
     | undefined;
   private readonly onToggleGroup: ((path: string) => void) | undefined;
 
+  // Column reorder (drag-drop). When enabled, header pointerdown
+  // captures a drag-candidate; on sufficient movement it promotes to
+  // an active drag with a visible drop indicator; on pointerup it
+  // splices `this.columns` and fires `onColumnReorder`. onHeaderClick
+  // is deferred to pointerup so a pure click still toggles sort.
+  private readonly columnReorderEnabled: boolean;
+  private readonly onColumnReorder:
+    | ((fromIndex: number, toIndex: number, columnId: string) => void)
+    | undefined;
+  private dragCandidateColumn: number | null = null;
+  private dragCandidateClientX = 0;
+  private dragActiveColumn: number | null = null;
+  private dragIndicatorEl: HTMLDivElement | null = null;
+  /** Drag insertion index (the column index where the dragged column
+   *  would land if dropped now). Range: [0, this.columns.length]. */
+  private dragInsertIndex = 0;
+
   constructor(options: GridOptions) {
     this.host = options.host;
     this.gridId = `onegrid-${String(++nextGridSequence)}`;
-    this.columns = options.columns;
+    // Copy so subsequent in-grid mutations (column reorder) don't
+    // touch the caller's array.
+    this.columns = [...options.columns];
     this.rowSource = options.rowSource;
     this.headerHeight = options.headerHeight ?? 32;
     this.frozenColumnCount = options.frozenColumnCount ?? 0;
@@ -195,6 +218,8 @@ export class Grid {
     this.onSelectionChange = options.onSelectionChange;
     this.onHeaderClick = options.onHeaderClick;
     this.sort = options.sort ?? [];
+    this.columnReorderEnabled = options.enableColumnReorder ?? false;
+    this.onColumnReorder = options.onColumnReorder;
 
     this.dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
 
@@ -810,17 +835,37 @@ export class Grid {
     const fullHeader = this.fullHeaderHeight();
     const dataTop = this.dataBandTop();
 
-    // Header click? Dispatch onHeaderClick instead of starting selection.
-    if (localY >= 0 && localY < fullHeader && this.onHeaderClick) {
+    // Header click? When column reorder is enabled, capture a drag
+    // candidate and defer the onHeaderClick fire to pointerup — that
+    // way a tap still toggles sort while a drag enters reorder mode.
+    // When reorder is disabled, fire immediately (legacy behavior).
+    if (localY >= 0 && localY < fullHeader) {
       const col = this.columnAtLocalX(localX);
-      if (col !== null) {
-        const column = this.columns[col];
-        if (column) {
-          this.onHeaderClick(column.id);
+      if (col !== null && this.columns[col]) {
+        if (this.columnReorderEnabled) {
+          this.dragCandidateColumn = col;
+          this.dragCandidateClientX = e.clientX;
           this.suppressSelectionUntilUp = true;
+          // Capture pointer so we still get move/up events even when
+          // the cursor leaves the scrollHost.
+          try {
+            this.scrollHost.setPointerCapture(e.pointerId);
+          } catch {
+            // Some browsers refuse capture during certain events; if
+            // that happens we still get the global window pointerup
+            // listener, just no smooth tracking outside the host.
+          }
+          return;
+        }
+        if (this.onHeaderClick) {
+          this.onHeaderClick(this.columns[col]!.id);
+          this.suppressSelectionUntilUp = true;
+          return;
         }
       }
-      return;
+      if (col !== null && this.onHeaderClick) {
+        return;
+      }
     }
 
     // Group chevron click: detect when the click falls in a group row
@@ -926,15 +971,119 @@ export class Grid {
         this.scheduleRender();
       }
     }
+    // Column drag: promote candidate → active once movement crosses
+    // the threshold, then track the cursor's nearest column boundary.
+    if (this.dragCandidateColumn !== null) {
+      if (Math.abs(e.clientX - this.dragCandidateClientX) > 6) {
+        this.dragActiveColumn = this.dragCandidateColumn;
+        this.dragCandidateColumn = null;
+        this.ensureDragIndicator();
+      }
+    }
+    if (this.dragActiveColumn !== null) {
+      this.updateDragIndicator(e.clientX);
+    }
     // Tooltip hover-tracking is independent of dragging — track on
     // every move when at least one column has a tooltip provider.
     if (this.tooltipEl) this.handleTooltipPointerMove(e);
   };
 
-  private handlePointerUp = (): void => {
+  private handlePointerUp = (e: PointerEvent): void => {
     this.isPointerDragging = false;
     this.suppressSelectionUntilUp = false;
+    // Column drag finalize. If a drag was active, splice columns + fire
+    // onColumnReorder. If only a candidate was held (no movement), it
+    // counts as a header click — fire onHeaderClick.
+    if (this.dragActiveColumn !== null) {
+      const from = this.dragActiveColumn;
+      const to = this.dragInsertIndex;
+      this.dragActiveColumn = null;
+      this.removeDragIndicator();
+      // Translate the post-splice insertion index into the visible
+      // column index after the splice. If we move forwards, the
+      // splice removes `from` first so the target shifts left by 1.
+      const targetIndex = to > from ? to - 1 : to;
+      if (targetIndex !== from) {
+        const moved = this.columns[from]!;
+        this.columns.splice(from, 1);
+        this.columns.splice(targetIndex, 0, moved);
+        this.recomputeColumnLayout();
+        this.scrollSpacer.style.width = `${this.totalColumnsWidth}px`;
+        this.scheduleRender();
+        this.onColumnReorder?.(from, targetIndex, moved.id);
+      }
+      try {
+        this.scrollHost.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore — pointer capture may have already been released.
+      }
+      return;
+    }
+    if (this.dragCandidateColumn !== null) {
+      const col = this.dragCandidateColumn;
+      this.dragCandidateColumn = null;
+      const column = this.columns[col];
+      if (column && this.onHeaderClick) {
+        this.onHeaderClick(column.id);
+      }
+      try {
+        this.scrollHost.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore.
+      }
+    }
   };
+
+  /** Lazily mount the vertical drop indicator that visually marks
+   *  where the dragged column will land. Pointer-events:none so it
+   *  never blocks the drag itself. */
+  private ensureDragIndicator(): void {
+    if (this.dragIndicatorEl) return;
+    const el = document.createElement('div');
+    el.style.cssText =
+      'position:absolute;top:0;width:2px;background:#6ea8fe;pointer-events:none;' +
+      'z-index:20;box-shadow:0 0 4px rgba(110,168,254,0.6);';
+    this.host.appendChild(el);
+    this.dragIndicatorEl = el;
+  }
+
+  private removeDragIndicator(): void {
+    this.dragIndicatorEl?.remove();
+    this.dragIndicatorEl = null;
+  }
+
+  /** Compute the nearest column boundary to the cursor and snap the
+   *  drop indicator there. Insertion index range: [0, columns.length]. */
+  private updateDragIndicator(clientX: number): void {
+    if (!this.dragIndicatorEl) return;
+    const hostRect = this.host.getBoundingClientRect();
+    const localX = clientX - hostRect.left;
+    // Account for horizontal scroll when computing layout-space X.
+    const layoutX =
+      localX < this.frozenWidth ? localX : localX + this.scrollLeft;
+    // Find the nearest cumulative-width boundary.
+    let bestIndex = 0;
+    let bestDelta = Infinity;
+    for (let i = 0; i <= this.columns.length; i++) {
+      const boundary = this.cumulativeColumnWidths[i] ?? 0;
+      const delta = Math.abs(boundary - layoutX);
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        bestIndex = i;
+      }
+    }
+    this.dragInsertIndex = bestIndex;
+    // Boundary in viewport coords: subtract scroll for non-frozen
+    // columns. The first frozen-column boundaries (up to
+    // frozenColumnCount) are not scrolled.
+    const boundary = this.cumulativeColumnWidths[bestIndex] ?? 0;
+    const viewportX =
+      bestIndex <= this.frozenColumnCount
+        ? boundary
+        : boundary - this.scrollLeft;
+    this.dragIndicatorEl.style.left = `${String(viewportX - 1)}px`;
+    this.dragIndicatorEl.style.height = `${String(this.viewportHeight)}px`;
+  }
 
   private handlePointerLeave = (): void => {
     this.hideTooltip();
