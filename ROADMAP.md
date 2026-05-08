@@ -212,16 +212,50 @@ Side-quests that ship anywhere in v0.0.6 (no ordering dependency):
 - Schema introspection helper for adapters
 
 ### v0.0.7 — "hierarchical"
+
 Tree data + nested grids = the "inner tables" milestone.
-- Tree data with lazy-load children
-- Nested grids inside detail panels
-- Server-side tree expansion
-- Sticky group rows + aggregation-aware group-row pin
-- Drag-drop reorder (columns, rows, and within tree/group)
-- Range fill-handle
-- Column tool panel / sidebar with column-group visibility manager
-- Context menu
-- Selection checkbox column
+
+Implementation order (critical path — hardest-to-retrofit first, same
+principle that drove v0.0.6 sequencing):
+
+1. **Tree data with lazy-load children** — the row-model abstraction
+   for hierarchy. Every other v0.0.7 item (nested grids, drag-drop,
+   sticky group rows, server-side tree) presumes this exists. Building
+   anything else first would force re-shaping its API later.
+2. **Nested grids inside detail panels** — recursive oneGrid-in-
+   oneGrid with focus + scroll containment. Builds directly on the
+   tree-data row model AND on the existing master-detail layer; the
+   inner grid lives in an outer detail panel.
+3. **Server-side tree expansion** — push tree expansion + lazy
+   children to the SSRM contract. Locking the protocol shape now
+   means future database adapters in v0.0.8 inherit a tree-aware
+   `BlockRequest` instead of needing a v0.0.8.1 protocol break.
+4. **Drag-drop reorder** (columns, rows, and within tree/group) — the
+   most-upvoted gap in the wider grid ecosystem. Touches selection,
+   tree data, and the renderer's hit-test plane; locking the API now
+   prevents the renderer-touching items below from re-doing pointer
+   plumbing.
+5. **Column tool panel / sidebar** with column-group visibility
+   manager — the host surface for drag-drop column reorder, group/
+   pivot/value drop zones, and visibility toggles. Slots into the
+   already-shipped `RovingTabindex` from `@onegrid/a11y`.
+6. **Context menu** — right-click → copy/paste/export/filter/group.
+   Reuses the column-tool-panel toolbar a11y pattern.
+7. **Sticky group rows + aggregation-aware group-row pin** — group
+   header pins while scrolling within. Smaller surface, slots onto
+   the existing row-grouping infrastructure once the renderer-touching
+   items above settle.
+8. **Range fill-handle** — drag the bottom-right corner of a
+   selection to extrapolate values. Composes on top of selection +
+   editing + tree data without architectural risk.
+9. **Selection checkbox column** — last because it's the smallest
+   independent piece; deferring lets the renderer-touching items
+   above iterate without breaking it.
+
+Side-quests with no ordering dependency (ship anywhere in v0.0.7):
+- Aggregation-aware group-row pin tuning
+- Tree-aware drag-drop polish (constrained-to-same-parent reorder)
+- Recursive grouping + pivot mix experiments
 
 ### v0.0.8 — "data infrastructure"
 Lean into the database moat.
