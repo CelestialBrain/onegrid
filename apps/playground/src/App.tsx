@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
 import {
+  ColumnToolPanel,
   createReactCellRenderer,
   useOneGrid,
   type CellRenderContext,
@@ -306,6 +307,7 @@ export const App = (): JSX.Element => {
   const [filterQuery, setFilterQuery] = useState<string>('');
   const [columnFilters, setColumnFilters] = useState<ReadonlyArray<FilterRule>>([]);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [showColumnPanel, setShowColumnPanel] = useState(false);
   /** When non-null, a set-filter popover is open for this rule id. */
   const [setFilterOpenFor, setSetFilterOpenFor] = useState<string | null>(null);
   /** Per-column substring filters from the floating filter row. */
@@ -1380,6 +1382,15 @@ export const App = (): JSX.Element => {
                 >
                   Filters{columnFilters.length > 0 ? ` (${String(columnFilters.length)})` : ''}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowColumnPanel((s) => !s);
+                  }}
+                  style={{ fontWeight: showColumnPanel ? 600 : 400 }}
+                >
+                  Columns
+                </button>
                 <label style={{ color: 'var(--muted)', fontSize: 12 }}>
                   Group by{' '}
                   <select
@@ -1679,11 +1690,25 @@ export const App = (): JSX.Element => {
           </div>
         </div>
       )}
-      <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+      <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex' }}>
         <div
           ref={ref}
-          style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}
+          style={{ flex: 1, position: 'relative', overflow: 'hidden' }}
         />
+        {showColumnPanel && (
+          <div
+            style={{
+              width: 240,
+              flex: '0 0 240px',
+              borderLeft: '1px solid var(--border)',
+              background: 'var(--panel)',
+              padding: 8,
+              overflow: 'auto',
+            }}
+          >
+            <ColumnToolPanel grid={grid} />
+          </div>
+        )}
         {!dataReady && (
           <div
             style={{

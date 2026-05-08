@@ -18,6 +18,9 @@ export type { OneGridProps } from './one-grid';
 export { createReactCellRenderer, unmountReactCell } from './cell-renderer';
 export type { CreateReactCellRendererOptions } from './cell-renderer';
 
+export { ColumnToolPanel } from './column-tool-panel';
+export type { ColumnToolPanelProps } from './column-tool-panel';
+
 // Re-export core types so adapter consumers don't need to import @onegrid/core directly.
 export type {
   CellRenderContext,

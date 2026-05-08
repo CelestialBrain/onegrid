@@ -408,6 +408,27 @@ export class Grid {
   // Public imperative API
   // ---------------------------------------------------------------------------
 
+  /** Replace the live column array. Recomputes layout and triggers a
+   *  redraw without remounting the host — preserves scroll position
+   *  and selection by *id* (selection by *index* may shift when the
+   *  column count or order changes). Use this to reorder or hide
+   *  columns from outside (e.g. a tool-panel sidebar) without paying
+   *  the cost of a full Grid teardown. */
+  setColumns(columns: ReadonlyArray<ColumnDef>): void {
+    this.columns = [...columns];
+    this.cumulativeColumnWidths = new Float32Array(this.columns.length + 1);
+    this.recomputeColumnLayout();
+    this.scrollSpacer.style.width = `${this.totalColumnsWidth}px`;
+    this.scrollHost.setAttribute('aria-colcount', String(this.columns.length));
+    this.scheduleRender();
+  }
+
+  /** Returns a snapshot of the current column array. The returned
+   *  array is a copy — mutating it does not affect the Grid. */
+  getColumns(): ReadonlyArray<ColumnDef> {
+    return [...this.columns];
+  }
+
   setRowSource(rowSource: RowSource, rowHeight: number | Float32Array): void {
     this.rowSource = rowSource;
     this.fenwick = new FenwickHeights(
