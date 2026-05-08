@@ -21,6 +21,15 @@ export type { CreateReactCellRendererOptions } from './cell-renderer';
 export { ColumnToolPanel } from './column-tool-panel';
 export type { ColumnToolPanelProps } from './column-tool-panel';
 
+export {
+  createSelectionCheckboxColumn,
+  SelectAllCheckbox,
+} from './selection-checkbox-column';
+export type {
+  SelectionCheckboxColumnOptions,
+  SelectAllCheckboxProps,
+} from './selection-checkbox-column';
+
 // Re-export core types so adapter consumers don't need to import @onegrid/core directly.
 export type {
   CellRenderContext,

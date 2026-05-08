@@ -26,3 +26,6 @@ test-results/
 !.vscode/extensions.json
 !.vscode/settings.json
 .idea
+
+# Claude Code runtime state.
+.claude/

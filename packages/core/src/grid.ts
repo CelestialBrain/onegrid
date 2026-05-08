@@ -2919,6 +2919,14 @@ export class Grid {
     const nextActive = new Map<string, HTMLElement>();
 
     for (let row = start; row <= end; row++) {
+      // Skip cell renderers on synthetic group rows — those rows are
+      // a horizontal banner (chevron + label + aggregates), not a
+      // table-row with per-column data. Mounting an interactive
+      // renderer (e.g. a checkbox) on a group row would intercept
+      // the chevron-click pointer path. Tree rows DO have per-column
+      // data so they continue to render normally.
+      const meta = this.getRowMeta?.(row);
+      if (meta && meta.kind === 'group') continue;
       for (let col = 0; col < this.columns.length; col++) {
         const column = this.columns[col];
         if (!column?.renderer) continue;

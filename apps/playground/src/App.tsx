@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
 import {
   ColumnToolPanel,
   createReactCellRenderer,
+  createSelectionCheckboxColumn,
+  SelectAllCheckbox,
   useOneGrid,
   type CellRenderContext,
   type ColumnDef,
@@ -310,6 +312,12 @@ export const App = (): JSX.Element => {
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showColumnPanel, setShowColumnPanel] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuTarget | null>(null);
+  const [checkedRows, setCheckedRows] = useState<Set<number>>(new Set());
+  // Off by default — adding the checkbox column shifts every other
+  // column right and adds a frozen-column slot, which would break
+  // tests that pin coordinates to the original layout. The toolbar
+  // toggle lets the user opt in.
+  const [showCheckboxColumn, setShowCheckboxColumn] = useState(false);
   /** When non-null, a set-filter popover is open for this rule id. */
   const [setFilterOpenFor, setSetFilterOpenFor] = useState<string | null>(null);
   /** Per-column substring filters from the floating filter row. */
@@ -736,12 +744,33 @@ export const App = (): JSX.Element => {
   // the status column. Memoized so the array identity is stable —
   // useOneGrid uses `options.columns` as a dep, and a fresh array
   // each render would constantly remount the Grid.
+  // Selection-checkbox column factory rebuilds on every checkedRows
+  // change so its store reflects the latest set. The factory ID is
+  // stable, so visible checkbox cells re-render through the
+  // store-subscription path without a Grid remount.
+  const selectionCheckboxColumn = useMemo(
+    () =>
+      createSelectionCheckboxColumn({
+        checkedRows,
+        onChange: setCheckedRows,
+      }),
+    [checkedRows],
+  );
+
   const memoryColumnsWithRenderer = useMemo(() => {
     if (!memoryDataset) return null;
-    return memoryDataset.columns.map((c) =>
+    const baseColumns = memoryDataset.columns.map((c) =>
       c.id === 'status' ? { ...c, renderer: statusPillRenderer } : c,
     );
-  }, [memoryDataset]);
+    return showCheckboxColumn
+      ? [selectionCheckboxColumn, ...baseColumns]
+      : baseColumns;
+    // selectionCheckboxColumn is intentionally excluded from deps; the
+    // factory mutates a module-scoped store on every call so the
+    // identity of this column ref doesn't need to change for the
+    // checkbox state to update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memoryDataset, showCheckboxColumn]);
 
   const safeColumns: ReadonlyArray<ColumnDef> = !dataReady
     ? EMPTY_COLUMNS
@@ -758,12 +787,30 @@ export const App = (): JSX.Element => {
               : mode === 'ssrm-tree'
                 ? SSRM_TREE_COLUMNS
                 : FORMULA_COLUMNS;
+  // Wrap the memory-mode rowSource to swallow lookups for synthetic
+  // columns (e.g. the selection-checkbox column) whose id isn't in
+  // the underlying materialized table. Memoize so the wrapper's
+  // identity is stable across renders — useOneGrid's setRowSource
+  // effect depends on rowSource identity, and a fresh wrapper each
+  // render would reset scrollTop / Fenwick on every render.
+  const memoryRowSourceWrapped = useMemo<RowSource | null>(() => {
+    if (mode !== 'memory') return null;
+    const base =
+      groupedRowSource ?? memoryView?.rowSource ?? memoryDataset?.rowSource;
+    if (!base) return null;
+    return {
+      numRows: base.numRows,
+      getCell: (row, colId) => {
+        if (colId.startsWith('__onegrid_')) return null;
+        return base.getCell(row, colId);
+      },
+    };
+  }, [mode, groupedRowSource, memoryView, memoryDataset]);
+
   const safeRowSource: RowSource = !dataReady
     ? EMPTY_ROW_SOURCE
     : mode === 'memory'
-      ? // Grouped > sorted/filtered view > lazy fallback. The grouped
-        // wrapper takes precedence so group headers appear in render order.
-        groupedRowSource ?? memoryView?.rowSource ?? memoryDataset!.rowSource
+      ? memoryRowSourceWrapped ?? memoryDataset!.rowSource
       : mode === 'ssrm'
         ? ssrm!.rowSource
         : mode === 'duckdb'
@@ -1012,7 +1059,12 @@ export const App = (): JSX.Element => {
     rowSource: safeRowSource,
     rowHeight: safeRowHeight,
     headerHeight: 32,
-    frozenColumnCount: mode === 'formula' ? 0 : 1,
+    frozenColumnCount:
+      mode === 'formula'
+        ? 0
+        : mode === 'memory' && showCheckboxColumn
+          ? 2
+          : 1,
     sort,
     expanded: expandedRows,
     detailHeight: 200,
@@ -1434,6 +1486,22 @@ export const App = (): JSX.Element => {
                 >
                   Columns
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCheckboxColumn((s) => !s);
+                  }}
+                  style={{ fontWeight: showCheckboxColumn ? 600 : 400 }}
+                >
+                  Selection col
+                </button>
+                {showCheckboxColumn && (
+                  <SelectAllCheckbox
+                    checkedRows={checkedRows}
+                    onChange={setCheckedRows}
+                    totalRows={safeRowSource.numRows}
+                  />
+                )}
                 <label style={{ color: 'var(--muted)', fontSize: 12 }}>
                   Group by{' '}
                   <select
