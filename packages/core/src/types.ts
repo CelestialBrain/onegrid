@@ -401,4 +401,27 @@ export interface RowGroupMeta {
   readonly aggregates?: Record<string, unknown>;
 }
 
-export type RowMeta = RowGroupMeta;
+/**
+ * Row meta for hierarchical tree data (parent → child). Renderer
+ * paints a chevron + indent matching `depth`, then falls through to
+ * normal cell rendering for the row's columns. `onToggleGroup` is
+ * the same callback used for groups — the tree's node `id` rides as
+ * the `path` argument so consumers route both via one handler.
+ */
+export interface RowTreeMeta {
+  readonly kind: 'tree';
+  readonly depth: number;
+  /** Stable node id; round-trips through onToggleGroup. */
+  readonly id: string;
+  /** Whether the children are visible. */
+  readonly expanded: boolean;
+  /** True when this node has no children AND no loader. Renderer
+   *  paints no chevron for leaves. */
+  readonly isLeaf: boolean;
+  /** True when expanding could reveal children (children present OR
+   *  loader supplied). When false but expanded, we render the chevron
+   *  in expanded state but no indent change beneath. */
+  readonly hasChildren: boolean;
+}
+
+export type RowMeta = RowGroupMeta | RowTreeMeta;

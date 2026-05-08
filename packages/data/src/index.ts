@@ -45,3 +45,6 @@ export type { PivotedTable } from './pivot';
 
 export { enumerateDistinct, enumerateDistinctChunked } from './distinct';
 export type { DistinctValue, EnumerateDistinctOptions } from './distinct';
+
+export { flattenTree, countTreeNodes } from './tree';
+export type { TreeNode, FlatTreeEntry } from './tree';

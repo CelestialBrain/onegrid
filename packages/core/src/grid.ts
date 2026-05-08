@@ -832,6 +832,18 @@ export class Grid {
             // a selection on synthetic group rows).
             return;
           }
+          if (meta && meta.kind === 'tree' && !meta.isLeaf) {
+            // Tree rows: small chevron at depth-indented column 0.
+            const hitMin = meta.depth * 16 + 4;
+            const hitMax = hitMin + 20;
+            if (localX >= hitMin && localX < hitMax) {
+              this.onToggleGroup(meta.id);
+              this.suppressSelectionUntilUp = true;
+              return;
+            }
+            // Click elsewhere in a tree row → fall through to normal
+            // cell selection.
+          }
         }
       }
     }
@@ -1900,6 +1912,10 @@ export class Grid {
         y += h;
         continue;
       }
+      // Tree rows render normal cells PLUS a chevron + indent on the
+      // leftmost column; cell-paint pass below shifts text by the
+      // tree indent computed here.
+      const treeMeta = meta && meta.kind === 'tree' ? meta : null;
 
       ctx.fillStyle = row % 2 === 0 ? theme.background : theme.altRowBackground;
       ctx.fillRect(0, y, this.viewportWidth, h);
@@ -1938,12 +1954,30 @@ export class Grid {
             ctx.fillRect(x, y, w, h);
           }
 
-          ctx.fillStyle = fg;
+          // Tree row: paint chevron + indent on the leftmost column,
+          // shift text right by indent amount.
+          let textPad = 12;
+          const isLeftmostCol = col === colStart && colStart === 0;
+          if (treeMeta && isLeftmostCol) {
+            const indent = treeMeta.depth * 16;
+            textPad = 12 + indent + (treeMeta.isLeaf ? 0 : 18);
+            if (!treeMeta.isLeaf) {
+              ctx.fillStyle = theme.mutedText;
+              ctx.fillText(
+                treeMeta.expanded ? '\u25BC' : '\u25B6',
+                x + 8 + indent,
+                y + h / 2 + 1,
+              );
+            }
+            ctx.fillStyle = fg;
+          } else {
+            ctx.fillStyle = fg;
+          }
           ctx.save();
           ctx.beginPath();
-          ctx.rect(x + 8, y, w - 16, h);
+          ctx.rect(x + textPad - 4, y, w - (textPad - 4) - 8, h);
           ctx.clip();
-          ctx.fillText(text, x + 12, y + h / 2 + 1);
+          ctx.fillText(text, x + textPad, y + h / 2 + 1);
           ctx.restore();
 
           ctx.strokeStyle = theme.border;

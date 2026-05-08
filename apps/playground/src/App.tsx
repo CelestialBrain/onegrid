@@ -57,6 +57,7 @@ import {
   indexToColumnId,
   type FormulaPlaygroundHandle,
 } from './lib/formula-mode';
+import { createTreeMode, type TreeModeHandle } from './lib/tree-mode';
 
 const ROW_OPTIONS = [1_000, 10_000, 100_000, 1_000_000, 10_000_000] as const;
 
@@ -240,7 +241,7 @@ function SetFilterPopover({
   );
 }
 
-type Mode = 'memory' | 'ssrm' | 'formula' | 'duckdb' | 'pivot';
+type Mode = 'memory' | 'ssrm' | 'formula' | 'duckdb' | 'pivot' | 'tree';
 
 // Stable references so useOneGrid's effect doesn't re-fire while waiting
 // for async data sources to resolve.
@@ -411,6 +412,18 @@ export const App = (): JSX.Element => {
   >('idle');
   const [duckdbProgress, setDuckdbProgress] = useState<string>('');
   const [duckdbTick, setDuckdbTick] = useState(0);
+
+  // ----- tree-data playground -----
+  const [tree, setTree] = useState<TreeModeHandle | null>(null);
+  const [treeTick, setTreeTick] = useState(0);
+  useEffect(() => {
+    if (mode !== 'tree') {
+      setTree(null);
+      return;
+    }
+    const handle = createTreeMode(() => setTreeTick((t) => t + 1));
+    setTree(handle);
+  }, [mode]);
 
   useEffect(() => {
     if (mode !== 'formula') {
@@ -606,6 +619,19 @@ export const App = (): JSX.Element => {
 
   const getRowMeta = useCallback(
     (rowIndex: number): RowMeta | null => {
+      // Tree mode takes precedence — it has its own flat list.
+      if (mode === 'tree' && tree) {
+        const entry = tree.flat[rowIndex];
+        if (!entry) return null;
+        return {
+          kind: 'tree',
+          depth: entry.depth,
+          id: entry.id,
+          expanded: entry.expanded,
+          isLeaf: entry.isLeaf,
+          hasChildren: entry.hasChildren,
+        };
+      }
       if (!groupedFlat) return null;
       const entry = groupedFlat[rowIndex];
       if (!entry || entry.kind !== 'group') return null;
@@ -621,17 +647,27 @@ export const App = (): JSX.Element => {
         aggregates: node.aggregates as Record<string, unknown>,
       };
     },
-    [groupedFlat, openGroups],
+    [groupedFlat, openGroups, mode, tree],
   );
 
-  const handleToggleGroup = useCallback((path: string) => {
-    setOpenGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      return next;
-    });
-  }, []);
+  const handleToggleGroup = useCallback(
+    (path: string) => {
+      // In tree mode, the path argument is the tree node id; route
+      // it through the tree handle's async toggle (which may run a
+      // lazy loadChildren before the state update).
+      if (mode === 'tree' && tree) {
+        void tree.toggle(path);
+        return;
+      }
+      setOpenGroups((prev) => {
+        const next = new Set(prev);
+        if (next.has(path)) next.delete(path);
+        else next.add(path);
+        return next;
+      });
+    },
+    [mode, tree],
+  );
 
   const dataReady =
     mode === 'memory'
@@ -642,7 +678,9 @@ export const App = (): JSX.Element => {
           ? duckdb !== null
           : mode === 'pivot'
             ? pivotResult !== null
-            : formula !== null;
+            : mode === 'tree'
+              ? tree !== null
+              : formula !== null;
 
   // Module-level stable fallbacks so useOneGrid's effect doesn't re-fire
   // every render while we're waiting for the async data source.
@@ -667,7 +705,9 @@ export const App = (): JSX.Element => {
           ? DUCKDB_COLUMNS
           : mode === 'pivot'
             ? pivotResult!.columns
-            : FORMULA_COLUMNS;
+            : mode === 'tree'
+              ? tree!.columns
+              : FORMULA_COLUMNS;
   const safeRowSource: RowSource = !dataReady
     ? EMPTY_ROW_SOURCE
     : mode === 'memory'
@@ -680,7 +720,9 @@ export const App = (): JSX.Element => {
           ? duckdb!.rowSource
           : mode === 'pivot'
             ? pivotResult!.rowSource
-            : formula!.rowSource;
+            : mode === 'tree'
+              ? tree!.rowSource
+              : formula!.rowSource;
   const safeRowHeight: number | Float32Array =
     mode === 'memory' && memoryDataset ? memoryDataset.heights : 28;
 
@@ -888,7 +930,9 @@ export const App = (): JSX.Element => {
     ...(editable !== undefined ? { editable } : {}),
     ...(pinnedBottom ? { pinnedBottomRowSource: pinnedBottom } : {}),
     ...(columnGroups ? { columnGroups } : {}),
-    ...(groupedFlat ? { getRowMeta, onToggleGroup: handleToggleGroup } : {}),
+    ...(groupedFlat || mode === 'tree'
+      ? { getRowMeta, onToggleGroup: handleToggleGroup }
+      : {}),
     ...(mode === 'memory'
       ? {
           floatingFilters: true,
@@ -930,6 +974,14 @@ export const App = (): JSX.Element => {
     if (!grid || mode !== 'duckdb') return;
     grid.refresh();
   }, [grid, duckdbTick, mode]);
+
+  // Tree mode: every toggle (or async lazy-load completion) bumps
+  // treeTick; the rowSource is the same object (it has live getters)
+  // so we just need to nudge the renderer.
+  useEffect(() => {
+    if (!grid || mode !== 'tree') return;
+    grid.refresh();
+  }, [grid, treeTick, mode]);
 
   // Push sort state into the underlying data source. SSRM mode invalidates
   // the row-source cache and refetches; in-memory mode rebuilds memoryView
@@ -1154,6 +1206,15 @@ export const App = (): JSX.Element => {
             style={{ fontWeight: mode === 'pivot' ? 600 : 400 }}
           >
             Pivot
+          </button>{' '}
+          <button
+            type="button"
+            onClick={() => {
+              setMode('tree');
+            }}
+            style={{ fontWeight: mode === 'tree' ? 600 : 400 }}
+          >
+            Tree
           </button>
         </div>
 
