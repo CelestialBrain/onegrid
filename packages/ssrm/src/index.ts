@@ -67,3 +67,9 @@ export type {
   RowDiffStream,
   RowDiffStreamOptions,
 } from './cdc';
+
+export { createOptimisticMutator } from './optimistic';
+export type {
+  OptimisticMutator,
+  OptimisticMutatorOptions,
+} from './optimistic';
