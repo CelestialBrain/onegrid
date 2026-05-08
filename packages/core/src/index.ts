@@ -24,6 +24,7 @@ export type {
   CellRenderer,
   ColumnDef,
   ColumnGroupDef,
+  ContextMenuTarget,
   FrameStats,
   GridOptions,
   GridTheme,

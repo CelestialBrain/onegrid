@@ -223,6 +223,29 @@ export interface GridTheme {
   readonly fontSize: number;
 }
 
+/** Discriminated union describing what the user right-clicked. The
+ *  consumer's onContextMenu handler reads `kind` and reaches for the
+ *  fields appropriate for that variant. */
+export type ContextMenuTarget =
+  | {
+      readonly kind: 'cell';
+      readonly rowIndex: number;
+      readonly columnId: string;
+      readonly clientX: number;
+      readonly clientY: number;
+    }
+  | {
+      readonly kind: 'header';
+      readonly columnId: string;
+      readonly clientX: number;
+      readonly clientY: number;
+    }
+  | {
+      readonly kind: 'empty';
+      readonly clientX: number;
+      readonly clientY: number;
+    };
+
 export const DEFAULT_THEME: GridTheme = {
   background: '#0b0d10',
   altRowBackground: '#11141a',
@@ -278,6 +301,22 @@ export interface GridOptions {
     toIndex: number,
     columnId: string,
   ) => void;
+
+  // ---- Context menu ----
+
+  /** Fires on right-click (or pointerType=touch long-press) over any
+   *  part of the grid. The Grid calls `preventDefault()` on the native
+   *  event so the browser menu doesn't show — the consumer is then
+   *  responsible for rendering their own menu (e.g. a popover) at the
+   *  reported client coordinates.
+   *
+   *  Payload tells the consumer what was right-clicked so the menu
+   *  can present contextual actions:
+   *   - kind='cell'   : a data cell (rowIndex + columnId set)
+   *   - kind='header' : a column header (columnId set, no rowIndex)
+   *   - kind='empty'  : the grid background, below all rows
+   */
+  readonly onContextMenu?: (target: ContextMenuTarget) => void;
 
   // ---- Master-detail (expandable rows) ----
 

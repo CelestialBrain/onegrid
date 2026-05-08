@@ -187,6 +187,13 @@ export class Grid {
     | undefined;
   private readonly onToggleGroup: ((path: string) => void) | undefined;
 
+  // Context menu — observers only. The Grid resolves the target
+  // (cell / header / empty), prevents the native menu, and forwards
+  // the payload. Rendering the menu is the consumer's responsibility.
+  private readonly onContextMenu:
+    | ((target: import('./types').ContextMenuTarget) => void)
+    | undefined;
+
   // Column reorder (drag-drop). When enabled, header pointerdown
   // captures a drag-candidate; on sufficient movement it promotes to
   // an active drag with a visible drop indicator; on pointerup it
@@ -220,6 +227,7 @@ export class Grid {
     this.sort = options.sort ?? [];
     this.columnReorderEnabled = options.enableColumnReorder ?? false;
     this.onColumnReorder = options.onColumnReorder;
+    this.onContextMenu = options.onContextMenu;
 
     this.dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
 
@@ -390,6 +398,7 @@ export class Grid {
     this.scrollHost.addEventListener('pointermove', this.handlePointerMove);
     this.scrollHost.addEventListener('pointerleave', this.handlePointerLeave);
     this.scrollHost.addEventListener('dblclick', this.handleDoubleClick);
+    this.scrollHost.addEventListener('contextmenu', this.handleContextMenu);
     window.addEventListener('pointerup', this.handlePointerUp);
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('paste', this.handlePaste);
@@ -567,6 +576,7 @@ export class Grid {
     this.scrollHost.removeEventListener('pointermove', this.handlePointerMove);
     this.scrollHost.removeEventListener('pointerleave', this.handlePointerLeave);
     this.scrollHost.removeEventListener('dblclick', this.handleDoubleClick);
+    this.scrollHost.removeEventListener('contextmenu', this.handleContextMenu);
     window.removeEventListener('pointerup', this.handlePointerUp);
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('paste', this.handlePaste);
@@ -1108,6 +1118,51 @@ export class Grid {
 
   private handlePointerLeave = (): void => {
     this.hideTooltip();
+  };
+
+  /** Native contextmenu event → resolve the target (cell / header /
+   *  empty), prevent the browser's default menu, hand off to the
+   *  consumer's onContextMenu callback. No menu is rendered here —
+   *  consumers position their own popover at (clientX, clientY). */
+  private handleContextMenu = (e: MouseEvent): void => {
+    if (!this.onContextMenu) return;
+    e.preventDefault();
+    const rect = this.host.getBoundingClientRect();
+    const localY = e.clientY - rect.top;
+    const localX = e.clientX - rect.left;
+    const fullHeader = this.fullHeaderHeight();
+    if (localY >= 0 && localY < fullHeader) {
+      const col = this.columnAtLocalX(localX);
+      const column = col !== null ? this.columns[col] : null;
+      if (column) {
+        this.onContextMenu({
+          kind: 'header',
+          columnId: column.id,
+          clientX: e.clientX,
+          clientY: e.clientY,
+        });
+        return;
+      }
+    }
+    const cell = this.cellAtClient(e.clientX, e.clientY);
+    if (cell) {
+      const column = this.columns[cell.col];
+      if (column) {
+        this.onContextMenu({
+          kind: 'cell',
+          rowIndex: cell.row,
+          columnId: column.id,
+          clientX: e.clientX,
+          clientY: e.clientY,
+        });
+        return;
+      }
+    }
+    this.onContextMenu({
+      kind: 'empty',
+      clientX: e.clientX,
+      clientY: e.clientY,
+    });
   };
 
   // -------------------------------------------------------------------------

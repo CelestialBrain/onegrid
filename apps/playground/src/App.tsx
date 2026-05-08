@@ -5,6 +5,7 @@ import {
   useOneGrid,
   type CellRenderContext,
   type ColumnDef,
+  type ContextMenuTarget,
   type FilterModel,
   type FrameStats,
   type MetricsSnapshot,
@@ -308,6 +309,7 @@ export const App = (): JSX.Element => {
   const [columnFilters, setColumnFilters] = useState<ReadonlyArray<FilterRule>>([]);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showColumnPanel, setShowColumnPanel] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuTarget | null>(null);
   /** When non-null, a set-filter popover is open for this rule id. */
   const [setFilterOpenFor, setSetFilterOpenFor] = useState<string | null>(null);
   /** Per-column substring filters from the floating filter row. */
@@ -1039,6 +1041,9 @@ export const App = (): JSX.Element => {
     ...(mode === 'memory' || mode === 'ssrm' || mode === 'duckdb'
       ? { enableColumnReorder: true }
       : {}),
+    onContextMenu: (target) => {
+      setContextMenu(target);
+    },
     statusBar: true,
     onCellEdit: handleCellEdit,
     onPaste: handlePaste,
@@ -1729,6 +1734,148 @@ export const App = (): JSX.Element => {
           </div>
         )}
       </div>
+      {contextMenu && (
+        <ContextMenuPopover
+          target={contextMenu}
+          onDismiss={() => {
+            setContextMenu(null);
+          }}
+          onSort={(columnId) => {
+            handleHeaderClick(columnId);
+            setContextMenu(null);
+          }}
+          onHideColumn={(columnId) => {
+            if (!grid) return;
+            const next = grid.getColumns().filter((c) => c.id !== columnId);
+            grid.setColumns(next);
+            setContextMenu(null);
+          }}
+          onCopyCell={(rowIndex, columnId) => {
+            const v = safeRowSource.getCell(rowIndex, columnId);
+            void navigator.clipboard.writeText(String(v ?? ''));
+            setContextMenu(null);
+          }}
+        />
+      )}
     </div>
   );
 };
+
+interface ContextMenuPopoverProps {
+  readonly target: ContextMenuTarget;
+  readonly onDismiss: () => void;
+  readonly onSort: (columnId: string) => void;
+  readonly onHideColumn: (columnId: string) => void;
+  readonly onCopyCell: (rowIndex: number, columnId: string) => void;
+}
+
+/** Lightweight popover. Real apps would use a portal + focus-trap;
+ *  the playground keeps it inline and dismisses on click-outside or
+ *  Escape. Position is set from the contextmenu event's clientX/Y. */
+function ContextMenuPopover(props: ContextMenuPopoverProps): JSX.Element {
+  const { target, onDismiss, onSort, onHideColumn, onCopyCell } = props;
+  useEffect(() => {
+    const onDocPointerDown = (e: PointerEvent): void => {
+      const el = e.target as HTMLElement;
+      if (el?.closest('[data-onegrid-context-menu]')) return;
+      onDismiss();
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onDismiss();
+    };
+    window.addEventListener('pointerdown', onDocPointerDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('pointerdown', onDocPointerDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onDismiss]);
+
+  const items: { label: string; onClick: () => void }[] = [];
+  if (target.kind === 'cell') {
+    items.push({
+      label: `Copy cell`,
+      onClick: () => {
+        onCopyCell(target.rowIndex, target.columnId);
+      },
+    });
+    items.push({
+      label: `Sort by ${target.columnId}`,
+      onClick: () => {
+        onSort(target.columnId);
+      },
+    });
+    items.push({
+      label: `Hide ${target.columnId}`,
+      onClick: () => {
+        onHideColumn(target.columnId);
+      },
+    });
+  } else if (target.kind === 'header') {
+    items.push({
+      label: `Sort by ${target.columnId}`,
+      onClick: () => {
+        onSort(target.columnId);
+      },
+    });
+    items.push({
+      label: `Hide ${target.columnId}`,
+      onClick: () => {
+        onHideColumn(target.columnId);
+      },
+    });
+  } else {
+    items.push({ label: '(no actions)', onClick: () => undefined });
+  }
+
+  return (
+    <div
+      data-onegrid-context-menu
+      role="menu"
+      style={{
+        position: 'fixed',
+        left: target.clientX,
+        top: target.clientY,
+        background: '#11141a',
+        border: '1px solid #2a2f37',
+        borderRadius: 4,
+        boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+        padding: 4,
+        minWidth: 180,
+        zIndex: 30,
+        fontFamily: 'ui-sans-serif,system-ui,sans-serif',
+        fontSize: 12,
+        color: '#e7e9ec',
+      }}
+    >
+      {items.map((it, i) => (
+        <button
+          key={i}
+          type="button"
+          role="menuitem"
+          onClick={it.onClick}
+          style={{
+            display: 'block',
+            width: '100%',
+            textAlign: 'left',
+            background: 'transparent',
+            border: 'none',
+            color: 'inherit',
+            padding: '6px 10px',
+            cursor: 'pointer',
+            font: 'inherit',
+            borderRadius: 3,
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.background = '#1b1f26';
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+          }}
+        >
+          {it.label}
+        </button>
+      ))}
+    </div>
+  );
+}

@@ -59,6 +59,8 @@ export function useOneGrid(options: UseOneGridOptions): UseOneGridReturn {
   onToggleGroupRef.current = options.onToggleGroup;
   const onColumnReorderRef = useRef(options.onColumnReorder);
   onColumnReorderRef.current = options.onColumnReorder;
+  const onContextMenuRef = useRef(options.onContextMenu);
+  onContextMenuRef.current = options.onContextMenu;
 
   useEffect(() => {
     if (!ref.current) return;
@@ -85,6 +87,7 @@ export function useOneGrid(options: UseOneGridOptions): UseOneGridReturn {
       onToggleGroup: (path) => onToggleGroupRef.current?.(path),
       onColumnReorder: (from, to, id) =>
         onColumnReorderRef.current?.(from, to, id),
+      onContextMenu: (target) => onContextMenuRef.current?.(target),
     });
     setGrid(instance);
     return () => {
