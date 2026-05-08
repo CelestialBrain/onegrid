@@ -59,3 +59,11 @@ export type {
   RowDiffTracker,
   RowDiffTrackerOptions,
 } from './row-diff-tracker';
+
+export { createRowDiffStream } from './cdc';
+export type {
+  CdcAdapter,
+  CdcSubscribeOptions,
+  RowDiffStream,
+  RowDiffStreamOptions,
+} from './cdc';
