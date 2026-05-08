@@ -282,6 +282,12 @@ export interface GridOptions {
    *  Caller owns the expanded state and passes it back via `expanded`. */
   readonly onToggleExpand?: (rowIndex: number) => void;
 
+  /** Called just before the grid removes a detail panel from the DOM
+   *  (row collapsed OR scrolled out of view). Use this to tear down
+   *  any nested resources the panel owns — e.g. a nested Grid created
+   *  inside `getDetailContent` should call its `destroy()` here. */
+  readonly onDetailUnmount?: (rowIndex: number, el: HTMLElement) => void;
+
   // ---- Cell editing ----
 
   /** Whether cells are editable. Pass a predicate to gate per cell.

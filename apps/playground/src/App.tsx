@@ -33,7 +33,7 @@ import {
   gpuSumFloat32,
   cpuSumFloat32,
 } from '@onegrid/webgpu';
-import type { RowMeta } from '@onegrid/core';
+import { Grid, type RowMeta } from '@onegrid/core';
 import { connectSsrm, SSRM_COLUMNS, type SsrmConnection } from './lib/ssrm';
 import {
   connectDuckDb,
@@ -748,37 +748,77 @@ export const App = (): JSX.Element => {
     return (rowIndex: number): HTMLElement | null => {
       const root = document.createElement('div');
       root.style.cssText =
-        'background:#11141a;border-top:1px solid #2a2f37;padding:14px 18px;height:100%;box-sizing:border-box;color:#a5b1c2;font-size:12px;display:flex;flex-direction:column;gap:8px;font-family:ui-sans-serif,system-ui,sans-serif;';
+        'background:#11141a;border-top:1px solid #2a2f37;padding:10px 14px;' +
+        'height:100%;box-sizing:border-box;color:#a5b1c2;font-size:12px;' +
+        'display:flex;flex-direction:column;gap:6px;' +
+        'font-family:ui-sans-serif,system-ui,sans-serif;';
 
       const title = document.createElement('div');
       title.style.cssText = 'font-weight:600;color:#e7e9ec;font-size:13px;';
-      title.textContent = `Row ${String(rowIndex + 1)} · master-detail panel`;
+      title.textContent = `Row ${String(rowIndex + 1)} · audit log (nested grid)`;
       root.appendChild(title);
 
-      const table = document.createElement('div');
-      table.style.cssText = 'display:grid;grid-template-columns:140px 1fr;gap:6px 16px;';
-      for (const col of memoryDataset.columns) {
-        const k = document.createElement('span');
-        k.style.cssText = 'color:#8b929c;';
-        k.textContent = String(col.displayName ?? col.id);
-        const v = document.createElement('span');
-        v.style.cssText = 'font-family:ui-monospace,monospace;color:#e7e9ec;';
-        const value = memoryDataset.rowSource.getCell(rowIndex, col.id);
-        v.textContent = col.format ? col.format(value, rowIndex) : String(value ?? '');
-        table.appendChild(k);
-        table.appendChild(v);
-      }
-      root.appendChild(table);
+      // Nested Grid: 10 synthetic audit-log entries for this row,
+      // rendered through a real Grid instance. The inner grid has its
+      // own canvas, scrollHost, ARIA shadow, and selection — fully
+      // independent of the outer one. Cleanup happens via
+      // onDetailUnmount, which calls grid.destroy().
+      const innerHost = document.createElement('div');
+      innerHost.style.cssText =
+        'flex:1;min-height:0;position:relative;border:1px solid #2a2f37;border-radius:4px;overflow:hidden;';
+      root.appendChild(innerHost);
 
-      const hint = document.createElement('div');
-      hint.style.cssText = 'color:#8b929c;font-size:11px;';
-      hint.textContent =
-        'This panel is a real DOM child of the Grid\u2019s detail layer — interactive widgets (forms, charts, nested grids) drop in here directly.';
-      root.appendChild(hint);
+      const innerColumns: ColumnDef[] = [
+        { id: 'ts', width: 170, displayName: 'Timestamp', format: (v) => String(v ?? '') },
+        { id: 'event', width: 140, displayName: 'Event', format: (v) => String(v ?? '') },
+        { id: 'actor', width: 130, displayName: 'Actor', format: (v) => String(v ?? '') },
+        { id: 'detail', width: 280, displayName: 'Detail', format: (v) => String(v ?? '') },
+      ];
+      const baseTs = 1_700_000_000_000 + rowIndex * 60_000;
+      const events = ['login', 'edit', 'view', 'export', 'comment', 'archive', 'restore', 'share', 'edit', 'edit'];
+      const innerRowSource: RowSource = {
+        numRows: 10,
+        getCell: (i, columnId) => {
+          if (columnId === 'ts') {
+            return new Date(baseTs - i * 3_600_000).toISOString().slice(0, 16).replace('T', ' ');
+          }
+          if (columnId === 'event') return events[i] ?? 'edit';
+          if (columnId === 'actor') return `user_${String((rowIndex + i) % 23)}`;
+          if (columnId === 'detail') {
+            return `r${String(rowIndex + 1)}: ${events[i] ?? 'edit'} #${String(i + 1)}`;
+          }
+          return null;
+        },
+      };
+
+      // Build the inner grid synchronously. innerHost still has size
+      // 0 at this point (parent container hasn't laid it out), but the
+      // Grid uses a ResizeObserver and will resize as soon as the
+      // browser flushes layout.
+      const inner = new Grid({
+        host: innerHost,
+        columns: innerColumns,
+        rowSource: innerRowSource,
+        rowHeight: 24,
+        headerHeight: 28,
+      });
+      // Stash the inner grid on the root element so onDetailUnmount
+      // can find + destroy it. Using a Symbol-keyed prop avoids
+      // colliding with anything the consumer might add.
+      (root as unknown as { __innerGrid: Grid }).__innerGrid = inner;
 
       return root;
     };
   }, [mode, memoryDataset]);
+
+  const handleDetailUnmount = useCallback(
+    (_rowIndex: number, el: HTMLElement): void => {
+      const inner = (el as unknown as { __innerGrid?: { destroy: () => void } })
+        .__innerGrid;
+      if (inner) inner.destroy();
+    },
+    [],
+  );
 
   const handleToggleExpand = useCallback((rowIndex: number) => {
     setExpandedRows((prev) => {
@@ -926,7 +966,9 @@ export const App = (): JSX.Element => {
     detailHeight: 200,
     // Conditionally spread optional callbacks/props so undefined isn't
     // assigned to optional fields (exactOptionalPropertyTypes).
-    ...(getDetailContent ? { getDetailContent } : {}),
+    ...(getDetailContent
+      ? { getDetailContent, onDetailUnmount: handleDetailUnmount }
+      : {}),
     ...(editable !== undefined ? { editable } : {}),
     ...(pinnedBottom ? { pinnedBottomRowSource: pinnedBottom } : {}),
     ...(columnGroups ? { columnGroups } : {}),

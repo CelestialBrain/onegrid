@@ -103,6 +103,9 @@ export class Grid {
   private readonly detailHeight: number;
   private readonly getDetailContent: ((rowIndex: number) => HTMLElement | null) | undefined;
   private readonly onToggleExpand: ((rowIndex: number) => void) | undefined;
+  private readonly onDetailUnmount:
+    | ((rowIndex: number, el: HTMLElement) => void)
+    | undefined;
   private detailLayer: HTMLDivElement | null = null;
   private mountedDetails = new Map<number, HTMLDivElement>();
   private readonly chevronWidth = 24;
@@ -201,6 +204,7 @@ export class Grid {
     this.detailHeight = options.detailHeight ?? 200;
     this.getDetailContent = options.getDetailContent;
     this.onToggleExpand = options.onToggleExpand;
+    this.onDetailUnmount = options.onDetailUnmount;
 
     // Cell editing wiring.
     this.editable = options.editable;
@@ -557,6 +561,14 @@ export class Grid {
     this.floatingFilterInputs.clear();
     this.statusBarEl?.remove();
     this.statusBarEl = null;
+    // Tear down any still-mounted detail panels so nested Grids /
+    // framework roots inside them get a chance to clean up.
+    if (this.onDetailUnmount) {
+      for (const [row, panel] of this.mountedDetails) {
+        const userContent = panel.firstChild as HTMLElement | null;
+        if (userContent) this.onDetailUnmount(row, userContent);
+      }
+    }
     this.mountedDetails.clear();
   }
 
@@ -1822,9 +1834,14 @@ export class Grid {
       y += baseH + (this.expanded.has(row) ? this.detailHeight : 0);
     }
     // Garbage-collect panels for rows that are no longer in view OR no
-    // longer expanded.
+    // longer expanded. Fire onDetailUnmount FIRST so the consumer can
+    // tear down nested resources (e.g. a nested Grid's destroy()).
     for (const [row, panel] of this.mountedDetails) {
       if (!visibleExpanded.has(row)) {
+        const userContent = panel.firstChild as HTMLElement | null;
+        if (userContent && this.onDetailUnmount) {
+          this.onDetailUnmount(row, userContent);
+        }
         panel.remove();
         this.mountedDetails.delete(row);
       }

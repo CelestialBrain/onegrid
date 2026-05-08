@@ -49,6 +49,8 @@ export function useOneGrid(options: UseOneGridOptions): UseOneGridReturn {
   onToggleExpandRef.current = options.onToggleExpand;
   const getDetailContentRef = useRef(options.getDetailContent);
   getDetailContentRef.current = options.getDetailContent;
+  const onDetailUnmountRef = useRef(options.onDetailUnmount);
+  onDetailUnmountRef.current = options.onDetailUnmount;
   const onFloatingFilterChangeRef = useRef(options.onFloatingFilterChange);
   onFloatingFilterChangeRef.current = options.onFloatingFilterChange;
   const getRowMetaRef = useRef(options.getRowMeta);
@@ -74,6 +76,7 @@ export function useOneGrid(options: UseOneGridOptions): UseOneGridReturn {
       // pass a wrapper and let the wrapper return null when the React
       // option is undefined.
       getDetailContent: (i) => getDetailContentRef.current?.(i) ?? null,
+      onDetailUnmount: (i, el) => onDetailUnmountRef.current?.(i, el),
       onFloatingFilterChange: (col, val) =>
         onFloatingFilterChangeRef.current?.(col, val),
       getRowMeta: (row) => getRowMetaRef.current?.(row) ?? null,
