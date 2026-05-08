@@ -5,7 +5,7 @@ most capable open-source grid in the JavaScript ecosystem. Items are
 grouped by where they create leverage, not by release order — see
 "Sequencing" at the bottom for milestone framing.
 
-**Last updated:** 2026-05-08
+**Last updated:** 2026-05-09
 
 ## Status legend
 
@@ -83,7 +83,7 @@ on benchmark charts.
 | **Incremental redraw with dirty-rect protocol** | 🟣 | Track dirty cell rectangles since last frame; paint only those rectangles |
 | **SharedArrayBuffer for cross-thread viewport** | 🟣 | Worker writes directly into a SAB the renderer reads — eliminates postMessage cost |
 | **Adaptive overscan** | 🔵 | Velocity-aware tuning that learns from real fling traces |
-| **Aggregation-pushdown SSRM** | 🔵 | Group-by happens in the database, not the browser; SSRM contract carries `groupBy` + `aggregations` |
+| Aggregation-pushdown SSRM | ✅ | `BlockRequest.aggregations?: AggregationModel`; database adapters emit one row per group with the alias columns + `__count__` |
 | **Worker-pool budget controller** | 🔵 | Cap how many cores the grid consumes so collaborative apps don't stall |
 | **BigInt-safe formula path** | 🔵 | Keep DB-typed integers in their own lane through the formula graph for currency / large-id columns |
 | **GPU hash-aggregate for group-by** | 🟣 | Parallel hash-aggregate compute kernel beyond reduce/filter |
@@ -114,25 +114,25 @@ ways commercial grids are structurally bad at.
 | Drizzle adapter | ✅ | |
 | Kysely adapter | ✅ | |
 | DuckDB-WASM as backing engine | ✅ | |
-| **Raw Postgres adapter** | 🔵 | `postgres`/`pg` driver; LISTEN/NOTIFY for live updates |
-| **MySQL adapter** | 🔵 | |
-| **SQLite adapter** | 🔵 | Local + Bun + Cloudflare D1 |
+| Raw Postgres adapter | ✅ | `@onegrid/postgres` — pure SQL compiler + `pg`-compatible queryable + LISTEN/NOTIFY CDC against an outbox table |
+| MySQL adapter | ✅ | `@onegrid/mysql` — same compiler shape; polling-based CDC against an outbox (no LISTEN/NOTIFY equivalent without binlog) |
+| SQLite adapter | ✅ | `@onegrid/sqlite` — works with better-sqlite3, node:sqlite, bun:sqlite, Cloudflare D1, libsql/Turso through one queryable interface |
+| ClickHouse adapter | ✅ | `@onegrid/clickhouse` — native named-parameter syntax (`{p0:Type}`), JSONEachRow + Arrow IPC response paths |
+| MongoDB adapter | ✅ | `@onegrid/mongo` — find / aggregation pipeline; change-streams-backed CDC with resume tokens |
 | **Snowflake adapter** | 🔵 | |
 | **BigQuery adapter** | 🔵 | |
-| **ClickHouse adapter** | 🔵 | Native HTTP + columnar push |
-| **MongoDB adapter** | 🔵 | Change streams for live updates |
 | **Elasticsearch adapter** | 🔵 | |
 | **Prisma adapter** | 🔵 | |
-| **Live updates / subscriptions** | 🔵 | Postgres LISTEN/NOTIFY, Mongo change streams, WebSocket fan-out |
-| **Optimistic mutations + conflict resolution** | 🟡 | Scaffolded in SSRM; needs real impl |
+| Live updates / subscriptions | ✅ | Postgres LISTEN/NOTIFY, Mongo change streams, MySQL/SQLite polling-outbox — all conform to the universal `CdcAdapter` shape from `@onegrid/ssrm` |
+| Optimistic mutations + conflict resolution | ✅ | `createOptimisticMutator` orchestrates apply → submit → commit/rollback with onCommit / onRollback / onTransportError callbacks; tracks pending mutations by clientId |
 | **Row-level security / column permissions** | 🔵 | Declarative, server-enforced |
 | **Cross-database joins via DuckDB-WASM** | 🟣 | Remote Postgres + local Parquet + CSV, joined in-browser |
 | **Query builder UI** | 🟣 | Build SQL/Mongo queries through the grid UI itself, anchored on the column tool panel |
-| **Keyset/cursor canonicalization in SSRM** | 🔵 | Make compound `(updated_at, id)` keyset cursors the protocol default; document offset as legacy |
-| **Aggregation-pushdown protocol** | 🔵 | Extend the SSRM `BlockRequest` contract with `groupBy` + `aggregations` so servers can group/aggregate without round-tripping raw rows |
-| **Real-time row diff protocol** | 🔵 | `{ kind: 'insert' \| 'update' \| 'delete', pkey, patch, version }` over WS/SSE with monotonic version vectors so clients detect lost updates and re-sync |
-| **Universal CDC adapter shape** | 🔵 | Postgres LISTEN/NOTIFY, Mongo change streams, Kafka, Debezium — all funnel into the same `RowEvent` stream interface |
-| **Schema introspection helper** | 🔵 | `inferColumns(schema)` derives `ColumnDef[]` from Drizzle / Kysely / Prisma schema metadata |
+| Keyset/cursor canonicalization in SSRM | ✅ | Canonical `ks:<base64-json>` codec in `@onegrid/ssrm`; legacy `offset:N` accepted via `parseLegacyOffsetCursor` |
+| Aggregation-pushdown protocol | ✅ | `BlockRequest.aggregations?: AggregationModel`; servers emit one row per group with alias columns + `__count__` |
+| Real-time row diff protocol | ✅ | `RowDiff { kind, version, pkey, fields? }` + `ResyncRequest`/`ResyncResponse` with `snapshot: true` fallback when the gap is too large to replay |
+| Universal CDC adapter shape | ✅ | `CdcAdapter` + `createRowDiffStream` in `@onegrid/ssrm`; gap detection via `RowDiffTracker` |
+| Schema introspection helper | ✅ | `@onegrid/introspect` — `columnsFromSchema`, `schemaFromSqlRows`, `schemaFromSqliteRows`, `columnTypeFromSql`. ORM-specific paths (Drizzle / Prisma) follow in v0.0.9 |
 
 ## 5. Differentiation moats
 
@@ -255,10 +255,10 @@ Side-quests with no ordering dependency (ship anywhere in v0.0.7):
 - Tree-aware drag-drop polish (constrained-to-same-parent reorder)
 - Recursive grouping + pivot mix experiments
 
-### v0.0.8 — "data infrastructure"
+### v0.0.8 — "data infrastructure"  ✅ **Shipped**
 
-Lean into the database moat. Detailed implementation patterns will land
-in **`docs/v0.0.8.md`** as the milestone progresses.
+Lean into the database moat. Detailed implementation patterns are in
+**`docs/v0.0.8.md`** (post-hoc).
 
 Implementation order (critical path — same hardest-to-retrofit-first
 principle that drove v0.0.6 and v0.0.7 sequencing). The first six items
@@ -266,53 +266,53 @@ are *protocol* additions that must lock before any real database
 adapter ships; otherwise every adapter would inherit the wrong
 protocol and force a v0.0.8.1 break:
 
-1. **Keyset/cursor canonicalization in SSRM** — first, because every
+1. ✅ **Keyset/cursor canonicalization in SSRM** — first, because every
    real database adapter needs to materialize cursors and we don't
    want offset-style cursors leaking into the production protocol.
    Make compound `(sortValues, rowId)` keyset cursors the canonical
    shape; document offset as legacy. Existing `KeysetCursor` type in
    `@onegrid/protocol` becomes the wire-default.
-2. **Aggregation-pushdown protocol** — extend `BlockRequest` with
-   `groupBy` + `aggregations` so servers can compute group rows + per-
-   group aggregates without round-tripping raw rows. The current
-   `GroupingModel` carries open keys but not aggregation specs;
-   adding the latter unlocks every database adapter that has cheap
-   server-side `GROUP BY` (which is all of them).
-3. **Real-time row diff protocol** — `{ kind: 'insert' | 'update' |
-   'delete', pkey, patch, version }` over WS/SSE with monotonic
-   version vectors so clients detect lost updates and re-sync. The
-   shape every CDC adapter has to conform to; locking it now means
-   the four adapters below ship against the same wire format.
-4. **Universal CDC adapter shape** — the in-process `RowEvent` stream
-   interface the four adapter classes (Postgres LISTEN/NOTIFY, Mongo
-   change streams, Kafka, Debezium) all funnel into. Locks the
-   client-side subscription API in `@onegrid/ssrm`.
-5. **Optimistic mutations + conflict resolution (real impl)** —
-   currently scaffolded; needs real version-vector reconciliation +
-   server-conflict surfacing. Builds on (3); same pkey+version
-   contract.
-6. **Arrow IPC + Arrow Flight ingestion** — zero-copy from server
-   via gRPC-Web/Connect-Web. The performance-critical wire path that
-   every high-throughput adapter eventually wants. Decoder lives in
-   `@onegrid/ssrm`; lands before any adapter so adapters can opt in
-   without forking.
-7. **Raw Postgres adapter** — `postgres`/`pg` driver with
-   LISTEN/NOTIFY for live updates. The flagship adapter that
-   exercises every protocol decision above. First adapter shipped =
-   first adapter that proves the protocol is right.
-8. **MySQL adapter** — second adapter, primarily for protocol
-   validation: anywhere the Postgres adapter and the MySQL adapter
-   diverge in shape is a sign the protocol leaks Postgres-isms.
-9. **SQLite adapter** — local + Bun + Cloudflare D1. Third adapter,
-   exercises the no-network / file-backed path.
-10. **ClickHouse adapter** — native HTTP + columnar push. Validates
-    the Arrow IPC ingestion path against a real columnar source.
-11. **MongoDB adapter** — change streams for live updates. Validates
-    the CDC shape against a non-relational source.
-12. **Schema introspection helper** — `inferColumns(schema)` that
-    derives `ColumnDef[]` from Drizzle / Kysely / Prisma schema
-    metadata. Last because it composes on top of the adapters; can't
-    introspect a schema you don't have.
+2. ✅ **Aggregation-pushdown protocol** — `BlockRequest.aggregations`
+   landed; servers emit one row per group with the alias columns +
+   `__count__`. Mock server demonstrates the path; the five real
+   adapters below all support it.
+3. ✅ **Real-time row diff protocol** — `RowDiff { kind, version,
+   pkey, fields? }` plus `ResyncRequest` / `ResyncResponse` with the
+   `snapshot: true` fallback for unrecoverable gaps. Client-side
+   `RowDiffTracker` does monotonic-version gap detection.
+4. ✅ **Universal CDC adapter shape** — `CdcAdapter` interface +
+   `createRowDiffStream` in `@onegrid/ssrm`; composes the tracker
+   with any adapter that exposes `subscribe` + `resync` + `close?`.
+5. ✅ **Optimistic mutations + conflict resolution** —
+   `createOptimisticMutator` orchestrates the apply→submit→commit/
+   rollback lifecycle with `onCommit` / `onRollback` /
+   `onTransportError`; tracks pending by clientId.
+6. ✅ **Arrow IPC ingestion** — `ArrowDecoder` hook on row + tree
+   sources; HTTP transport sniffs `Content-Type:
+   application/vnd.apache.arrow.stream` and returns
+   `BlockResponse<'arrow-ipc'>` with cursors carried via response
+   headers.
+7. ✅ **Raw Postgres adapter** — `@onegrid/postgres`. Pure SQL
+   compiler (35 unit tests against fake `pg`) + LISTEN/NOTIFY CDC
+   against an outbox table. README documents the trigger DDL.
+8. ✅ **MySQL adapter** — `@onegrid/mysql`. Same compiler shape,
+   four documented divergences (backticks, `?` placeholders,
+   emulated NULLS handling, `BINARY` for case-sensitive). Polling-
+   based CDC since MySQL has no LISTEN/NOTIFY equivalent.
+9. ✅ **SQLite adapter** — `@onegrid/sqlite`. Works with better-
+   sqlite3 / node:sqlite / bun:sqlite / Cloudflare D1 / libsql via
+   one queryable interface (sync OR async returns).
+10. ✅ **ClickHouse adapter** — `@onegrid/clickhouse`. Native
+    `{p0:Type}` named-parameter syntax; JSONEachRow + Arrow IPC
+    response paths.
+11. ✅ **MongoDB adapter** — `@onegrid/mongo`. find / aggregation
+    pipeline; change-streams CDC with resume tokens; keyset
+    pagination expands to chained `$or` mirroring SQL row-tuple
+    comparison.
+12. ✅ **Schema introspection helper** — `@onegrid/introspect`.
+    `columnsFromSchema`, `schemaFromSqlRows`, `schemaFromSqliteRows`,
+    `columnTypeFromSql`. ORM-specific (Drizzle / Prisma) follows in
+    v0.0.9.
 
 Side-quests with no ordering dependency (ship anywhere in v0.0.8):
 - Row-level security / column permissions (declarative, server-enforced)

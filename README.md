@@ -2,7 +2,7 @@
 
 > A free, open-source, framework-agnostic data grid built for 10M+ rows, multiple databases, formulas, instant updates, and modern ORM integrations. MIT-licensed end to end.
 
-**Status:** v0.0.7 (on `main`) — engine, SSRM, formula engine, DuckDB-WASM mode, cell editing, row grouping, pivot tables, master-detail with nested grids, tree data with lazy-load, server-side hierarchical fetch, column drag-drop reorder, column tool panel, context menu, sticky group rows, range fill-handle, selection checkbox column, GPU compute kernels, and the framework + ORM adapter family.
+**Status:** v0.0.8 (on `main`) — engine, SSRM with canonical keyset cursors / aggregation pushdown / real-time row-diff protocol / Arrow IPC ingestion, formula engine, DuckDB-WASM mode, cell editing, row grouping, pivot tables, master-detail with nested grids, tree data with lazy-load, server-side hierarchical fetch, column drag-drop reorder, column tool panel, context menu, sticky group rows, range fill-handle, selection checkbox column, GPU compute kernels, real database adapters (Postgres, MySQL, SQLite, ClickHouse, Mongo) with universal CDC + optimistic-mutation orchestration, schema introspection, and the framework + ORM adapter family.
 
 ---
 
@@ -53,6 +53,12 @@ All under a single MIT license. No paywalled tiers. No commercial-only features.
 | [`@onegrid/wc`](packages/adapters/wc) | Web Component adapter |
 | [`@onegrid/drizzle`](packages/adapters/drizzle) | Drizzle ORM datasource adapter |
 | [`@onegrid/kysely`](packages/adapters/kysely) | Kysely query-builder datasource adapter |
+| [`@onegrid/postgres`](packages/adapters/postgres) | Raw Postgres adapter — SQL compiler + LISTEN/NOTIFY CDC |
+| [`@onegrid/mysql`](packages/adapters/mysql) | MySQL adapter — SQL compiler + polling-outbox CDC |
+| [`@onegrid/sqlite`](packages/adapters/sqlite) | SQLite adapter — works with better-sqlite3, node:sqlite, bun:sqlite, D1, libsql |
+| [`@onegrid/clickhouse`](packages/adapters/clickhouse) | ClickHouse adapter — native named parameters + Arrow IPC |
+| [`@onegrid/mongo`](packages/adapters/mongo) | MongoDB adapter — find / aggregation pipeline + change-streams CDC |
+| [`@onegrid/introspect`](packages/introspect) | Schema introspection — Schema → ColumnDef[], SQL data-type mapping |
 
 ---
 
