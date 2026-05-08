@@ -256,17 +256,67 @@ Side-quests with no ordering dependency (ship anywhere in v0.0.7):
 - Recursive grouping + pivot mix experiments
 
 ### v0.0.8 — "data infrastructure"
-Lean into the database moat.
-- Keyset/cursor canonicalization in SSRM (protocol-level, before adapters land)
-- Aggregation-pushdown protocol (SSRM `BlockRequest` extension)
-- Raw Postgres adapter with LISTEN/NOTIFY live updates
-- MySQL + SQLite adapters
-- Optimistic mutations + conflict resolution (real impl)
-- Real-time row diff protocol with version vectors
-- Universal CDC adapter shape (Postgres / Mongo / Kafka / Debezium → unified `RowEvent`)
-- Arrow IPC + Arrow Flight ingestion
-- ClickHouse adapter
-- MongoDB adapter
+
+Lean into the database moat. Detailed implementation patterns will land
+in **`docs/v0.0.8.md`** as the milestone progresses.
+
+Implementation order (critical path — same hardest-to-retrofit-first
+principle that drove v0.0.6 and v0.0.7 sequencing). The first six items
+are *protocol* additions that must lock before any real database
+adapter ships; otherwise every adapter would inherit the wrong
+protocol and force a v0.0.8.1 break:
+
+1. **Keyset/cursor canonicalization in SSRM** — first, because every
+   real database adapter needs to materialize cursors and we don't
+   want offset-style cursors leaking into the production protocol.
+   Make compound `(sortValues, rowId)` keyset cursors the canonical
+   shape; document offset as legacy. Existing `KeysetCursor` type in
+   `@onegrid/protocol` becomes the wire-default.
+2. **Aggregation-pushdown protocol** — extend `BlockRequest` with
+   `groupBy` + `aggregations` so servers can compute group rows + per-
+   group aggregates without round-tripping raw rows. The current
+   `GroupingModel` carries open keys but not aggregation specs;
+   adding the latter unlocks every database adapter that has cheap
+   server-side `GROUP BY` (which is all of them).
+3. **Real-time row diff protocol** — `{ kind: 'insert' | 'update' |
+   'delete', pkey, patch, version }` over WS/SSE with monotonic
+   version vectors so clients detect lost updates and re-sync. The
+   shape every CDC adapter has to conform to; locking it now means
+   the four adapters below ship against the same wire format.
+4. **Universal CDC adapter shape** — the in-process `RowEvent` stream
+   interface the four adapter classes (Postgres LISTEN/NOTIFY, Mongo
+   change streams, Kafka, Debezium) all funnel into. Locks the
+   client-side subscription API in `@onegrid/ssrm`.
+5. **Optimistic mutations + conflict resolution (real impl)** —
+   currently scaffolded; needs real version-vector reconciliation +
+   server-conflict surfacing. Builds on (3); same pkey+version
+   contract.
+6. **Arrow IPC + Arrow Flight ingestion** — zero-copy from server
+   via gRPC-Web/Connect-Web. The performance-critical wire path that
+   every high-throughput adapter eventually wants. Decoder lives in
+   `@onegrid/ssrm`; lands before any adapter so adapters can opt in
+   without forking.
+7. **Raw Postgres adapter** — `postgres`/`pg` driver with
+   LISTEN/NOTIFY for live updates. The flagship adapter that
+   exercises every protocol decision above. First adapter shipped =
+   first adapter that proves the protocol is right.
+8. **MySQL adapter** — second adapter, primarily for protocol
+   validation: anywhere the Postgres adapter and the MySQL adapter
+   diverge in shape is a sign the protocol leaks Postgres-isms.
+9. **SQLite adapter** — local + Bun + Cloudflare D1. Third adapter,
+   exercises the no-network / file-backed path.
+10. **ClickHouse adapter** — native HTTP + columnar push. Validates
+    the Arrow IPC ingestion path against a real columnar source.
+11. **MongoDB adapter** — change streams for live updates. Validates
+    the CDC shape against a non-relational source.
+12. **Schema introspection helper** — `inferColumns(schema)` that
+    derives `ColumnDef[]` from Drizzle / Kysely / Prisma schema
+    metadata. Last because it composes on top of the adapters; can't
+    introspect a schema you don't have.
+
+Side-quests with no ordering dependency (ship anywhere in v0.0.8):
+- Row-level security / column permissions (declarative, server-enforced)
+- Snowflake adapter, BigQuery adapter, Elasticsearch adapter, Prisma adapter
 
 ### v0.0.9 — "performance"
 Push the ceiling above what commercial grids can hit.
