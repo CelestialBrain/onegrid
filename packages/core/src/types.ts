@@ -302,6 +302,15 @@ export interface GridOptions {
     columnId: string,
   ) => void;
 
+  // ---- Sticky group rows ----
+
+  /** Pin the topmost visible group ancestor's header to the top of
+   *  the data band when the user scrolls past it. Without this, the
+   *  user loses the "what group am I in" context as soon as the
+   *  group's title scrolls off-screen. Default: true when
+   *  `getRowMeta` is set. */
+  readonly stickyGroupRows?: boolean;
+
   // ---- Context menu ----
 
   /** Fires on right-click (or pointerType=touch long-press) over any

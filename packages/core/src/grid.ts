@@ -186,6 +186,7 @@ export class Grid {
     | ((rowIndex: number) => import('./types').RowMeta | null | undefined)
     | undefined;
   private readonly onToggleGroup: ((path: string) => void) | undefined;
+  private readonly stickyGroupRowsEnabled: boolean;
 
   // Context menu — observers only. The Grid resolves the target
   // (cell / header / empty), prevents the native menu, and forwards
@@ -255,6 +256,11 @@ export class Grid {
     // Row grouping.
     this.getRowMeta = options.getRowMeta;
     this.onToggleGroup = options.onToggleGroup;
+    // Sticky group rows default ON whenever getRowMeta is provided —
+    // it's always desirable for grouped/tree views, and is cheap to
+    // compute. Consumers can opt-out by passing `false`.
+    this.stickyGroupRowsEnabled =
+      options.stickyGroupRows ?? options.getRowMeta !== undefined;
 
     // Floating filter row.
     this.floatingFiltersEnabled = options.floatingFilters === true;
@@ -1996,6 +2002,7 @@ export class Grid {
       dataBottom,
     );
     this.drawHeader();
+    this.drawStickyGroupRow(start);
     this.updateStatusBar();
     if (this.rendererPool) this.syncCellOverlay(start, end);
     this.updateAccessibilityShadow(start, end);
@@ -2320,6 +2327,57 @@ export class Grid {
         }
       }
     }
+  }
+
+  /** Render the topmost ancestor group row pinned to the top of the
+   *  data band whenever the user has scrolled past it. Walks
+   *  backwards from the topmost-visible row to find the most recent
+   *  group, then re-renders that row at y=dataTop on top of the
+   *  scrolling content (already drawn) so the user sees their
+   *  current group context at all times.
+   *
+   *  Single-level only — for tree views with depth > 1 this stacks
+   *  exactly one ancestor (the immediate group). Multi-level sticky
+   *  is a v0.0.8 follow-up. */
+  private drawStickyGroupRow(_visibleStart: number): void {
+    if (!this.stickyGroupRowsEnabled || !this.getRowMeta) return;
+    if (this.rowSource.numRows === 0) return;
+    // Use the un-overscanned topmost-visible row index — overscan
+    // can include rows above the actual viewport edge and would
+    // hide the sticky case (when the parent group is in the
+    // overscan band but scrolled above the data top).
+    const topmost = this.fenwick.indexAtOffset(this.scrollTop);
+    if (topmost < 0 || topmost >= this.rowSource.numRows) return;
+    // Walk backwards (or use topmost itself) looking for the nearest
+    // ancestor group row that has scrolled above the data band's top.
+    let parentRow = -1;
+    let parentMeta: import('./types').RowGroupMeta | null = null;
+    const startScan = topmost;
+    for (let r = startScan; r >= 0; r--) {
+      const m = this.getRowMeta(r);
+      if (m && m.kind === 'group') {
+        const y = this.fenwick.prefixSum(r);
+        const h = this.fenwick.get(r);
+        if (y + h <= this.scrollTop) {
+          parentRow = r;
+          parentMeta = m;
+          break;
+        }
+        // Group row is still partially or fully visible at its own
+        // position — no sticky needed for this scroll position.
+        return;
+      }
+    }
+    if (!parentMeta || parentRow < 0) return;
+    const parentH = this.fenwick.get(parentRow);
+    const dataTop = this.dataBandTop();
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, dataTop, this.viewportWidth, parentH);
+    ctx.clip();
+    this.drawGroupRow(parentMeta, dataTop, parentH, this.scrollLeft);
+    ctx.restore();
   }
 
   private drawHeader(): void {
