@@ -314,6 +314,12 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
+  packages/introspect:
+    dependencies:
+      '@onegrid/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
   packages/migrate:
     dependencies:
       commander:
