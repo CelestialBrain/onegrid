@@ -35,7 +35,7 @@ import type {
   HierarchyEntry,
   SortModel,
 } from '@onegrid/protocol';
-import type { RowSource } from './row-source';
+import type { ArrowDecoder, RowSource } from './row-source';
 
 const ROOT_KEY = '__onegrid_root__';
 
@@ -60,6 +60,9 @@ export interface SsrmTreeSourceOptions {
   readonly onUpdate?: () => void;
   /** Placeholder returned for not-yet-loaded cells. */
   readonly placeholder?: unknown;
+  /** Optional Arrow IPC decoder. See `ArrowDecoder` in row-source.ts
+   *  for the recommended apache-arrow recipe. */
+  readonly decodeArrowIpc?: ArrowDecoder;
 }
 
 export interface SsrmTreeSourceHandle extends RowSource {
@@ -93,6 +96,7 @@ export function createSsrmTreeSource(
   const placeholder = options.placeholder ?? '…';
   const sort = options.initialSort ?? [];
   const filter = options.initialFilter ?? null;
+  const decodeArrow = options.decodeArrowIpc;
 
   const childrenById = new Map<string, CachedChildren>();
   const inflight = new Map<string, Promise<void>>();
@@ -112,7 +116,7 @@ export function createSsrmTreeSource(
     const promise = dataSource
       .fetchBlock(req)
       .then((res) => {
-        const rows = ensureJsonRows(res);
+        const rows = decodeRows(res, decodeArrow);
         const hierarchy = res.hierarchy ?? rows.map(() => ({ id: '', hasChildren: false }));
         childrenById.set(parentKey, { rows, hierarchy });
         rebuildFlat();
@@ -222,11 +226,23 @@ export function createSsrmTreeSource(
   };
 }
 
-function ensureJsonRows(
+function decodeRows(
   response: BlockResponse,
+  decodeArrow: ArrowDecoder | undefined,
 ): ReadonlyArray<Record<string, unknown>> {
-  if (response.encoding !== 'json') {
-    throw new Error('createSsrmTreeSource: arrow-ipc encoding not yet supported here.');
+  if (response.encoding === 'json') {
+    return response.rows as ReadonlyArray<Record<string, unknown>>;
   }
-  return response.rows as ReadonlyArray<Record<string, unknown>>;
+  if (response.encoding === 'arrow-ipc') {
+    if (!decodeArrow) {
+      throw new Error(
+        'createSsrmTreeSource: server returned arrow-ipc but no `decodeArrowIpc` option was provided.',
+      );
+    }
+    const bytes = response.rows as unknown as Uint8Array;
+    return decodeArrow(bytes);
+  }
+  throw new Error(
+    `createSsrmTreeSource: unknown encoding "${String(response.encoding)}".`,
+  );
 }

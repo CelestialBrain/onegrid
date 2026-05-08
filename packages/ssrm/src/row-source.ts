@@ -31,6 +31,29 @@ export interface RowSource {
   readonly getCell: (rowIndex: number, columnId: string) => unknown;
 }
 
+/**
+ * Decode an Arrow IPC byte stream into a JS row array. Adapter authors
+ * who emit `BlockResponse.encoding === 'arrow-ipc'` plug in a decoder
+ * here so the row source can hydrate cells out of the stream.
+ *
+ * Recommended impl (using `apache-arrow`):
+ *
+ * ```ts
+ * import { tableFromIPC } from 'apache-arrow';
+ * const decodeArrowIpc: ArrowDecoder = (bytes) => {
+ *   const table = tableFromIPC(bytes);
+ *   return table.toArray().map((row) => row.toJSON()); // or use raw fields
+ * };
+ * ```
+ *
+ * The row source intentionally does NOT bundle `apache-arrow` so that
+ * JSON-only deployments stay small. If you don't supply a decoder and
+ * the server emits Arrow IPC, the row source throws.
+ */
+export type ArrowDecoder = (
+  bytes: Uint8Array,
+) => ReadonlyArray<Record<string, unknown>>;
+
 export interface SsrmRowSourceOptions {
   /** Total number of rows in the dataset. The server-side query result. */
   readonly numRows: number;
@@ -44,6 +67,11 @@ export interface SsrmRowSourceOptions {
   readonly initialSort?: SortModel;
   /** Initial filter. Defaults to null. */
   readonly initialFilter?: FilterModel;
+  /** Optional Arrow IPC decoder. When the server emits responses with
+   *  `encoding === 'arrow-ipc'`, the row source delegates to this
+   *  function to materialize rows. Omit when you only consume JSON
+   *  responses. */
+  readonly decodeArrowIpc?: ArrowDecoder;
 }
 
 export interface SsrmRowSourceHandle extends RowSource {
@@ -73,6 +101,7 @@ export function createSsrmRowSource(
 ): SsrmRowSourceHandle {
   const blockSize = options.blockSize ?? 200;
   const placeholder = options.placeholder ?? '…';
+  const decodeArrow = options.decodeArrowIpc;
   const blocks = new Map<number, CachedBlock>();
   const inflight = new Map<number, Promise<void>>();
   let currentSort: SortModel = options.initialSort ?? [];
@@ -92,7 +121,7 @@ export function createSsrmRowSource(
     const promise = dataSource
       .fetchBlock(req)
       .then((res) => {
-        const rows = ensureJsonRows(res);
+        const rows = decodeRows(res, decodeArrow);
         blocks.set(blockIndex, { rows });
         // Server-authoritative row count: when the result set narrows
         // (e.g. filter applied) the response carries the new total. The
@@ -158,12 +187,23 @@ export function createSsrmRowSource(
   return handle;
 }
 
-function ensureJsonRows(
+function decodeRows(
   response: BlockResponse,
+  decodeArrow: ArrowDecoder | undefined,
 ): ReadonlyArray<Record<string, unknown>> {
-  if (response.encoding !== 'json') {
-    // Arrow IPC support is on the roadmap; for now, throw if we get bytes back.
-    throw new Error('createSsrmRowSource: arrow-ipc encoding not yet supported here.');
+  if (response.encoding === 'json') {
+    return response.rows as ReadonlyArray<Record<string, unknown>>;
   }
-  return response.rows as ReadonlyArray<Record<string, unknown>>;
+  if (response.encoding === 'arrow-ipc') {
+    if (!decodeArrow) {
+      throw new Error(
+        'createSsrmRowSource: server returned arrow-ipc but no `decodeArrowIpc` option was provided.',
+      );
+    }
+    const bytes = response.rows as unknown as Uint8Array;
+    return decodeArrow(bytes);
+  }
+  throw new Error(
+    `createSsrmRowSource: unknown encoding "${String(response.encoding)}".`,
+  );
 }

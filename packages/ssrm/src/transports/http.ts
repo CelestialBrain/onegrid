@@ -40,9 +40,13 @@ export interface HttpTransportOptions {
 export function createHttpTransport(options: HttpTransportOptions): SsrmTransport {
   const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
   const base = `${options.baseUrl}${options.basePath ?? ''}`;
+  // Accept both JSON and the canonical Apache Arrow IPC stream MIME
+  // (Arrow Project: https://arrow.apache.org/docs/format/IPC.html).
+  // The server picks per-request; the response's Content-Type tells us
+  // how to parse the body.
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    Accept: 'application/json',
+    Accept: 'application/json, application/vnd.apache.arrow.stream',
     ...options.headers,
   };
 
@@ -52,7 +56,7 @@ export function createHttpTransport(options: HttpTransportOptions): SsrmTranspor
     return (await res.json()) as Schema;
   }
 
-  async function request(req: BlockRequest, opts?: FetchOptions): Promise<BlockResponse<'json'>> {
+  async function request(req: BlockRequest, opts?: FetchOptions): Promise<BlockResponse> {
     const res = await fetchImpl(`${base}/block`, {
       method: 'POST',
       headers,
@@ -60,6 +64,27 @@ export function createHttpTransport(options: HttpTransportOptions): SsrmTranspor
       signal: opts?.signal ?? null,
     });
     if (!res.ok) throw new Error(`@onegrid/ssrm http: block ${String(res.status)}`);
+    // Sniff Content-Type to dispatch JSON vs Arrow IPC. The Arrow
+    // path returns a BlockResponse<'arrow-ipc'> whose `rows` is the
+    // raw IPC byte stream; the row source's decoder unpacks it.
+    const contentType = res.headers.get('content-type') ?? '';
+    if (contentType.includes('application/vnd.apache.arrow.stream')) {
+      const buf = await res.arrayBuffer();
+      // Cursors / totalRowCount come from response headers when the
+      // body is binary (no room in the bytes for protocol metadata).
+      const nextCursor = res.headers.get('x-onegrid-next-cursor');
+      const prevCursor = res.headers.get('x-onegrid-prev-cursor');
+      const totalRowCountHeader = res.headers.get('x-onegrid-total-row-count');
+      return {
+        encoding: 'arrow-ipc',
+        rows: new Uint8Array(buf),
+        nextCursor: nextCursor && nextCursor.length > 0 ? nextCursor : null,
+        prevCursor: prevCursor && prevCursor.length > 0 ? prevCursor : null,
+        ...(totalRowCountHeader !== null
+          ? { totalRowCount: Number(totalRowCountHeader) }
+          : {}),
+      } as BlockResponse<'arrow-ipc'>;
+    }
     return (await res.json()) as BlockResponse<'json'>;
   }
 
