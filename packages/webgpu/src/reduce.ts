@@ -18,7 +18,8 @@ const WORKGROUP_SIZE = 256;
 const REDUCE_SHADER = /* wgsl */ `
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read_write> output: array<f32>;
-@group(0) @binding(2) var<uniform> meta: vec4<u32>; // x = inputLen
+// 'meta' is a reserved keyword in WGSL — use 'params' instead.
+@group(0) @binding(2) var<uniform> params: vec4<u32>; // x = inputLen
 
 var<workgroup> shared_data: array<f32, ${String(WORKGROUP_SIZE)}>;
 
@@ -27,7 +28,7 @@ fn main(
   @builtin(workgroup_id) wg_id: vec3<u32>,
   @builtin(local_invocation_id) local_id: vec3<u32>,
 ) {
-  let len = meta.x;
+  let len = params.x;
   let global_idx = wg_id.x * ${String(WORKGROUP_SIZE)}u + local_id.x;
   shared_data[local_id.x] = select(0.0, input[global_idx], global_idx < len);
   workgroupBarrier();

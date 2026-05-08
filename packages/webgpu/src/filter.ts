@@ -23,7 +23,7 @@ const OP_CODES: Record<FilterOp, number> = {
 const WORKGROUP_SIZE = 256;
 
 const FILTER_SHADER = /* wgsl */ `
-struct Meta {
+struct Params {
   threshold: f32,
   op: u32,
   len: u32,
@@ -32,15 +32,16 @@ struct Meta {
 
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read_write> output: array<u32>;
-@group(0) @binding(2) var<uniform> meta: Meta;
+// 'meta' is a reserved keyword in WGSL — use 'params' instead.
+@group(0) @binding(2) var<uniform> params: Params;
 
 @compute @workgroup_size(${String(WORKGROUP_SIZE)})
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  if (gid.x >= meta.len) { return; }
+  if (gid.x >= params.len) { return; }
   let v = input[gid.x];
-  let t = meta.threshold;
+  let t = params.threshold;
   var pass: bool = false;
-  switch meta.op {
+  switch params.op {
     case 0u: { pass = v > t; }
     case 1u: { pass = v >= t; }
     case 2u: { pass = v < t; }
