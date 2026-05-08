@@ -33,6 +33,7 @@ export type {
 
 export { createSsrmRowSource } from './row-source';
 export type {
+  ArrowDecoder,
   RowSource,
   SsrmRowSourceHandle,
   SsrmRowSourceOptions,
