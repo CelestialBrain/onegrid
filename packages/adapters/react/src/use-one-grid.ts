@@ -12,39 +12,80 @@ export interface UseOneGridReturn {
 }
 
 /**
- * Mount a oneGrid instance into a host `<div>`. The grid is recreated when
- * the column list, row source, row height, or theme identity changes — keep
- * these stable (e.g. via useMemo) for live grids.
+ * Mount a oneGrid instance into a host `<div>`. The grid is recreated only
+ * when columns / headerHeight / frozenColumnCount / theme change. Other
+ * props update live via imperative paths:
  *
- * `onFrame` is captured into a ref so callback identity changes don't
- * remount the grid.
+ *   - `rowSource` / `rowHeight` → `grid.setRowSource(...)` (preserves
+ *     scroll, editor focus, floating filter inputs, etc.)
+ *   - All callbacks (onFrame, onCellEdit, onPaste, onSelectionChange,
+ *     onHeaderClick, onBeginEdit, getDetailContent, onToggleExpand,
+ *     onFloatingFilterChange, getRowMeta, onToggleGroup) are stored in
+ *     refs and called via stable wrappers. Closure changes propagate
+ *     immediately without remounting the Grid — critical when the
+ *     callbacks depend on React state that toggles (e.g. group
+ *     expansion, master-detail, floating filter values).
  */
 export function useOneGrid(options: UseOneGridOptions): UseOneGridReturn {
   const ref = useRef<HTMLDivElement | null>(null);
   const [grid, setGrid] = useState<Grid | null>(null);
 
-  const onFrameRef = useRef<UseOneGridOptions['onFrame']>(options.onFrame);
+  // Refs for every pass-through callback. `current` is reassigned on
+  // every render so the latest closure is what fires when the Grid
+  // dispatches.
+  const onFrameRef = useRef(options.onFrame);
   onFrameRef.current = options.onFrame;
+  const onSelectionChangeRef = useRef(options.onSelectionChange);
+  onSelectionChangeRef.current = options.onSelectionChange;
+  const onHeaderClickRef = useRef(options.onHeaderClick);
+  onHeaderClickRef.current = options.onHeaderClick;
+  const onCellEditRef = useRef(options.onCellEdit);
+  onCellEditRef.current = options.onCellEdit;
+  const onBeginEditRef = useRef(options.onBeginEdit);
+  onBeginEditRef.current = options.onBeginEdit;
+  const onPasteRef = useRef(options.onPaste);
+  onPasteRef.current = options.onPaste;
+  const onToggleExpandRef = useRef(options.onToggleExpand);
+  onToggleExpandRef.current = options.onToggleExpand;
+  const getDetailContentRef = useRef(options.getDetailContent);
+  getDetailContentRef.current = options.getDetailContent;
+  const onFloatingFilterChangeRef = useRef(options.onFloatingFilterChange);
+  onFloatingFilterChangeRef.current = options.onFloatingFilterChange;
+  const getRowMetaRef = useRef(options.getRowMeta);
+  getRowMetaRef.current = options.getRowMeta;
+  const onToggleGroupRef = useRef(options.onToggleGroup);
+  onToggleGroupRef.current = options.onToggleGroup;
 
   useEffect(() => {
     if (!ref.current) return;
-    // Don't mount until we have real data. Lets consumers render a
-    // "connecting…" placeholder while async data sources resolve.
     if (options.columns.length === 0 || options.rowSource.numRows === 0) return;
     const instance = new Grid({
       ...options,
       host: ref.current,
-      onFrame: (stats) => {
-        onFrameRef.current?.(stats);
-      },
+      onFrame: (stats) => onFrameRef.current?.(stats),
+      onSelectionChange: (s) => onSelectionChangeRef.current?.(s),
+      onHeaderClick: (id) => onHeaderClickRef.current?.(id),
+      onCellEdit: (row, col, n, o) => onCellEditRef.current?.(row, col, n, o),
+      onBeginEdit: (row, col) => onBeginEditRef.current?.(row, col),
+      onPaste: (row, col, rows) => onPasteRef.current?.(row, col, rows),
+      onToggleExpand: (i) => onToggleExpandRef.current?.(i),
+      // getDetailContent is read fresh on every chevron click — when
+      // null the Grid disables the master-detail layer, so we always
+      // pass a wrapper and let the wrapper return null when the React
+      // option is undefined.
+      getDetailContent: (i) => getDetailContentRef.current?.(i) ?? null,
+      onFloatingFilterChange: (col, val) =>
+        onFloatingFilterChangeRef.current?.(col, val),
+      getRowMeta: (row) => getRowMetaRef.current?.(row) ?? null,
+      onToggleGroup: (path) => onToggleGroupRef.current?.(path),
     });
     setGrid(instance);
     return () => {
       instance.destroy();
       setGrid(null);
     };
-    // Intentionally NOT depending on rowSource / rowHeight — those swap
-    // imperatively via the effect below to preserve in-grid DOM state.
+    // Intentionally NOT depending on rowSource / rowHeight / callbacks
+    // — those flow imperatively (setRowSource) or via refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     options.columns,
@@ -53,9 +94,6 @@ export function useOneGrid(options: UseOneGridOptions): UseOneGridReturn {
     options.theme,
   ]);
 
-  // Swap the row source / row heights without remounting. setRowSource
-  // resets scroll + Fenwick + caches without touching the canvas, the
-  // a11y shadow, the editor, or the floating filter inputs.
   useEffect(() => {
     if (!grid) return;
     grid.setRowSource(options.rowSource, options.rowHeight);
