@@ -58,6 +58,11 @@ import {
   type FormulaPlaygroundHandle,
 } from './lib/formula-mode';
 import { createTreeMode, type TreeModeHandle } from './lib/tree-mode';
+import {
+  connectSsrmTree,
+  SSRM_TREE_COLUMNS,
+  type SsrmTreeConnection,
+} from './lib/ssrm-tree';
 
 const ROW_OPTIONS = [1_000, 10_000, 100_000, 1_000_000, 10_000_000] as const;
 
@@ -241,7 +246,14 @@ function SetFilterPopover({
   );
 }
 
-type Mode = 'memory' | 'ssrm' | 'formula' | 'duckdb' | 'pivot' | 'tree';
+type Mode =
+  | 'memory'
+  | 'ssrm'
+  | 'formula'
+  | 'duckdb'
+  | 'pivot'
+  | 'tree'
+  | 'ssrm-tree';
 
 // Stable references so useOneGrid's effect doesn't re-fire while waiting
 // for async data sources to resolve.
@@ -423,6 +435,29 @@ export const App = (): JSX.Element => {
     }
     const handle = createTreeMode(() => setTreeTick((t) => t + 1));
     setTree(handle);
+  }, [mode]);
+
+  // ----- SSRM-tree (server-side hierarchical) -----
+  const [ssrmTree, setSsrmTree] = useState<SsrmTreeConnection | null>(null);
+  const [ssrmTreeTick, setSsrmTreeTick] = useState(0);
+  useEffect(() => {
+    if (mode !== 'ssrm-tree') {
+      setSsrmTree(null);
+      return;
+    }
+    let canceled = false;
+    connectSsrmTree(() => setSsrmTreeTick((t) => t + 1))
+      .then((conn) => {
+        if (canceled) return;
+        setSsrmTree(conn);
+      })
+      .catch((err: unknown) => {
+        if (canceled) return;
+        console.error('[onegrid] ssrm-tree connect failed', err);
+      });
+    return () => {
+      canceled = true;
+    };
   }, [mode]);
 
   useEffect(() => {
@@ -632,6 +667,9 @@ export const App = (): JSX.Element => {
           hasChildren: entry.hasChildren,
         };
       }
+      if (mode === 'ssrm-tree' && ssrmTree) {
+        return ssrmTree.handle.getRowMeta(rowIndex);
+      }
       if (!groupedFlat) return null;
       const entry = groupedFlat[rowIndex];
       if (!entry || entry.kind !== 'group') return null;
@@ -647,7 +685,7 @@ export const App = (): JSX.Element => {
         aggregates: node.aggregates as Record<string, unknown>,
       };
     },
-    [groupedFlat, openGroups, mode, tree],
+    [groupedFlat, openGroups, mode, tree, ssrmTree],
   );
 
   const handleToggleGroup = useCallback(
@@ -659,6 +697,10 @@ export const App = (): JSX.Element => {
         void tree.toggle(path);
         return;
       }
+      if (mode === 'ssrm-tree' && ssrmTree) {
+        ssrmTree.handle.toggle(path);
+        return;
+      }
       setOpenGroups((prev) => {
         const next = new Set(prev);
         if (next.has(path)) next.delete(path);
@@ -666,7 +708,7 @@ export const App = (): JSX.Element => {
         return next;
       });
     },
-    [mode, tree],
+    [mode, tree, ssrmTree],
   );
 
   const dataReady =
@@ -680,7 +722,9 @@ export const App = (): JSX.Element => {
             ? pivotResult !== null
             : mode === 'tree'
               ? tree !== null
-              : formula !== null;
+              : mode === 'ssrm-tree'
+                ? ssrmTree !== null
+                : formula !== null;
 
   // Module-level stable fallbacks so useOneGrid's effect doesn't re-fire
   // every render while we're waiting for the async data source.
@@ -707,7 +751,9 @@ export const App = (): JSX.Element => {
             ? pivotResult!.columns
             : mode === 'tree'
               ? tree!.columns
-              : FORMULA_COLUMNS;
+              : mode === 'ssrm-tree'
+                ? SSRM_TREE_COLUMNS
+                : FORMULA_COLUMNS;
   const safeRowSource: RowSource = !dataReady
     ? EMPTY_ROW_SOURCE
     : mode === 'memory'
@@ -722,7 +768,9 @@ export const App = (): JSX.Element => {
             ? pivotResult!.rowSource
             : mode === 'tree'
               ? tree!.rowSource
-              : formula!.rowSource;
+              : mode === 'ssrm-tree'
+                ? ssrmTree!.rowSource
+                : formula!.rowSource;
   const safeRowHeight: number | Float32Array =
     mode === 'memory' && memoryDataset ? memoryDataset.heights : 28;
 
@@ -972,7 +1020,7 @@ export const App = (): JSX.Element => {
     ...(editable !== undefined ? { editable } : {}),
     ...(pinnedBottom ? { pinnedBottomRowSource: pinnedBottom } : {}),
     ...(columnGroups ? { columnGroups } : {}),
-    ...(groupedFlat || mode === 'tree'
+    ...(groupedFlat || mode === 'tree' || mode === 'ssrm-tree'
       ? { getRowMeta, onToggleGroup: handleToggleGroup }
       : {}),
     ...(mode === 'memory'
@@ -1024,6 +1072,16 @@ export const App = (): JSX.Element => {
     if (!grid || mode !== 'tree') return;
     grid.refresh();
   }, [grid, treeTick, mode]);
+
+  // SSRM-tree mode: ssrmTree.handle is a *live* RowSource (numRows
+  // grows as children fetches land), but Grid's Fenwick heights are
+  // sized to numRows at setRowSource time — refresh() alone won't
+  // resize them. So every tick we re-call setRowSource against the
+  // same handle, which rebuilds Fenwick + aria-rowcount.
+  useEffect(() => {
+    if (!grid || mode !== 'ssrm-tree' || !ssrmTree) return;
+    grid.setRowSource(ssrmTree.rowSource, 28);
+  }, [grid, ssrmTreeTick, mode, ssrmTree]);
 
   // Push sort state into the underlying data source. SSRM mode invalidates
   // the row-source cache and refetches; in-memory mode rebuilds memoryView
@@ -1257,6 +1315,15 @@ export const App = (): JSX.Element => {
             style={{ fontWeight: mode === 'tree' ? 600 : 400 }}
           >
             Tree
+          </button>{' '}
+          <button
+            type="button"
+            onClick={() => {
+              setMode('ssrm-tree');
+            }}
+            style={{ fontWeight: mode === 'ssrm-tree' ? 600 : 400 }}
+          >
+            SSRM Tree
           </button>
         </div>
 

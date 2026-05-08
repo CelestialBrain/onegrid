@@ -37,3 +37,10 @@ export type {
   SsrmRowSourceHandle,
   SsrmRowSourceOptions,
 } from './row-source';
+
+export { createSsrmTreeSource } from './tree-source';
+export type {
+  SsrmTreeSourceHandle,
+  SsrmTreeSourceOptions,
+  SsrmTreeRowMeta,
+} from './tree-source';

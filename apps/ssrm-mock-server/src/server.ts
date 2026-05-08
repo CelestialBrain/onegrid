@@ -26,7 +26,12 @@ import {
   sortIndex,
   type ColumnInput,
 } from '@onegrid/data';
-import type { BlockRequest, BlockResponse, Schema } from '@onegrid/protocol';
+import type {
+  BlockRequest,
+  BlockResponse,
+  HierarchyEntry,
+  Schema,
+} from '@onegrid/protocol';
 
 // -----------------------------------------------------------------------------
 // Synthetic dataset
@@ -110,7 +115,143 @@ function encodeOffsetCursor(offset: number): string {
 // Block fetch
 // -----------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------
+// Hierarchical synthetic dataset for tree-mode SSRM
+//
+// 3 regions × 3-4 countries × 4-6 cities, totaling ~50 nodes. Far more
+// expressive than the in-memory tree mode because the entire 1M flat
+// table is also a "leaf" of each city (in concept) — but we keep it
+// scoped to ~50 nodes here so the wire round-trip is the focus, not
+// dataset size.
+//
+// Node ids look like `r:emea`, `c:emea/germany`, `x:emea/germany/berlin`
+// so the response carries enough info to reconstruct lineage.
+// -----------------------------------------------------------------------------
+
+interface TreeNode {
+  readonly id: string;
+  readonly name: string;
+  readonly population?: number;
+  readonly children?: ReadonlyArray<TreeNode>;
+}
+
+const TREE_ROOTS: ReadonlyArray<TreeNode> = [
+  {
+    id: 'r:emea',
+    name: 'EMEA',
+    children: [
+      {
+        id: 'c:emea/germany',
+        name: 'Germany',
+        children: [
+          { id: 'x:emea/germany/berlin', name: 'Berlin', population: 3_700_000 },
+          { id: 'x:emea/germany/munich', name: 'Munich', population: 1_500_000 },
+        ],
+      },
+      {
+        id: 'c:emea/france',
+        name: 'France',
+        children: [
+          { id: 'x:emea/france/paris', name: 'Paris', population: 2_100_000 },
+          { id: 'x:emea/france/lyon', name: 'Lyon', population: 520_000 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'r:americas',
+    name: 'Americas',
+    children: [
+      {
+        id: 'c:americas/usa',
+        name: 'USA',
+        children: [
+          { id: 'x:americas/usa/nyc', name: 'New York', population: 8_300_000 },
+          { id: 'x:americas/usa/sf', name: 'San Francisco', population: 880_000 },
+        ],
+      },
+      {
+        id: 'c:americas/brazil',
+        name: 'Brazil',
+        children: [
+          { id: 'x:americas/brazil/sp', name: 'São Paulo', population: 12_300_000 },
+          { id: 'x:americas/brazil/rio', name: 'Rio', population: 6_700_000 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'r:apac',
+    name: 'APAC',
+    children: [
+      {
+        id: 'c:apac/japan',
+        name: 'Japan',
+        children: [
+          { id: 'x:apac/japan/tokyo', name: 'Tokyo', population: 13_900_000 },
+        ],
+      },
+      {
+        id: 'c:apac/india',
+        name: 'India',
+        children: [
+          { id: 'x:apac/india/mumbai', name: 'Mumbai', population: 12_500_000 },
+        ],
+      },
+    ],
+  },
+];
+
+const TREE_INDEX = new Map<string, TreeNode>();
+function indexTree(nodes: ReadonlyArray<TreeNode>): void {
+  for (const n of nodes) {
+    TREE_INDEX.set(n.id, n);
+    if (n.children) indexTree(n.children);
+  }
+}
+indexTree(TREE_ROOTS);
+
+const TREE_SCHEMA: Schema = [
+  { id: 'id', type: 'utf8' },
+  { id: 'name', type: 'utf8' },
+  { id: 'population', type: 'int32' },
+];
+
+function fetchTreeBlock(parentId: string | null): BlockResponse<'json'> {
+  let children: ReadonlyArray<TreeNode>;
+  if (parentId === null) {
+    children = TREE_ROOTS;
+  } else {
+    const node = TREE_INDEX.get(parentId);
+    children = node?.children ?? [];
+  }
+  const rows: Record<string, unknown>[] = children.map((c) => ({
+    id: c.id,
+    name: c.name,
+    population: c.population ?? null,
+  }));
+  const hierarchy: HierarchyEntry[] = children.map((c) => ({
+    id: c.id,
+    hasChildren: !!c.children && c.children.length > 0,
+  }));
+  return {
+    encoding: 'json',
+    rows,
+    hierarchy,
+    nextCursor: null,
+    prevCursor: null,
+    totalRowCount: rows.length,
+  };
+}
+
 function fetchBlock(req: BlockRequest): BlockResponse<'json'> {
+  // Hierarchical fetches branch into the synthetic tree dataset; flat
+  // fetches go through the 1M-row people table below. The presence of
+  // `parentId` in the request (even null!) flips the mode; clients that
+  // never set it always get the flat table.
+  if (req.parentId !== undefined) {
+    return fetchTreeBlock(req.parentId);
+  }
   const sel = filterIndex(TABLE, req.filter);
   // Materialize filtered indices, sorted by req.sort.
   const filteredIndices = sel.toIndices();
@@ -212,6 +353,11 @@ const server = http.createServer((req, res) => {
 
   if (req.method === 'GET' && url.pathname === '/schema') {
     send(res, 200, SCHEMA);
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/tree-schema') {
+    send(res, 200, TREE_SCHEMA);
     return;
   }
 

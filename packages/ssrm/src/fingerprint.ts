@@ -20,6 +20,7 @@ export function fingerprintQuery(
   filter: FilterModel,
   grouping?: GroupingModel,
   pivot?: PivotModel,
+  parentId?: string | null,
 ): string {
   const obj = {
     s: sort.map((field) => ({
@@ -45,6 +46,10 @@ export function fingerprintQuery(
           })),
         }
       : null,
+    // parentId participates in fingerprinting so children blocks for
+    // different parents are cached independently. `undefined` and `null`
+    // collapse to the same canonical representation (root level).
+    pid: parentId == null ? null : parentId,
   };
   return JSON.stringify(obj);
 }

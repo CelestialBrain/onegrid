@@ -215,6 +215,29 @@ export interface BlockRequest {
   readonly columns?: ReadonlyArray<string>;
   /** Per-block correlation id; server should echo for telemetry/cancel. */
   readonly requestId?: string;
+  /**
+   * Hierarchical (tree) fetch. Null/undefined = root level. When set, the
+   * server returns the children of the named parent node, paginated by
+   * cursor / limit. Distinct `parentId`s use independent cursor spaces:
+   * a cursor returned for parent A is NOT valid against parent B.
+   *
+   * Cache fingerprint includes `parentId` so blocks fetched under one
+   * parent never collide with blocks fetched under another.
+   */
+  readonly parentId?: string | null;
+}
+
+/**
+ * Per-row hierarchy metadata for tree responses. Indexed parallel to
+ * `BlockResponse.rows`. Servers populate this on hierarchical fetches
+ * (where `BlockRequest.parentId` semantics are in play); flat responses
+ * may omit it.
+ */
+export interface HierarchyEntry {
+  /** Stable node id; passed back as `parentId` to fetch this node's children. */
+  readonly id: string;
+  /** Whether this node has children that can be expanded. */
+  readonly hasChildren: boolean;
 }
 
 /**
@@ -240,6 +263,13 @@ export interface BlockResponse<TEncoding extends RowEncoding = RowEncoding> {
    */
   readonly totalRowCount?: number;
   readonly requestId?: string;
+  /**
+   * Per-row hierarchy info, parallel to `rows`. Present on hierarchical
+   * fetches (where the request carried `parentId`); absent on flat fetches.
+   * Clients MUST tolerate missing entries — e.g. a server that doesn't
+   * support trees just leaves this undefined.
+   */
+  readonly hierarchy?: ReadonlyArray<HierarchyEntry>;
 }
 
 // -----------------------------------------------------------------------------

@@ -50,7 +50,13 @@ export class BlockCache {
   }
 
   static fingerprintFor(req: BlockRequest): string {
-    return fingerprintQuery(req.sort, req.filter, req.grouping, req.pivot);
+    return fingerprintQuery(
+      req.sort,
+      req.filter,
+      req.grouping,
+      req.pivot,
+      req.parentId,
+    );
   }
 
   get(key: string): BlockResponse | undefined {
