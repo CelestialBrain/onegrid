@@ -6,7 +6,7 @@
 // begin edit, type, Enter to commit, Escape to cancel, and an Android-
 // Chrome-style keyCode=229 simulation that should NOT commit.
 //
-// Reference: docs/implementation/v0.0.6.md § 1.
+// Reference: docs/v0.0.6.md § 1.
 // =============================================================================
 
 import { expect, test } from '@playwright/test';

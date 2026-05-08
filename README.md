@@ -2,7 +2,7 @@
 
 > A free, open-source, framework-agnostic data grid built for 10M+ rows, multiple databases, formulas, instant updates, and modern ORM integrations. MIT-licensed end to end.
 
-**Status:** v0.0.5 — engine, SSRM, formula engine, DuckDB-WASM mode, cell editing, row grouping, pivot tables, master-detail, GPU compute kernels, and the first wave of framework + ORM adapters.
+**Status:** v0.0.7 (on `main`) — engine, SSRM, formula engine, DuckDB-WASM mode, cell editing, row grouping, pivot tables, master-detail with nested grids, tree data with lazy-load, server-side hierarchical fetch, column drag-drop reorder, column tool panel, context menu, sticky group rows, range fill-handle, selection checkbox column, GPU compute kernels, and the framework + ORM adapter family.
 
 ---
 
@@ -11,14 +11,19 @@
 A single MIT-licensed grid that consolidates the things real applications need at scale into one coherent stack:
 
 - **Canvas-first rendering** at 10M rows, with a DOM accessibility shadow and DOM overlays for editors and detail panels.
-- **Server-side row model** with cursor pagination, sliding-window block cache, optimistic mutations, and Arrow-friendly payloads.
+- **Server-side row model** with cursor pagination, sliding-window block cache, optimistic mutations, and Arrow-friendly payloads — including hierarchical lazy fetches via `BlockRequest.parentId`.
 - **Spreadsheet-class formulas** with a parser, dependency graph (with range nodes for linear-edge growth), and Adapton-style demand-driven recompute.
 - **Columnar Apache-Arrow-compatible memory layout** for typed-array sort/filter and zero-copy slicing.
 - **Cell editing + clipboard paste** — inline DOM overlay editor (F2/Enter/double-click/type-ahead), Excel-compatible TSV copy + paste, range selection.
-- **Row grouping with aggregations** — sum/avg/count/min/max headers with collapse/expand, native to the renderer.
+- **Range fill-handle** — drag the bottom-right of a selection to extend; the consumer applies the data policy via `onFillHandle`.
+- **Row grouping with aggregations** — sum/avg/count/min/max headers with collapse/expand, sticky group rows that pin while scrolling, native to the renderer.
+- **Tree data with lazy-load children** — first-class hierarchical row model. The same `getRowMeta` / `onToggleGroup` path drives both row grouping and tree mode; children fetch on first expand.
 - **Pivot tables** — bucketed (rowKey × pivotKey × measure) materializer that produces a regular ColumnTable, so the existing renderer/sort/filter pipeline carries pivots for free.
 - **Pinned rows + column groups + status bar** — totals rows above/below the data, header tree band for grouped columns, selection-aggregate footer.
-- **Master-detail expandable rows** with first-class DOM detail panels.
+- **Master-detail expandable rows** with first-class DOM detail panels — including **nested oneGrids** inside the panel via the `onDetailUnmount` lifecycle hook.
+- **Column drag-drop reorder + tool panel** — header drag with a vertical drop indicator; React `<ColumnToolPanel>` for show/hide and within-panel reorder.
+- **Context menu** — right-click → Grid resolves the target (cell / header / empty) + suppresses the native menu; the consumer renders their own popover.
+- **Selection-checkbox column** — Excel-style row selection separate from cell selection; `<SelectAllCheckbox>` toolbar widget for tri-state select-all.
 - **DuckDB-WASM mode** as a turnkey in-browser query engine.
 - **GPU compute kernels** (WebGPU) — parallel reductions and predicate filters over typed-array columns, with CPU fallbacks.
 - **First-class ORM and database adapters** — Drizzle, Kysely, with more on the roadmap.
@@ -60,42 +65,57 @@ The full slate of planned work — surface area, performance, hierarchy, databas
 ## Architecture
 
 - **[packages/protocol/src/index.ts](packages/protocol/src/index.ts)** — Load-bearing schema. The contract every other package depends on.
-- **[apps/playground](apps/playground)** — Live demo with five modes:
-  - **In-memory** — materialized typed-array columns with sort/filter/quick-filter, cell editing, copy/paste, master-detail panels, pinned totals row, column groups, status bar, and "group by status" with revenue/score aggregates.
+- **[apps/playground](apps/playground)** — Live demo with seven modes:
+  - **In-memory** — materialized typed-array columns with sort/filter/quick-filter, cell editing, copy/paste, master-detail panels (with nested oneGrids), pinned totals row, column groups, status bar, fill-handle, opt-in selection-checkbox column, column drag-drop, column tool panel, context menu, and "group by status" with sticky group rows + revenue/score aggregates.
   - **SSRM (localhost:3001)** — block-paginated server-side row model wired to a mock Express server.
+  - **SSRM Tree** — hierarchical fetches over the SSRM protocol against the mock server's regions → countries → cities dataset, with `parentId`-keyed cache fingerprinting.
   - **Formula** — incremental engine with live recompute, Adapton-style demand-driven evaluation, and a formula bar.
   - **DuckDB (in-browser)** — WASM DuckDB ingesting a 100k-row synthetic CSV, served through the same SsrmRowSource bridge.
   - **Pivot** — pivots a 100k-row dataset by status × firstName with sum(revenue) and avg(score), rendered through the standard column pipeline.
+  - **Tree** — synthetic regions/countries/cities tree with a lazy-loaded country (Brazil) demonstrating the async `loadChildren` path.
 - **[apps/benchmarks](apps/benchmarks)** — Playwright-driven performance gates: 1M-row scroll FPS, SSRM block latency, formula recompute throughput, throttled-CPU floors.
 
 ---
 
-## Feature surface (v0.0.5)
+## Feature surface (v0.0.7 on `main`)
 
 | Category | Status |
 |---|---|
 | Canvas-2D renderer (10M rows, variable row heights via Fenwick) | shipped |
 | Frozen columns | shipped |
 | Sort (single + multi-column) | shipped |
-| Filter (quick-filter + per-column rules) | shipped |
+| Filter (quick-filter, per-column rules, set filter with distinct counts, floating filter row) | shipped |
 | Range selection (drag, shift-click, ctrl-click multi-range, shift+arrow extend) | shipped |
+| Range fill-handle (Excel-style drag-to-extend) | shipped |
 | Clipboard copy (TSV) + paste (TSV → onPaste hook) | shipped |
 | Cell editing (F2/Enter/double-click/type-ahead, Tab/Enter/Escape) | shipped |
+| Cell editor variants (select / date / textarea) + IME composition guard + sync/async validation | shipped |
+| Tooltip system (single shared `<div role=tooltip>`, hover delay, Escape/scroll dismiss) | shipped |
+| Custom cell renderers (pool + overlay layer in core; React-adapter-flavoured factory) | shipped |
 | Master-detail expandable rows with DOM detail layer | shipped |
+| Nested oneGrids inside detail panels (with `onDetailUnmount` lifecycle) | shipped |
+| Tree data (hierarchical row model with lazy-load children) | shipped |
+| Server-side hierarchical fetches (`BlockRequest.parentId` + `HierarchyEntry`) | shipped |
 | Pinned top + bottom row sources | shipped |
 | Column groups (header tree band) | shipped |
 | Status bar (selection aggregates: count/sum/avg/min/max) | shipped |
 | Row grouping with aggregations + collapse/expand chevrons | shipped |
+| Sticky group rows (topmost ancestor pins to data band top while scrolled) | shipped |
 | Pivot tables (bucketed compute → materialized output table) | shipped |
+| Column drag-drop reorder (header drag with vertical drop indicator) | shipped |
+| Column tool panel / sidebar (React `<ColumnToolPanel>` for show/hide + within-panel reorder) | shipped |
+| Context menu (cell/header/empty target resolution, native menu suppressed) | shipped |
+| Selection-checkbox column (`createSelectionCheckboxColumn` + `<SelectAllCheckbox>`) | shipped |
 | CSV + XLSX export | shipped |
 | Server-side row model (cursor + block cache + optimistic mutations) | shipped |
 | Formula engine (parser, dep graph, range nodes, Adapton-style recompute) | shipped |
 | DuckDB-WASM as a backing engine | shipped |
 | GPU compute kernels (WebGPU): parallel reduce + predicate→mask filter | shipped |
+| `@onegrid/migrate` CLI (config translator, AST-based) | shipped |
 | ORM adapters: Drizzle, Kysely | shipped |
 | Framework adapters: React, Vue, Svelte, Solid, Angular, Web Components | shipped |
 | WebGPU rendering path (full canvas replacement with glyph atlas) | not yet |
-| Tree data (hierarchical row model, beyond grouping) | not yet |
+| Real Postgres / MySQL / SQLite database adapters | not yet |
 
 ---
 

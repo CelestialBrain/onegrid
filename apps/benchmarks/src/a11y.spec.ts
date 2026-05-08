@@ -16,7 +16,7 @@
 //      with the correct aria-colindex / aria-rowindex.
 //
 // Layer 4 (screen reader smoke via Guidepup) is documented in
-// docs/implementation/v0.0.6.md and lands in a follow-up PR — it
+// docs/v0.0.6.md and lands in a follow-up PR — it
 // requires a Windows runner for NVDA and a macOS runner for VoiceOver.
 // =============================================================================
 

@@ -47,6 +47,26 @@ oneGrid targets 10M+ row workloads. Every PR that touches a hot path (rendering,
 
 Bundle size is enforced via `size-limit` in CI. PRs that bloat any package fail until justified.
 
+## Verification rhythm
+
+PRs that touch the canvas renderer, pointer-event pipeline, WebGPU kernels, or framework-adapter cell renderers MUST be verified in a real browser before merging — jsdom does not have a canvas context, IntersectionObserver is mocked, and WebGPU is absent entirely. Two real-browser bugs that v0.0.6/v0.0.7 caught only after live verification:
+
+- WGSL `meta` is a reserved keyword. The CPU and GPU code paths agreed in jsdom (which can't compile shaders); the GPU kernel returned 0 in a real browser, fooling the parity check.
+- Callback closures captured at Grid construct time stay frozen even when React re-renders. A row-grouping browser test caught a getRowMeta that worked once and never again — fixed by routing every callback through a ref in `useOneGrid`.
+
+Use `apps/benchmarks` Playwright specs for headless verification; add Chrome DevTools MCP probes (or manual reproduction) for anything pixel- or pointer-event-sensitive. Doc the verification step in the PR description.
+
+## Documentation
+
+Each milestone has an "Implementation Patterns Report" in `docs/v0.0.X.md` capturing:
+
+- The architecture chosen for each cross-cutting concern
+- Edge cases discovered during the milestone
+- The test gates that were wired in CI
+- Public-spec / RFC / engineer-blog references — never commercial source
+
+The pattern was started by v0.0.6 (pre-shipping) and v0.0.7 (post-shipping). Future milestones should mirror it.
+
 ## License
 
 Contributions are under MIT. By submitting a PR you agree your code is MIT-licensed and you have the right to contribute it.

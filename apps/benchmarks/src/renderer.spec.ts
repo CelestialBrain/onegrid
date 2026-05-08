@@ -11,7 +11,7 @@
 //      shows the row's score, not a stale value
 //   4. destroy() cleans up the overlay layer
 //
-// Reference: docs/implementation/v0.0.6.md § 3.
+// Reference: docs/v0.0.6.md § 3.
 // =============================================================================
 
 import { expect, test } from '@playwright/test';

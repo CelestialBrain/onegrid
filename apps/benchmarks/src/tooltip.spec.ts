@@ -9,7 +9,7 @@
 //   4. Escape dismisses (WCAG 1.4.13 dismissable requirement)
 //   5. Scroll dismisses (anchored content with no anchor is nonsense)
 //
-// Reference: docs/implementation/v0.0.6.md § 6.
+// Reference: docs/v0.0.6.md § 6.
 // =============================================================================
 
 import { expect, test } from '@playwright/test';

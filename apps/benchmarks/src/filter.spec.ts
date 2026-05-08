@@ -11,7 +11,7 @@
 //   5. Selecting values + Apply narrows the grid (status text reflects
 //      the smaller row count)
 //
-// Reference: docs/implementation/v0.0.6.md § 4 + 5.
+// Reference: docs/v0.0.6.md § 4 + 5.
 // =============================================================================
 
 import { expect, test } from '@playwright/test';

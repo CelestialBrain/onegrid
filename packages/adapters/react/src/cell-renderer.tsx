@@ -15,7 +15,7 @@
 //
 //   columns: [{ id: 'status', width: 110, renderer }]
 //
-// Architecture (per docs/implementation/v0.0.6.md § 3):
+// Architecture (per docs/v0.0.6.md § 3):
 //   - One React root per pooled DOM element. Created on mount, kept
 //     alive across scroll-in/scroll-out cycles via the RendererPool.
 //   - Props flow through a useSyncExternalStore subscription so the

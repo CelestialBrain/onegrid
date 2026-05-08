@@ -5,7 +5,7 @@ most capable open-source grid in the JavaScript ecosystem. Items are
 grouped by where they create leverage, not by release order — see
 "Sequencing" at the bottom for milestone framing.
 
-**Last updated:** 2026-05-04
+**Last updated:** 2026-05-08
 
 ## Status legend
 
@@ -37,29 +37,30 @@ application reaches for at some point.
 | Row grouping with aggregations | ✅ | |
 | Pivot tables | ✅ | |
 | CSV + XLSX export | ✅ | |
-| **Tree data** | 🔵 | Hierarchical row model, parent→child in the data itself |
+| Tree data | ✅ | `flattenTree` / `RowTreeMeta` in @onegrid/data; lazy `loadChildren` per node; nested grids inside detail panels piggy-back on the same row-meta path |
+| Server-side hierarchical fetches | ✅ | `BlockRequest.parentId` + per-row `HierarchyEntry`; `createSsrmTreeSource` lazy children fetcher |
 | Set filter (distinct-values checkbox + counts) | ✅ | `enumerateDistinct` in @onegrid/data + popover UI |
 | Floating filter row | ✅ | Per-column `<input role=searchbox>` band, sticky below header |
-| **Column tool panel / sidebar** | 🔵 | Drag-drop visibility, reorder, group/pivot/value drop zones |
-| **Context menu** | 🔵 | Right-click → copy/paste/export/filter/group |
-| **Drag-drop column reorder** | 🔵 | |
-| **Drag-drop row reorder** | 🔵 | |
+| Column tool panel / sidebar | ✅ | React `<ColumnToolPanel>` with show/hide + within-panel drag-drop; `Grid.setColumns()` / `getColumns()` imperative API |
+| Context menu | ✅ | `ContextMenuTarget` discriminated union; native menu suppressed; consumer renders the popover |
+| Drag-drop column reorder | ✅ | Header pointerdown → drop indicator → in-place column splice; click-vs-drag at the 6px threshold |
+| **Drag-drop row reorder** | 🔵 | Within-tree-or-group reorder is a v0.0.8 follow-up |
 | **Row + column span (merged cells)** | 🔵 | |
-| **Sticky group rows** | 🔵 | Group header pins while scrolling within |
+| Sticky group rows | ✅ | `drawStickyGroupRow` re-renders the topmost ancestor at the data band top with aggregates intact |
 | **Loading / no-rows / skeleton overlays** | 🔵 | |
 | Tooltip system | ✅ | Single shared `<div role=tooltip>` with hover delay + Escape/scroll dismiss |
 | Custom cell renderers | ✅ | Pool + overlay layer in core; React adapter shipped (Vue/Svelte/Solid follow-up) |
 | Editor variants | ✅ | `createSelectEditor` / `createDateEditor` / `createTextareaEditor` (autocomplete + multi-select chips follow-up) |
-| **Selection checkbox column** | 🔵 | |
+| Selection checkbox column | ✅ | `createSelectionCheckboxColumn` factory + `<SelectAllCheckbox>` tri-state widget; module-scoped store keeps cells in sync via `useSyncExternalStore` |
 | **Range chart** | 🔵 | Select cells → embed a chart bound to the selection |
 | **Sparklines in cells** | 🔵 | |
 | **Undo/redo** | 🔵 | Transactional edit history |
 | **Light theme + density variants** | 🔵 | Currently one dark theme |
 | IME composition-aware editor commit | ✅ | State machine on composition events + `keyCode===229` guard |
 | Cell editor validation | ✅ | Sync + async with `AbortController`; aria-invalid + aria-errormessage + LiveAnnouncer fallback |
-| **Range fill-handle** | 🔵 | Drag the bottom-right corner of a selection to extrapolate values (Excel-style series fill) |
+| Range fill-handle | ✅ | Bottom-right handle, dashed-outline drag preview, `onFillHandle(source, fill)` callback |
 | **Multi-select cell type with chips** | 🔵 | Multi-value column type rendering chips per cell, with a popover editor |
-| **Column-group visibility manager** | 🔵 | Toggle whole header groups on/off in one action |
+| **Column-group visibility manager** | 🔵 | Toggle whole header groups on/off in one action (single-column visibility ships in `<ColumnToolPanel>`) |
 | **Header text wrap** | 🔵 | Opt-in wrap with auto-row-height in the header band |
 | **Page-level sticky header** | 🔵 | Header sticks to page scroll, not just the grid container — works for grids embedded in long-scroll pages |
 | **FDC3 broadcast + intent listener** | 🔵 | Fintech-desk interop: broadcast row context to peer apps, receive intents back |
@@ -95,12 +96,12 @@ The "inner tables" axis: data and UI that nest cleanly.
 |---|---|---|
 | Master-detail expandable rows | ✅ | |
 | Row grouping (aggregation-driven, not data-driven) | ✅ | |
-| **Tree data with lazy-load children** | 🔵 | Server fetches children at depth N on demand |
-| **Nested grids inside detail panels** | 🔵 | Recursive oneGrid-in-oneGrid with focus + scroll containment |
-| **Server-side tree** | 🔵 | Push tree expansion + lazy children to the server, same DataSource shape |
+| Tree data with lazy-load children | ✅ | Caller-supplied tree, `loadChildren` invoked on first expand; same `getRowMeta` / `onToggleGroup` path used by row grouping |
+| Nested grids inside detail panels | ✅ | Recursive oneGrid-in-oneGrid; `Grid.onDetailUnmount` lifecycle hook lets the consumer destroy() inner instances on collapse / scroll-out / outer destroy |
+| Server-side tree | ✅ | `BlockRequest.parentId` + per-row `HierarchyEntry`; `createSsrmTreeSource` lazy children fetcher; `parentId` participates in cache fingerprint |
 | **Recursive grouping + pivot mix** | 🔵 | Tree data with pivot columns at leaf level |
 | **Drag-drop reorder within tree / group** | 🔵 | Reorder rows across siblings in tree data and across groups; the most-requested gap in the wider grid ecosystem |
-| **Aggregation-aware group-row pin** | 🔵 | Parent group row pins at viewport top while scrolling its children |
+| Aggregation-aware group-row pin | ✅ | `drawStickyGroupRow` re-renders the topmost ancestor group at the data band top with its aggregates intact |
 
 ## 4. Database + data infrastructure
 
@@ -175,7 +176,7 @@ capability.
 Polish on what just shipped + the editing experience users expect.
 Detailed implementation patterns (architecture, edge cases, test
 strategy, code surface, citations) are in
-**[docs/implementation/v0.0.6.md](docs/implementation/v0.0.6.md)**.
+**[docs/v0.0.6.md](docs/v0.0.6.md)**.
 
 Implementation order — each item builds on the previous so the
 critical path is *not* the order they appeared in the original
