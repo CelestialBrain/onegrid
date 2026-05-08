@@ -75,4 +75,48 @@ describe('fingerprintQuery', () => {
     const ungrouped = fingerprintQuery([], null);
     expect(grouped).not.toBe(ungrouped);
   });
+
+  it('differentiates aggregations vs no aggregations', () => {
+    const grouping = { columns: ['status'], openKeys: [] };
+    const noAgg = fingerprintQuery([], null, grouping);
+    const withAgg = fingerprintQuery([], null, grouping, undefined, undefined, [
+      { columnId: 'revenue', fn: 'sum' },
+    ]);
+    expect(noAgg).not.toBe(withAgg);
+  });
+
+  it('differentiates sum vs avg of the same column', () => {
+    const grouping = { columns: ['status'], openKeys: [] };
+    const sum = fingerprintQuery([], null, grouping, undefined, undefined, [
+      { columnId: 'revenue', fn: 'sum' },
+    ]);
+    const avg = fingerprintQuery([], null, grouping, undefined, undefined, [
+      { columnId: 'revenue', fn: 'avg' },
+    ]);
+    expect(sum).not.toBe(avg);
+  });
+
+  it('differentiates aliases', () => {
+    const grouping = { columns: ['status'], openKeys: [] };
+    const a = fingerprintQuery([], null, grouping, undefined, undefined, [
+      { columnId: 'revenue', fn: 'sum', alias: 'total' },
+    ]);
+    const b = fingerprintQuery([], null, grouping, undefined, undefined, [
+      { columnId: 'revenue', fn: 'sum', alias: 'rev_total' },
+    ]);
+    expect(a).not.toBe(b);
+  });
+
+  it('treats two distinct aggregation orderings as distinct', () => {
+    const grouping = { columns: ['status'], openKeys: [] };
+    const ab = fingerprintQuery([], null, grouping, undefined, undefined, [
+      { columnId: 'revenue', fn: 'sum' },
+      { columnId: 'score', fn: 'avg' },
+    ]);
+    const ba = fingerprintQuery([], null, grouping, undefined, undefined, [
+      { columnId: 'score', fn: 'avg' },
+      { columnId: 'revenue', fn: 'sum' },
+    ]);
+    expect(ab).not.toBe(ba);
+  });
 });

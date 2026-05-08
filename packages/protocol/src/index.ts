@@ -222,6 +222,24 @@ export interface BlockRequest {
   readonly sort: SortModel;
   readonly filter: FilterModel;
   readonly grouping?: GroupingModel;
+  /**
+   * Aggregations to compute per group when `grouping` is set. The server
+   * SHOULD pushdown the rollup (`SUM`/`AVG`/`COUNT`/etc.) so it can return
+   * one row per distinct group key combination instead of every raw row in
+   * the group — that's the entire point of pushdown.
+   *
+   * Aliases name the output columns: each `Aggregation`'s `alias` (defaulting
+   * to `${fn}_${columnId}` when omitted) becomes a key on every grouped
+   * response row alongside the group-key columns. Without `grouping`,
+   * `aggregations` is ignored; the server returns flat rows.
+   *
+   * Example request: group by `status`, compute `sum(revenue)` and
+   * `avg(score)`. Response rows look like
+   * `{ status: 'active', sum_revenue: 9.99e9, avg_score: 49.5, __count__: 200000 }`.
+   * The `__count__` field carries the per-group row count so the client can
+   * render the group header chevron + count without a second round-trip.
+   */
+  readonly aggregations?: AggregationModel;
   readonly pivot?: PivotModel;
   /** Subset of columns the client wants materialised. Server may return more. */
   readonly columns?: ReadonlyArray<string>;

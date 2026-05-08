@@ -56,6 +56,7 @@ export class BlockCache {
       req.grouping,
       req.pivot,
       req.parentId,
+      req.aggregations,
     );
   }
 

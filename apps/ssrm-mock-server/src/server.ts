@@ -23,8 +23,10 @@ import http from 'node:http';
 import {
   createColumnTable,
   filterIndex,
+  groupRows,
   sortIndex,
   type ColumnInput,
+  type GroupNode,
 } from '@onegrid/data';
 import type {
   BlockRequest,
@@ -236,6 +238,53 @@ function fetchTreeBlock(parentId: string | null): BlockResponse<'json'> {
   };
 }
 
+/**
+ * Group + aggregate the flat people table per the request's grouping
+ * column list and aggregation spec, returning one row per distinct
+ * top-level group key. Each row carries:
+ *   - the group-key column (e.g. `status: 'active'`)
+ *   - one column per aggregation, named by `alias` or
+ *     `${fn}_${columnId}` (e.g. `sum_revenue`, `avg_score`)
+ *   - `__count__` — the row count under that group, for the chevron
+ *     label / count badge in the renderer
+ *
+ * Pagination ignores cursors here — the result is small enough (at
+ * most a few thousand groups) to fit in one response. A real adapter
+ * would page the group rows themselves under cursor; that's outside
+ * the v0.0.8 item 2 scope.
+ */
+function fetchGroupedBlock(req: BlockRequest): BlockResponse<'json'> {
+  const sel = filterIndex(TABLE, req.filter);
+  const filteredIndices = new Set(sel.toIndices());
+  const root: GroupNode = groupRows(
+    TABLE,
+    req.grouping!,
+    {
+      ...(req.aggregations ? { aggregations: req.aggregations } : {}),
+      rowFilter: (i) => filteredIndices.has(i),
+    },
+  );
+  // Top-level group rows. `groupRows` returns a synthetic root whose
+  // children are the first-level groups. We emit one wire-row per
+  // child. Multi-level open-keys handling lands in v0.0.9.
+  const rows: Record<string, unknown>[] = root.children.map((node) => {
+    const key = node.path[0] ?? null;
+    const groupColumn = req.grouping!.columns[0]!;
+    return {
+      [groupColumn]: key,
+      __count__: node.rowCount,
+      ...node.aggregates,
+    };
+  });
+  return {
+    encoding: 'json',
+    rows,
+    nextCursor: null,
+    prevCursor: null,
+    totalRowCount: rows.length,
+  };
+}
+
 function fetchBlock(req: BlockRequest): BlockResponse<'json'> {
   // Hierarchical fetches branch into the synthetic tree dataset; flat
   // fetches go through the 1M-row people table below. The presence of
@@ -243,6 +292,15 @@ function fetchBlock(req: BlockRequest): BlockResponse<'json'> {
   // never set it always get the flat table.
   if (req.parentId !== undefined) {
     return fetchTreeBlock(req.parentId);
+  }
+  // Aggregation pushdown: when the request carries `grouping`, we
+  // build the group tree and emit one row per top-level group with
+  // the per-group aggregate aliases as columns. Clients get group
+  // headers WITHOUT round-tripping every raw row in the group —
+  // which is the entire point of pushdown for a 1M-row dataset.
+  // (Multi-level grouping + open-key expansion is a v0.0.9 follow-up.)
+  if (req.grouping && req.grouping.columns.length > 0) {
+    return fetchGroupedBlock(req);
   }
   const sel = filterIndex(TABLE, req.filter);
   // Materialize filtered indices, sorted by req.sort.

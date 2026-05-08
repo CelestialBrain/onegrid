@@ -8,6 +8,7 @@
 // =============================================================================
 
 import type {
+  AggregationModel,
   FilterModel,
   FilterNode,
   GroupingModel,
@@ -21,6 +22,7 @@ export function fingerprintQuery(
   grouping?: GroupingModel,
   pivot?: PivotModel,
   parentId?: string | null,
+  aggregations?: AggregationModel,
 ): string {
   const obj = {
     s: sort.map((field) => ({
@@ -50,6 +52,15 @@ export function fingerprintQuery(
     // different parents are cached independently. `undefined` and `null`
     // collapse to the same canonical representation (root level).
     pid: parentId == null ? null : parentId,
+    // aggregations participate so changing the rollup spec (sum vs avg,
+    // adding a new measure, renaming an alias) invalidates the cache.
+    a: aggregations
+      ? aggregations.map((agg) => ({
+          c: agg.columnId,
+          fn: agg.fn,
+          a: agg.alias ?? null,
+        }))
+      : null,
   };
   return JSON.stringify(obj);
 }
