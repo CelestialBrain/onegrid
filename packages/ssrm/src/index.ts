@@ -53,3 +53,9 @@ export {
   isLegacyOffsetCursor,
   parseLegacyOffsetCursor,
 } from './cursor';
+
+export { createRowDiffTracker } from './row-diff-tracker';
+export type {
+  RowDiffTracker,
+  RowDiffTrackerOptions,
+} from './row-diff-tracker';

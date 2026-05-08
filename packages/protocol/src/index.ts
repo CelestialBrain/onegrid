@@ -422,6 +422,62 @@ export type Patch =
   | InvalidatePatch;
 
 // -----------------------------------------------------------------------------
+// Real-time row-diff stream
+// -----------------------------------------------------------------------------
+
+/**
+ * Single versioned row-diff event. Servers emit one for every
+ * insert / update / delete on any row a client could have cached.
+ * `version` is monotonically increasing per source — a client tracks
+ * the last seen value to detect a gap (e.g. after a WebSocket
+ * reconnect) and trigger a resync request.
+ *
+ * Wire shape is deliberately flat (no nested `patch`) so the
+ * envelope cost is minimal — high-throughput change streams may emit
+ * thousands of these per second.
+ */
+export interface RowDiff {
+  readonly kind: 'insert' | 'update' | 'delete';
+  /** Monotonic per-source counter. Strictly increasing across emits. */
+  readonly version: number;
+  /** Primary key value identifying the row across its lifecycle. */
+  readonly pkey: string | number;
+  /** Cell values for insert / update; omitted for delete. Servers
+   *  MAY send a partial map for update (only changed fields) — the
+   *  client's reconciliation policy decides whether to merge against
+   *  cached state or refetch the row. */
+  readonly fields?: Record<string, unknown>;
+}
+
+/**
+ * Client → server: replay row-diffs from `fromVersion` (exclusive)
+ * onwards. Sent when the client detects a version gap (last seen
+ * version + 1 ≠ next received version) or after a transport
+ * reconnect.
+ */
+export interface ResyncRequest {
+  readonly fromVersion: number;
+}
+
+/**
+ * Server → client response to a `ResyncRequest`. When the gap is
+ * small enough to replay (`diffs` populated, `snapshot` absent),
+ * the client merges them in version order. When the gap is too
+ * large to keep history for (`snapshot: true`), the client MUST
+ * drop its cache and re-fetch from scratch — the server is telling
+ * it that a coherent replay isn't possible.
+ */
+export interface ResyncResponse {
+  readonly fromVersion: number;
+  readonly toVersion: number;
+  readonly diffs: ReadonlyArray<RowDiff>;
+  /** When true, the client should treat its cache as invalid and
+   *  re-issue the original `BlockRequest`s from scratch. `diffs` is
+   *  empty in this case. */
+  readonly snapshot?: true;
+}
+
+// -----------------------------------------------------------------------------
 // Errors
 // -----------------------------------------------------------------------------
 
