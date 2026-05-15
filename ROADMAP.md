@@ -537,9 +537,24 @@ The flagship moonshot.
 - Compute-shader sort/filter at viewport scale
 - Cross-database joins via DuckDB-WASM in the same render frame
 
-### v1.0.0 — "stable"
+### v1.0.0 — "stable"  🟡 **RC shipped (2026-05-16) — final pending audit + version bumps**
 Surface freeze, full a11y audit, every adapter promoted from
 experimental, semver guarantees, security review.
+
+RC ([docs/v1.0.0.md](./docs/v1.0.0.md)) ships:
+- [`docs/SURFACE.md`](./docs/SURFACE.md) — four stability tiers (`@public`/`@beta`/`@internal`/`@deprecated`); public surface enumerated for every package.
+- [`docs/SEMVER.md`](./docs/SEMVER.md) — semver policy (what counts as breaking) + deprecation lifecycle + wire-protocol stability rule.
+- [`docs/SECURITY.md`](./docs/SECURITY.md) — threat model + in-scope defenses (XSS / SQL injection / formula eval / Worker messages / MCP mutation discipline / CSP) + out-of-scope items.
+- `apps/benchmarks/src/a11y-modes.spec.ts` — axe-core WCAG 2.1 A/AA gate on every playground mode + column tool panel + filters + group-by sticky rows. 7 new tests, all green.
+
+Final ([docs/v1.0.0.md](./docs/v1.0.0.md) §"What v1.0.0 final still needs") lands when:
+- Workspace-wide version bump (0.0.x → 1.0.0; mechanical, touches every package.json + peer-dep range).
+- `@public` / `@beta` JSDoc tags on every public export.
+- Auto-generated API report (`docs/api/*.api.md`) per package; PR diff gate.
+- Third-party security audit report.
+- Fuzz harness in CI (formula parser, cursor codec, duckdb-join SQL gen, filter expression validator).
+- Deprecation-import lint rule.
+- v0.0.11 + v0.1.0 packages auto-promote `@beta` → `@public` at v1.3 per surface policy.
 
 ### v1.1.0 — "spreadsheet-grade compat"
 
