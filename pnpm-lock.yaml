@@ -59,15 +59,30 @@ importers:
       '@duckdb/duckdb-wasm':
         specifier: ^1.28.0
         version: 1.32.0
+      '@onegrid/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@onegrid/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@onegrid/crdt':
+        specifier: workspace:*
+        version: link:../../packages/crdt
       '@onegrid/data':
         specifier: workspace:*
         version: link:../../packages/data
+      '@onegrid/data-worker':
+        specifier: workspace:*
+        version: link:../../packages/data-worker
+      '@onegrid/dbsp':
+        specifier: workspace:*
+        version: link:../../packages/dbsp
       '@onegrid/duckdb':
         specifier: workspace:*
         version: link:../../packages/duckdb
+      '@onegrid/duckdb-join':
+        specifier: workspace:*
+        version: link:../../packages/duckdb-join
       '@onegrid/export':
         specifier: workspace:*
         version: link:../../packages/export
@@ -80,15 +95,33 @@ importers:
       '@onegrid/intl':
         specifier: workspace:*
         version: link:../../packages/intl
+      '@onegrid/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
+      '@onegrid/orm-sync':
+        specifier: workspace:*
+        version: link:../../packages/orm-sync
       '@onegrid/plugin-kit':
         specifier: workspace:*
         version: link:../../packages/plugin-kit
+      '@onegrid/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@onegrid/react':
         specifier: workspace:*
         version: link:../../packages/adapters/react
+      '@onegrid/reactive':
+        specifier: workspace:*
+        version: link:../../packages/reactive
+      '@onegrid/sparklines':
+        specifier: workspace:*
+        version: link:../../packages/sparklines
       '@onegrid/ssrm':
         specifier: workspace:*
         version: link:../../packages/ssrm
+      '@onegrid/temporal':
+        specifier: workspace:*
+        version: link:../../packages/temporal
       '@onegrid/tokens':
         specifier: workspace:*
         version: link:../../packages/tokens
@@ -98,6 +131,9 @@ importers:
       '@onegrid/webgpu':
         specifier: workspace:*
         version: link:../../packages/webgpu
+      '@onegrid/webgpu-render':
+        specifier: workspace:*
+        version: link:../../packages/webgpu-render
       '@onegrid/worker-plugins':
         specifier: workspace:*
         version: link:../../packages/worker-plugins

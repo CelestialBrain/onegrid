@@ -31,3 +31,10 @@ export {
   cpuFilterMaskF32,
   type FilterOp,
 } from './filter';
+
+export {
+  gpuHashAggSumF32,
+  cpuHashAggSumF32,
+  type HashAggResult,
+  type HashAggOptions,
+} from './hash-agg';

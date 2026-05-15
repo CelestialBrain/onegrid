@@ -39,6 +39,9 @@ import {
 } from '@onegrid/webgpu';
 import { Grid, type RowMeta } from '@onegrid/core';
 import { V009Demo } from './v009-demo';
+import { V010Demo } from './v010-demo';
+import { V011Demo } from './v011-demo';
+import { V100Demo } from './v100-demo';
 import { connectSsrm, SSRM_COLUMNS, type SsrmConnection } from './lib/ssrm';
 import {
   connectDuckDb,
@@ -313,6 +316,9 @@ export const App = (): JSX.Element => {
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showColumnPanel, setShowColumnPanel] = useState(false);
   const [showV009Demo, setShowV009Demo] = useState(false);
+  const [showV010Demo, setShowV010Demo] = useState(false);
+  const [showV011Demo, setShowV011Demo] = useState(false);
+  const [showV100Demo, setShowV100Demo] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuTarget | null>(null);
   const [checkedRows, setCheckedRows] = useState<Set<number>>(new Set());
   // Off by default — adding the checkbox column shifts every other
@@ -1613,6 +1619,37 @@ export const App = (): JSX.Element => {
 
         <button
           type="button"
+          data-testid="v010-demo-toggle"
+          onClick={() => {
+            setShowV010Demo((s) => !s);
+          }}
+          style={{ fontWeight: showV010Demo ? 600 : 400 }}
+        >
+          v0.0.10 Demo
+        </button>
+        <button
+          type="button"
+          data-testid="v011-demo-toggle"
+          onClick={() => {
+            setShowV011Demo((s) => !s);
+          }}
+          style={{ fontWeight: showV011Demo ? 600 : 400 }}
+        >
+          v0.0.11 Demo
+        </button>
+        <button
+          type="button"
+          data-testid="v100-demo-toggle"
+          onClick={() => {
+            setShowV100Demo((s) => !s);
+          }}
+          style={{ fontWeight: showV100Demo ? 600 : 400 }}
+        >
+          v0.1.0 Demo
+        </button>
+
+        <button
+          type="button"
           data-testid="v009-demo-toggle"
           onClick={() => {
             setShowV009Demo((s) => !s);
@@ -1843,6 +1880,39 @@ export const App = (): JSX.Element => {
             }}
           >
             <V009Demo />
+          </div>
+        )}
+        {showV010Demo && (
+          <div
+            style={{
+              flex: '0 0 auto',
+              borderLeft: '1px solid var(--border)',
+              overflow: 'auto',
+            }}
+          >
+            <V010Demo />
+          </div>
+        )}
+        {showV011Demo && (
+          <div
+            style={{
+              flex: '0 0 auto',
+              borderLeft: '1px solid var(--border)',
+              overflow: 'auto',
+            }}
+          >
+            <V011Demo />
+          </div>
+        )}
+        {showV100Demo && (
+          <div
+            style={{
+              flex: '0 0 auto',
+              borderLeft: '1px solid var(--border)',
+              overflow: 'auto',
+            }}
+          >
+            <V100Demo />
           </div>
         )}
         {!dataReady && (
