@@ -1,0 +1,10 @@
+{
+  "name": "@onegrid/dbsp",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 4096,
+      "note": "Z-set + source/map/filter/union/distinct/groupAgg/topK + Pipeline. Headroom for the full join + sort indexes scheduled for v0.0.10.x."
+    }
+  ]
+}
