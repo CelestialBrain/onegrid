@@ -1,0 +1,10 @@
+{
+  "name": "@onegrid/crdt",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 2048,
+      "note": "Yjs + Automerge bridges. No CRDT lib imports — adopters keep the real doc outside the package and pass structural ports."
+    }
+  ]
+}
