@@ -1,0 +1,10 @@
+{
+  "name": "@onegrid/temporal",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 2048,
+      "note": "Append-only diff log + snapshot anchors + branch + invertDiff. Memory bounds are caller-controlled via anchorInterval + retentionVersions."
+    }
+  ]
+}

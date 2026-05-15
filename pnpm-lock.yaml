@@ -425,6 +425,12 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
+  packages/temporal:
+    dependencies:
+      '@onegrid/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
   packages/tokens:
     dependencies:
       '@onegrid/plugin-kit':
