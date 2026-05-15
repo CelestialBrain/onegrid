@@ -1,0 +1,15 @@
+{
+  "name": "@onegrid/worker-plugins",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 2048,
+      "note": "Host side — WorkerPluginHost + collectTransferables."
+    },
+    {
+      "file": "dist/worker.js",
+      "bytes": 1024,
+      "note": "Worker side — definePluginWorker dispatcher. Authors import this from inside their worker file."
+    }
+  ]
+}
