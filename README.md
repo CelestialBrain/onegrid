@@ -2,7 +2,7 @@
 
 > A free, open-source, framework-agnostic data grid built for 10M+ rows, multiple databases, formulas, instant updates, and modern ORM integrations. MIT-licensed end to end.
 
-**Status:** v0.0.8 (on `main`) — engine, SSRM with canonical keyset cursors / aggregation pushdown / real-time row-diff protocol / Arrow IPC ingestion, formula engine, DuckDB-WASM mode, cell editing, row grouping, pivot tables, master-detail with nested grids, tree data with lazy-load, server-side hierarchical fetch, column drag-drop reorder, column tool panel, context menu, sticky group rows, range fill-handle, selection checkbox column, GPU compute kernels, real database adapters (Postgres, MySQL, SQLite, ClickHouse, Mongo) with universal CDC + optimistic-mutation orchestration, schema introspection, and the framework + ORM adapter family.
+**Status:** through v0.1.0 (on `main`) — engine + canvas renderer with column virtualization and adaptive overscan; SSRM with canonical keyset cursors / aggregation pushdown / real-time row-diff protocol / Arrow IPC ingestion; BigInt-safe formula engine; DuckDB-WASM mode with cross-source SQL joins; cell editing, row grouping, pivot tables, master-detail with nested grids, tree data with lazy-load; server-side hierarchical fetch; column drag-drop reorder, column tool panel, context menu, sticky group rows, range fill-handle, selection checkbox column; GPU compute kernels (reduce / filter / hash-aggregate) with CPU fallbacks; real database adapters (Postgres, MySQL, SQLite, ClickHouse, Mongo) with universal CDC + optimistic-mutation orchestration; schema introspection; framework + ORM adapter family; **plugin-kit + DTCG tokens + headless lifecycle + intl + touch + worker-plugins + bundle-budget CI** (v0.0.9); **DBSP operator algebra + data-worker offload + sparklines** (v0.0.10); **MCP server + time-travel + AI intents + live ORM sync + CRDT collab + Salsa reactivity substrate** (v0.0.11); **WebGPU render scaffold + MSDF text + cross-DB joins** (v0.1.0).
 
 ---
 
@@ -59,6 +59,23 @@ All under a single MIT license. No paywalled tiers. No commercial-only features.
 | [`@onegrid/clickhouse`](packages/adapters/clickhouse) | ClickHouse adapter — native named parameters + Arrow IPC |
 | [`@onegrid/mongo`](packages/adapters/mongo) | MongoDB adapter — find / aggregation pipeline + change-streams CDC |
 | [`@onegrid/introspect`](packages/introspect) | Schema introspection — Schema → ColumnDef[], SQL data-type mapping |
+| [`@onegrid/plugin-kit`](packages/plugin-kit) | CodeMirror-6-style facets + compartments + 10 typed plugin registries |
+| [`@onegrid/tokens`](packages/tokens) | W3C DTCG 2025.10 design tokens → CSS variables (themes + density) |
+| [`@onegrid/headless`](packages/headless) | Lit-`ReactiveController` lifecycle wrapping `Grid` (mount / requestUpdate / SSR shadow) |
+| [`@onegrid/intl`](packages/intl) | i18n / l10n / RTL — `Intl.*` wrappers, ICU MessageFormat subset, BCP 47 validator |
+| [`@onegrid/touch`](packages/touch) | Pointer Events 3 gesture recognizer + touch CSS emitter + VirtualKeyboard adapter |
+| [`@onegrid/worker-plugins`](packages/worker-plugins) | Worker-boundary sandbox for user-supplied compute (formula fns, aggregators) |
+| [`@onegrid/data-worker`](packages/data-worker) | Web Worker offload for `@onegrid/data` sort / filter / group / pivot |
+| [`@onegrid/dbsp`](packages/dbsp) | DBSP operator algebra — Z-sets + incremental view maintenance |
+| [`@onegrid/sparklines`](packages/sparklines) | In-cell line / bar / win-loss charts drawn to the canvas |
+| [`@onegrid/mcp`](packages/mcp) | Model Context Protocol surface — LLMs read + act on the grid through standardized tools |
+| [`@onegrid/temporal`](packages/temporal) | Time-travel — append-only diff log, snapshotAt(version), branch, invertDiff |
+| [`@onegrid/ai`](packages/ai) | Natural-language → typed grid intent (BYO-LLM contract) |
+| [`@onegrid/orm-sync`](packages/orm-sync) | Live ORM sync — typed CDC bridge for Drizzle / Kysely / Prisma |
+| [`@onegrid/crdt`](packages/crdt) | Collaborative editing — Yjs + Automerge bridges into RowDiff streams |
+| [`@onegrid/reactive`](packages/reactive) | Salsa-style on-demand memoization substrate with backdating |
+| [`@onegrid/webgpu-render`](packages/webgpu-render) | WebGPU rendering scaffold — device + cell-quad pipeline + MSDF text shader |
+| [`@onegrid/duckdb-join`](packages/duckdb-join) | Cross-database SQL joins via DuckDB-WASM (rows / arrow / sql sources) |
 
 ---
 
@@ -83,11 +100,15 @@ The full slate of planned work — surface area, performance, hierarchy, databas
 
 ---
 
-## Feature surface (v0.0.7 on `main`)
+## Feature surface (through v0.1.0 on `main`)
 
+### Renderer + interaction (v0.0.6–v0.0.10)
 | Category | Status |
 |---|---|
 | Canvas-2D renderer (10M rows, variable row heights via Fenwick) | shipped |
+| Column virtualization (visible-range narrowing in draw loops) | shipped (v0.0.10) |
+| Adaptive overscan (EMA-smoothed velocity + direction-aware split) | shipped (v0.0.10) |
+| rAF discipline + dirty-state gate (no idle-loop battery drain) | shipped (v0.0.10) |
 | Frozen columns | shipped |
 | Sort (single + multi-column) | shipped |
 | Filter (quick-filter, per-column rules, set filter with distinct counts, floating filter row) | shipped |
@@ -112,16 +133,62 @@ The full slate of planned work — surface area, performance, hierarchy, databas
 | Column tool panel / sidebar (React `<ColumnToolPanel>` for show/hide + within-panel reorder) | shipped |
 | Context menu (cell/header/empty target resolution, native menu suppressed) | shipped |
 | Selection-checkbox column (`createSelectionCheckboxColumn` + `<SelectAllCheckbox>`) | shipped |
-| CSV + XLSX export | shipped |
+| In-cell sparklines (line / bar / winloss) | shipped (v0.0.10) |
+
+### Data + adapters (v0.0.8)
+| Category | Status |
+|---|---|
 | Server-side row model (cursor + block cache + optimistic mutations) | shipped |
-| Formula engine (parser, dep graph, range nodes, Adapton-style recompute) | shipped |
+| Real database adapters: Postgres, MySQL, SQLite, ClickHouse, Mongo | shipped (v0.0.8) |
+| Universal CDC adapter shape + monotonic row-diff stream + resync protocol | shipped (v0.0.8) |
+| Schema introspection (`@onegrid/introspect`) | shipped (v0.0.8) |
+| Arrow IPC ingestion (`application/vnd.apache.arrow.stream`) | shipped (v0.0.8) |
+| BigInt-safe formula path (precision past 2^53 for int64 columns) | shipped (v0.0.10) |
+| Formula engine (parser, dep graph, range nodes, Adapton-style recompute, 41 built-in fns) | shipped |
 | DuckDB-WASM as a backing engine | shipped |
-| GPU compute kernels (WebGPU): parallel reduce + predicate→mask filter | shipped |
+| Cross-database SQL joins via DuckDB-WASM (`@onegrid/duckdb-join`) | shipped (v0.1.0) |
+| Web Worker offload for sort / filter / group / pivot (`@onegrid/data-worker`) | shipped (v0.0.10) |
+| DBSP operator algebra + incremental view maintenance (`@onegrid/dbsp`) | shipped (v0.0.10) |
+| CSV + XLSX export | shipped |
 | `@onegrid/migrate` CLI (config translator, AST-based) | shipped |
 | ORM adapters: Drizzle, Kysely | shipped |
 | Framework adapters: React, Vue, Svelte, Solid, Angular, Web Components | shipped |
-| WebGPU rendering path (full canvas replacement with glyph atlas) | not yet |
-| Real Postgres / MySQL / SQLite database adapters | not yet |
+
+### Extensibility + ergonomics (v0.0.9)
+| Category | Status |
+|---|---|
+| Plugin / extension framework (`@onegrid/plugin-kit` — facets, compartments, 10 registries) | shipped (v0.0.9) |
+| Design tokens — DTCG 2025.10 themes + density (`@onegrid/tokens`) | shipped (v0.0.9) |
+| Nested config + `defineGridOptions` migration | shipped (v0.0.9) |
+| Headless contract — Lit-`ReactiveController` lifecycle (`@onegrid/headless`) | shipped (v0.0.9) |
+| Per-package bundle-budget CI (`pnpm bundle:check` with [budget-bump: pkg] escape hatch) | shipped (v0.0.9) |
+| i18n / l10n / RTL (`@onegrid/intl` — Intl.\*, ICU MessageFormat subset, BCP 47) | shipped (v0.0.9) |
+| Touch / mobile (`@onegrid/touch` — gestures, touch CSS, VirtualKeyboard) | shipped (v0.0.9) |
+| Worker-boundary plugin sandbox (`@onegrid/worker-plugins`) | shipped (v0.0.9) |
+| Error boundaries, schema-evolution, RLS, deprecation policy, test harness, print/export, validators, feature-flags | research-pending (v0.0.9.x) |
+
+### Moats (v0.0.11)
+| Category | Status |
+|---|---|
+| Model Context Protocol surface (`@onegrid/mcp`) | shipped (v0.0.11) |
+| Time-travel — diff log, snapshotAt, branch, invertDiff (`@onegrid/temporal`) | shipped (v0.0.11) |
+| AI integration — NL → typed intents, BYO-LLM (`@onegrid/ai`) | shipped (v0.0.11) |
+| Live ORM sync — Drizzle / Kysely / Prisma (`@onegrid/orm-sync`) | shipped (v0.0.11) |
+| Collaborative editing — Yjs / Automerge bridges (`@onegrid/crdt`) | shipped (v0.0.11) |
+| Salsa-style reactivity substrate (`@onegrid/reactive`) | shipped (v0.0.11; formula migration in v0.0.11.x) |
+
+### WebGPU (v0.0.5 → v0.1.0)
+| Category | Status |
+|---|---|
+| GPU compute kernels: parallel reduce + predicate→mask filter | shipped (v0.0.5) |
+| GPU hash-aggregate (atomic-CAS spin loop for f32 sums) | shipped (v0.1.0) |
+| WebGPU render scaffold (device + cell-quad pipeline + MSDF text shader + per-cell vertex buffer protocol) | shipped (v0.1.0) |
+| Canvas → WebGPU paint-loop port (full renderer replacement) | scaffold landed; full migration in v0.1.0.x |
+
+### Roadmap ahead
+- **v0.1.0.x** — canvas→WebGPU paint-loop migration, hash-agg linear probing, Slug-style per-curve text
+- **v1.0.0** — surface freeze, full a11y audit, every adapter promoted from experimental, semver guarantees, security review
+- **v1.1.0** — spreadsheet-grade compat: ~460 Excel functions, dynamic arrays + spilling, structured table refs, R1C1 mode, OOXML interop
 
 ---
 
