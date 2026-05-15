@@ -10,7 +10,16 @@
 // =============================================================================
 
 import type { FormulaNode } from './ast';
-import { compare, toBoolean, toNumber, toString_ } from './coerce';
+import {
+  addNumeric,
+  compare,
+  divNumeric,
+  mulNumeric,
+  subNumeric,
+  toBoolean,
+  toNumber,
+  toString_,
+} from './coerce';
 import {
   DIV_ZERO,
   FormulaError,
@@ -81,27 +90,22 @@ function evalBinary(
 
   switch (op) {
     case '+':
+      return addNumeric(l, r);
     case '-':
+      return subNumeric(l, r);
     case '*':
+      return mulNumeric(l, r);
     case '/':
+      return divNumeric(l, r);
     case '^': {
+      // ^ is always float (BigInt exponentiation `a ** b` requires both
+      // bigint; Excel allows fractional + negative exponents we can't
+      // represent in BigInt anyway).
       const a = toNumber(l);
       const b = toNumber(r);
       if (isFormulaError(a)) return a;
       if (isFormulaError(b)) return b;
-      switch (op) {
-        case '+':
-          return a + b;
-        case '-':
-          return a - b;
-        case '*':
-          return a * b;
-        case '/':
-          return b === 0 ? DIV_ZERO : a / b;
-        case '^':
-          return Math.pow(a, b);
-      }
-      return VALUE_ERROR;
+      return Math.pow(a, b);
     }
     case '&':
       return toString_(l) + toString_(r);
