@@ -36,6 +36,8 @@ export type {
   ValidationResult,
 } from './types';
 
+export type { SelectionSnapshot } from './selection';
+
 export {
   createSelectEditor,
   createDateEditor,

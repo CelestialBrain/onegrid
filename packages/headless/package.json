@@ -1,0 +1,40 @@
+{
+  "name": "@onegrid/headless",
+  "version": "0.0.9",
+  "description": "Framework-agnostic Grid host with Lit-ReactiveController-shaped lifecycle. Imperative surface (setSort/setFilter/setColumns/scrollToRow/subscribe) + rAF-coalesced invalidate + SSR shadow-HTML serialization.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@onegrid/core": "workspace:*",
+    "@onegrid/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false
+}

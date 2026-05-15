@@ -314,6 +314,19 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
+  packages/headless:
+    dependencies:
+      '@onegrid/core':
+        specifier: workspace:*
+        version: link:../core
+      '@onegrid/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      jsdom:
+        specifier: ^25.0.0
+        version: 25.0.1
+
   packages/introspect:
     dependencies:
       '@onegrid/protocol':
