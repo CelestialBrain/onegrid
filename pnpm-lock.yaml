@@ -412,6 +412,15 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
+  packages/orm-sync:
+    dependencies:
+      '@onegrid/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@onegrid/ssrm':
+        specifier: workspace:*
+        version: link:../ssrm
+
   packages/plugin-kit:
     dependencies:
       '@onegrid/protocol':

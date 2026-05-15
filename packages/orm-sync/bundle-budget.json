@@ -1,0 +1,10 @@
+{
+  "name": "@onegrid/orm-sync",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 3072,
+      "note": "Descriptor extractors (Drizzle/Kysely/Prisma) + bindOrmSync. Heavy lifting stays in @onegrid/ssrm CDC adapters."
+    }
+  ]
+}
