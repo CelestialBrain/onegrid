@@ -387,6 +387,16 @@ importers:
         specifier: workspace:*
         version: link:../plugin-kit
 
+  packages/touch:
+    dependencies:
+      '@onegrid/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      jsdom:
+        specifier: ^25.0.0
+        version: 25.0.1
+
   packages/webgpu:
     dependencies:
       '@onegrid/protocol':

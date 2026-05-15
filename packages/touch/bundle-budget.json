@@ -1,0 +1,10 @@
+{
+  "name": "@onegrid/touch",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 4096,
+      "note": "Gesture recognizer + touch CSS emitter + VirtualKeyboard adapter + inputmode mapping."
+    }
+  ]
+}
