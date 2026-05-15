@@ -528,7 +528,7 @@ The signature features that aren't on any other grid.
 - Salsa-style reactivity substrate refactor
   (Plugin / extension API moved to v0.0.9 item 1.)
 
-### v0.1.0 — "WebGPU rendering"
+### v0.1.0 — "WebGPU rendering"  ✅ **Shipped (scaffold + protocol; renderer migration in v0.1.0.x)**
 The flagship moonshot.
 - MSDF glyph atlas (the lower-risk path, ports cleanly from the public WebGPU MSDF sample)
 - Slug-style per-curve quadratic Bézier text (atlas-free fallback for arbitrarily-large zoom)
