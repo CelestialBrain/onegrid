@@ -1,0 +1,33 @@
+{
+  "name": "@onegrid/mcp",
+  "version": "0.0.11",
+  "description": "Model Context Protocol server surface for oneGrid — exposes grid state (columns, sort, filter, selection, viewport) and mutation tools through MCP's typed tool/resource shapes. Lets an LLM read and act on the grid through a standardized contract.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@onegrid/protocol": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false
+}

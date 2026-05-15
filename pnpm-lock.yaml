@@ -375,6 +375,12 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
+  packages/mcp:
+    dependencies:
+      '@onegrid/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
   packages/migrate:
     dependencies:
       commander:

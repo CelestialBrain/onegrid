@@ -1,0 +1,10 @@
+{
+  "name": "@onegrid/mcp",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 3072,
+      "note": "JSON-RPC handler + 6 tools + 6 resources + tool/resource descriptors. No SDK dependency — adopters plug into any MCP transport."
+    }
+  ]
+}
