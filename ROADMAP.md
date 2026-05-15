@@ -332,7 +332,7 @@ Side-quests with no ordering dependency (ship anywhere in v0.0.8):
 - Row-level security / column permissions (declarative, server-enforced)
 - Snowflake adapter, BigQuery adapter, Elasticsearch adapter, Prisma adapter
 
-### v0.0.9 — "extensibility + ergonomics"
+### v0.0.9 — "extensibility + ergonomics"  ✅ **Items 1–8 shipped**
 
 Systems-design layer. Detailed implementation patterns will land in
 **`docs/v0.0.9.md`** as the milestone progresses; the architectural
