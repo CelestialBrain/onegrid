@@ -1,0 +1,15 @@
+{
+  "name": "@onegrid/data-worker",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 1024,
+      "note": "Host-side typed wrapper. Real cost is in the worker bundle which inlines @onegrid/data."
+    },
+    {
+      "file": "dist/worker.js",
+      "bytes": 8192,
+      "note": "Worker-side dispatcher. Bundles @onegrid/data — same surface as the in-process path, just on the other side of postMessage."
+    }
+  ]
+}

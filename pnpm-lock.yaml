@@ -301,6 +301,18 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
+  packages/data-worker:
+    dependencies:
+      '@onegrid/data':
+        specifier: workspace:*
+        version: link:../data
+      '@onegrid/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@onegrid/worker-plugins':
+        specifier: workspace:*
+        version: link:../worker-plugins
+
   packages/duckdb:
     dependencies:
       '@duckdb/duckdb-wasm':
