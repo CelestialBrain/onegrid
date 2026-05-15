@@ -5,7 +5,7 @@ most capable open-source grid in the JavaScript ecosystem. Items are
 grouped by where they create leverage, not by release order — see
 "Sequencing" at the bottom for milestone framing.
 
-**Last updated:** 2026-05-10
+**Last updated:** 2026-05-15
 
 ## Status legend
 
@@ -540,6 +540,133 @@ The flagship moonshot.
 ### v1.0.0 — "stable"
 Surface freeze, full a11y audit, every adapter promoted from
 experimental, semver guarantees, security review.
+
+### v1.1.0 — "spreadsheet-grade compat"
+
+Excel/Sheets-grade formula coverage. v0.0.5–v1.0 ships a working
+Adapton-based formula engine with ~41 functions covering the common
+arithmetic / aggregation / text / date / logical set; v1.1 brings the
+function library and the structural semantics to feature parity with
+Excel's published behavior. Public source only — Microsoft's published
+function documentation and the OOXML spec (ECMA-376) for the wire
+shape; never any proprietary engine source.
+
+Function library — ~460 additional functions across nine groups:
+
+- **Lookup / reference** (~15) — VLOOKUP, HLOOKUP, XLOOKUP, INDEX,
+  MATCH, OFFSET, INDIRECT, CHOOSE, FILTER, SORT, UNIQUE, SEQUENCE,
+  LET, LAMBDA, MAP
+- **Statistical** (~80) — MEDIAN, MODE family, STDEV* / VAR*,
+  PERCENTILE* / QUARTILE*, RANK*, COUNTIF* / AVERAGEIF* / SUMIF*,
+  regression family (SLOPE, INTERCEPT, RSQ, FORECAST*, LINEST,
+  TREND), distribution functions (NORM*, T*, CHISQ*, BINOM*, POISSON,
+  WEIBULL, GAMMA*)
+- **Financial** (~55) — NPV, IRR, MIRR, PMT, FV, PV, RATE, NPER, the
+  depreciation family (SLN, SYD, DDB, VDB), bond math (PRICE,
+  YIELD, DURATION, MDURATION, ACCRINT, COUPNUM)
+- **Date / time** (~25) — DATEDIF, NETWORKDAYS / NETWORKDAYS.INTL,
+  WORKDAY / WORKDAY.INTL, EOMONTH, EDATE, WEEKNUM with all 11 week
+  bases, ISOWEEKNUM, YEARFRAC with all 5 basis modes
+- **Text** (~30) — TEXTSPLIT, TEXTJOIN, TEXTBEFORE / TEXTAFTER,
+  the new REGEX* family (REGEXTEST, REGEXEXTRACT, REGEXREPLACE),
+  PROPER, CLEAN, EXACT, T, VALUE, NUMBERVALUE, CHAR / CODE /
+  UNICHAR / UNICODE, DOLLAR / FIXED
+- **Math** (~60) — LOG family, full trig (SIN/COS/TAN/A* and
+  hyperbolic), matrix ops (MMULT, MINVERSE, MDETERM, MUNIT),
+  GCD / LCM, COMBIN / COMBINA / PERMUT / PERMUTATIONA, ROMAN /
+  ARABIC, SIGN, modular arithmetic, RAND / RANDBETWEEN /
+  RANDARRAY
+- **Logical** (~10) — IFS, SWITCH, XOR, LET, BYROW, BYCOL,
+  REDUCE, SCAN, MAKEARRAY
+- **Engineering** (~50) — BIN2HEX / HEX2BIN / DEC2BIN / OCT2*
+  family, BITAND / BITOR / BITXOR / BITLSHIFT / BITRSHIFT,
+  Bessel functions (BESSELI / J / K / Y), complex number math
+  (COMPLEX, IMABS, IMSUM, IMAGINARY, IMREAL, IMARGUMENT,
+  IMCONJUGATE, IMEXP, IMLN, IMLOG10, IMSQRT, IMPOWER, IMPRODUCT,
+  IMDIV, IMSUB), error functions (ERF / ERFC), unit conversion
+  (CONVERT with all unit groups)
+- **Database / cube / web** (~50) — DGET, DSUM, DAVERAGE,
+  DCOUNT*, DMAX, DMIN, DPRODUCT, DSTDEV*, DVAR*, CUBEMEMBER,
+  CUBEVALUE, CUBESET, CUBEFIELD, CUBEKPIMEMBER (subset behind
+  optional sub-path; many require OLAP connectivity), WEBSERVICE,
+  FILTERXML, ENCODEURL, HYPERLINK
+
+Structural semantics (the bigger lift than function count):
+
+- **Dynamic arrays + spilling** — single-formula multi-cell output,
+  `#` spilled-range operator, implicit-intersection `@` operator
+  introduced in Excel 2019. Requires evaluator refactor — the
+  current single-cell model isn't enough.
+- **Structured table references** — `Table1[#Headers]`,
+  `Table1[@Column]`, `Table1[[#All],[Column]]` syntax + parser
+  hooks.
+- **Named ranges with workbook / sheet scope** — name resolution
+  before A1 resolution, scope shadowing rules.
+- **R1C1 vs A1 reference modes** — switchable at workbook level;
+  relative references in R1C1 use `R[1]C[-1]`-style brackets.
+- **Mixed / absolute references** — `$A$1`, `A$1`, `$A1` mode
+  combinations and how copy-paste shifts them.
+
+Excel-compatibility bug-list (matching exact behavior so adopters'
+existing spreadsheets evaluate the same number):
+
+- **1900 leap year bug** — Excel treats 1900 as a leap year for
+  Lotus 1-2-3 compatibility; serial number 60 maps to a non-
+  existent date. Match the bug; let opt-out via
+  `formula.dateSystem: '1904'` (Mac mode) or
+  `'1900-strict'` (no bug — breaks .xlsx round-trip).
+- **DATE serial number epoch** — 1900-01-01 = 1 in 1900 mode,
+  1904-01-01 = 0 in 1904 mode.
+- **Float-precision display rules** — Excel rounds at the cell
+  level to suppress `0.1 + 0.2 = 0.30000000000000004`; document
+  exact threshold and match.
+- **Operator precedence edge cases** — `-2^2 = -4` in Excel
+  (unary minus binds tighter than `^`); standard math says +4.
+  Decision: match Excel; document the divergence from
+  mathematical convention.
+- **Empty-cell vs zero coercion** — empty cell is 0 in arithmetic,
+  "" in text, FALSE in logical, but `ISBLANK` distinguishes.
+- **Error propagation order** — `#NULL!` < `#DIV/0!` < `#VALUE!`
+  < `#REF!` < `#NAME?` < `#NUM!` < `#N/A`. First error wins
+  unless wrapped in IFERROR / IFNA.
+- **Implicit intersection `@`** — pre-2019 Excel implicitly
+  intersected ranges with the formula's row; modern Excel requires
+  the explicit `@` operator. Both modes opt-in via
+  `formula.implicitIntersection`.
+- **Circular references** — opt-in iterative calculation
+  (`formula.iteration: { max: 100, epsilon: 0.001 }`); without
+  it, return `#REF!` and stop.
+- **Locale-aware decimal / list separators** — `;` vs `,` for
+  function arguments, `,` vs `.` for decimals. Driven by the
+  v0.0.9 i18n locale.
+- **Text-as-number coercion** — `"5" + 3 = 8` in Excel; `"5x" + 3
+  = #VALUE!`. Match exactly.
+- **Boolean ↔ 0/1 promotion** — TRUE + 1 = 2; SUM(TRUE, FALSE) = 1.
+- **ROUND vs ROUNDDOWN vs INT vs TRUNC sign-handling** —
+  `INT(-2.5) = -3` (rounds toward negative infinity);
+  `TRUNC(-2.5) = -2` (rounds toward zero); document each.
+- **Operator precedence table** — full table matching ECMA-376
+  §18.17 precedence ordering.
+
+Test strategy: a public corpus of Excel-formula behavior tests
+(adapted from public spreadsheet-engine projects' OWN test
+suites — never from proprietary Excel source). Each test
+includes the formula, expected value, expected error code if
+any, and the OOXML reference. Coverage gate: 95% of corpus
+green before v1.1 ships.
+
+OOXML interop: `@onegrid/xlsx` (new package) — read .xlsx
+formulas from a workbook, parse to oneGrid's AST, write back.
+SheetJS-style approach; pure parser, no proprietary dependencies.
+
+Ships behind sub-path imports so adopters who only need the
+v1.0 41-function set don't pay the bundle cost:
+
+```ts
+import '@onegrid/formula';                     // 41 base functions
+import '@onegrid/formula/excel-compat';        // +460 functions
+import '@onegrid/formula/excel-compat/financial';  // just the finance subset
+```
 
 ---
 
