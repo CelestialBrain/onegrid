@@ -408,6 +408,8 @@ importers:
 
   packages/protocol: {}
 
+  packages/sparklines: {}
+
   packages/ssrm:
     dependencies:
       '@onegrid/data':

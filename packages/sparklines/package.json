@@ -1,0 +1,30 @@
+{
+  "name": "@onegrid/sparklines",
+  "version": "0.0.10",
+  "description": "In-cell sparklines for oneGrid — line / bar / win-loss charts drawn straight to the grid's canvas. Tiny, fast, no dependencies.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false
+}

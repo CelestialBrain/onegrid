@@ -1,0 +1,10 @@
+{
+  "name": "@onegrid/sparklines",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 2048,
+      "note": "line + bar + winloss kinds + cell-renderer factory. Pure functions; no deps."
+    }
+  ]
+}
