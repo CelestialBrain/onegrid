@@ -87,7 +87,22 @@ export class Grid {
   private readonly frameBufferCap = 4096;
   private readonly frameBuffer: FrameSample[] = [];
   private frameBufferHead = 0;
+  /**
+   * Per-scroll-event magnitude (`|Δscrollτ|`). Raw signal; the
+   * v0.0.10 adaptive overscan derives a smoothed estimate from it.
+   */
   private velocity = 0;
+  /**
+   * Exponentially-smoothed scroll velocity. Filtered to suppress
+   * single-frame spikes from trackpad inertia + browser stutter so
+   * the overscan window doesn't snap between sizes mid-fling.
+   */
+  private velocitySmoothed = 0;
+  /**
+   * +1 down, -1 up, 0 stationary. Drives direction-aware overscan —
+   * pre-fetching ahead of travel matters; pre-fetching behind doesn't.
+   */
+  private scrollDirection: -1 | 0 | 1 = 0;
   private debugLog = false;
 
   private cumulativeColumnWidths: Float32Array;
@@ -774,7 +789,13 @@ export class Grid {
   private handleScroll = (): void => {
     const newTop = this.scrollHost.scrollTop;
     const newLeft = this.scrollHost.scrollLeft;
-    this.velocity = Math.abs(newTop - this.scrollTop);
+    const delta = newTop - this.scrollTop;
+    this.velocity = Math.abs(delta);
+    // EMA — α = 0.4 retains responsiveness while damping single-frame
+    // trackpad-inertia spikes (60 fps × 16 ms × ~7 frames to converge).
+    this.velocitySmoothed =
+      this.velocitySmoothed * 0.6 + this.velocity * 0.4;
+    this.scrollDirection = delta > 0 ? 1 : delta < 0 ? -1 : this.scrollDirection;
     this.scrollTop = newTop;
     this.scrollLeft = newLeft;
     // Tooltip dismiss on scroll: anchored content makes no sense once
@@ -2083,12 +2104,16 @@ export class Grid {
     const dataBottom = this.dataBandBottom();
     const dataHeight = Math.max(0, dataBottom - dataTop);
 
-    const overscan = this.velocityAwareOverscan();
-    const start = Math.max(0, this.fenwick.indexAtOffset(this.scrollTop) - overscan);
+    // Direction-aware row overscan — pre-fetch more rows ahead of
+    // travel than behind. See adaptiveOverscan() for derivation.
+    const { ahead, behind } = this.adaptiveOverscan();
+    const overscanTop = this.scrollDirection < 0 ? ahead : behind;
+    const overscanBottom = this.scrollDirection < 0 ? behind : ahead;
+    const start = Math.max(0, this.fenwick.indexAtOffset(this.scrollTop) - overscanTop);
     const endOffset = this.scrollTop + dataHeight;
     const end = Math.min(
       this.rowSource.numRows - 1,
-      this.fenwick.indexAtOffset(endOffset) + overscan,
+      this.fenwick.indexAtOffset(endOffset) + overscanBottom,
     );
 
     const firstRowTop = this.fenwick.prefixSum(start);
@@ -2955,10 +2980,50 @@ export class Grid {
     this.statusBarEl.textContent = parts.join('  ·  ');
   }
 
+  /**
+   * Static fallback used at sites that haven't migrated to the
+   * direction-aware shape yet. Returns the larger of (ahead, behind)
+   * so any pre-v0.0.10 caller stays conservative.
+   */
   private velocityAwareOverscan(): number {
-    if (this.velocity > 200) return 12;
-    if (this.velocity > 50) return 6;
-    return 2;
+    const { ahead, behind } = this.adaptiveOverscan();
+    return Math.max(ahead, behind);
+  }
+
+  /**
+   * Adaptive overscan (v0.0.10 item 2). Splits the row-prefetch
+   * window across travel direction:
+   *   - `ahead`  rows to render in the direction of travel
+   *   - `behind` rows to render against the direction of travel
+   * Driven by `velocitySmoothed` (EMA) so a single noisy frame can't
+   * snap the window. Stationary returns a balanced minimum; flinging
+   * skews aggressively forward.
+   */
+  private adaptiveOverscan(): { ahead: number; behind: number } {
+    const v = this.velocitySmoothed;
+    let ahead: number;
+    let behind: number;
+    if (v > 200) {
+      ahead = 16;
+      behind = 4;
+    } else if (v > 50) {
+      ahead = 8;
+      behind = 3;
+    } else if (v > 5) {
+      ahead = 4;
+      behind = 2;
+    } else {
+      ahead = 2;
+      behind = 2;
+    }
+    // Direction flip — swap ahead/behind so the bigger window faces
+    // travel regardless of sign.
+    if (this.scrollDirection < 0) {
+      const t = ahead;
+      ahead = behind;
+      behind = t;
+    }
+    return { ahead, behind };
   }
 
   /**

@@ -66,7 +66,7 @@ function makeColumns(count: number, width = 100): ColumnDef[] {
 function makeRowSource(rows = 50): RowSource {
   return {
     numRows: rows,
-    getCell: (r, c) => `${c}:${r}`,
+    getCell: (r: number, c: string) => `${c}:${String(r)}`,
   } as unknown as RowSource;
 }
 
