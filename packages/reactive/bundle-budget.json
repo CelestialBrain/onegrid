@@ -1,0 +1,10 @@
+{
+  "name": "@onegrid/reactive",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 2048,
+      "note": "Database + Input + Query + dependency tracking + backdating. Substrate-only — formula engine migration lands in v0.0.11.x."
+    }
+  ]
+}

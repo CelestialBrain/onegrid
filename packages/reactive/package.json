@@ -1,0 +1,30 @@
+{
+  "name": "@onegrid/reactive",
+  "version": "0.0.11",
+  "description": "Salsa-style on-demand memoization substrate for oneGrid. Input slots, tracked queries, revision-counter invalidation, backdating to suppress cascade recomputes when a value re-derives to its previous result. The reactivity substrate the formula engine + derived views will migrate onto in v0.0.11.x.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false
+}

@@ -435,6 +435,8 @@ importers:
 
   packages/protocol: {}
 
+  packages/reactive: {}
+
   packages/sparklines: {}
 
   packages/ssrm:
