@@ -1,0 +1,9 @@
+{
+  "name": "@onegrid/react",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 4096
+    }
+  ]
+}

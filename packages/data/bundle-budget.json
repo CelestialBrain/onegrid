@@ -1,0 +1,9 @@
+{
+  "name": "@onegrid/data",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 7680
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@onegrid/tokens",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 2560,
+      "note": "DTCG flatten + compile + watchPrefersColorScheme + forcedColorsBlock. Bundles excluded — sub-path imports."
+    },
+    {
+      "file": "dist/themes/light.js",
+      "bytes": 1024
+    },
+    {
+      "file": "dist/themes/dark.js",
+      "bytes": 1024
+    },
+    {
+      "file": "dist/density/comfortable.js",
+      "bytes": 512
+    }
+  ]
+}

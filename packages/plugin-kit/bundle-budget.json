@@ -1,0 +1,10 @@
+{
+  "name": "@onegrid/plugin-kit",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 3072,
+      "note": "Facets + Compartment + 10 registries. Headroom for the typed interface-version helper."
+    }
+  ]
+}

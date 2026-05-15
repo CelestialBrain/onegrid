@@ -1,0 +1,10 @@
+{
+  "name": "@onegrid/formula",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 8192,
+      "note": "Adapton-style engine + 41 base functions. v1.1 excel-compat lands behind sub-path imports."
+    }
+  ]
+}

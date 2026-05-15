@@ -1,0 +1,10 @@
+{
+  "name": "@onegrid/protocol",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 256,
+      "note": "Types-only. Anything above 256 bytes means runtime code crept in — investigate."
+    }
+  ]
+}

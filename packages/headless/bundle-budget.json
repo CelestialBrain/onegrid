@@ -1,0 +1,10 @@
+{
+  "name": "@onegrid/headless",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 2560,
+      "note": "Thin lifecycle wrapper. Real cost is paid by @onegrid/core; this layer is glue."
+    }
+  ]
+}

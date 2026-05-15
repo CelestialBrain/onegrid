@@ -1,0 +1,10 @@
+{
+  "name": "@onegrid/core",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 30720,
+      "note": "Canvas renderer + ARIA shadow + FenwickHeights + selection + editing. Hard floor — every feature ships through this. Bump only with justification."
+    }
+  ]
+}

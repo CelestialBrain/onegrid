@@ -1,0 +1,10 @@
+{
+  "name": "@onegrid/ssrm",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 8192,
+      "note": "Block fetcher + LRU cache + cursor codec + row-diff tracker + optimistic mutator + Arrow IPC sniff."
+    }
+  ]
+}
