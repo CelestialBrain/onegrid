@@ -1,0 +1,61 @@
+{
+  "name": "@onegrid/tokens",
+  "version": "0.0.9",
+  "description": "oneGrid design tokens: W3C DTCG 2025.10 JSON bundles compiled to CSS custom properties. Theme + density slots; forced-colors high-contrast mapping.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./themes/light": {
+      "types": "./dist/themes/light.d.ts",
+      "import": "./dist/themes/light.js",
+      "require": "./dist/themes/light.cjs"
+    },
+    "./themes/dark": {
+      "types": "./dist/themes/dark.d.ts",
+      "import": "./dist/themes/dark.js",
+      "require": "./dist/themes/dark.cjs"
+    },
+    "./density/compact": {
+      "types": "./dist/density/compact.d.ts",
+      "import": "./dist/density/compact.js",
+      "require": "./dist/density/compact.cjs"
+    },
+    "./density/comfortable": {
+      "types": "./dist/density/comfortable.d.ts",
+      "import": "./dist/density/comfortable.js",
+      "require": "./dist/density/comfortable.cjs"
+    },
+    "./density/spacious": {
+      "types": "./dist/density/spacious.d.ts",
+      "import": "./dist/density/spacious.js",
+      "require": "./dist/density/spacious.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@onegrid/plugin-kit": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false
+}
