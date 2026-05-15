@@ -38,6 +38,7 @@ import {
   cpuSumFloat32,
 } from '@onegrid/webgpu';
 import { Grid, type RowMeta } from '@onegrid/core';
+import { V009Demo } from './v009-demo';
 import { connectSsrm, SSRM_COLUMNS, type SsrmConnection } from './lib/ssrm';
 import {
   connectDuckDb,
@@ -311,6 +312,7 @@ export const App = (): JSX.Element => {
   const [columnFilters, setColumnFilters] = useState<ReadonlyArray<FilterRule>>([]);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showColumnPanel, setShowColumnPanel] = useState(false);
+  const [showV009Demo, setShowV009Demo] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuTarget | null>(null);
   const [checkedRows, setCheckedRows] = useState<Set<number>>(new Set());
   // Off by default — adding the checkbox column shifts every other
@@ -1609,6 +1611,17 @@ export const App = (): JSX.Element => {
         </button>
         <span style={{ color: 'var(--muted)', fontSize: 11 }}>{gpuStatus}</span>
 
+        <button
+          type="button"
+          data-testid="v009-demo-toggle"
+          onClick={() => {
+            setShowV009Demo((s) => !s);
+          }}
+          style={{ fontWeight: showV009Demo ? 600 : 400 }}
+        >
+          v0.0.9 Demo
+        </button>
+
         <button type="button" onClick={copyMetrics}>
           Copy metrics
         </button>
@@ -1818,6 +1831,18 @@ export const App = (): JSX.Element => {
             }}
           >
             <ColumnToolPanel grid={grid} />
+          </div>
+        )}
+        {showV009Demo && (
+          <div
+            style={{
+              flex: '0 0 auto',
+              borderLeft: '1px solid var(--border)',
+              padding: 8,
+              overflow: 'auto',
+            }}
+          >
+            <V009Demo />
           </div>
         )}
         {!dataReady && (

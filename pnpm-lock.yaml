@@ -74,15 +74,33 @@ importers:
       '@onegrid/formula':
         specifier: workspace:*
         version: link:../../packages/formula
+      '@onegrid/headless':
+        specifier: workspace:*
+        version: link:../../packages/headless
+      '@onegrid/intl':
+        specifier: workspace:*
+        version: link:../../packages/intl
+      '@onegrid/plugin-kit':
+        specifier: workspace:*
+        version: link:../../packages/plugin-kit
       '@onegrid/react':
         specifier: workspace:*
         version: link:../../packages/adapters/react
       '@onegrid/ssrm':
         specifier: workspace:*
         version: link:../../packages/ssrm
+      '@onegrid/tokens':
+        specifier: workspace:*
+        version: link:../../packages/tokens
+      '@onegrid/touch':
+        specifier: workspace:*
+        version: link:../../packages/touch
       '@onegrid/webgpu':
         specifier: workspace:*
         version: link:../../packages/webgpu
+      '@onegrid/worker-plugins':
+        specifier: workspace:*
+        version: link:../../packages/worker-plugins
       react:
         specifier: ^19.0.0
         version: 19.2.5
