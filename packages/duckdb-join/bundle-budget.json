@@ -1,0 +1,10 @@
+{
+  "name": "@onegrid/duckdb-join",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 2048,
+      "note": "Source-registration SQL generator + executeJoinQuery. DuckDB-WASM is an OPTIONAL peer — adopters bring their own AsyncDuckDB instance."
+    }
+  ]
+}

@@ -343,6 +343,19 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
+  packages/duckdb-join:
+    dependencies:
+      '@onegrid/duckdb':
+        specifier: workspace:*
+        version: link:../duckdb
+      '@onegrid/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      '@duckdb/duckdb-wasm':
+        specifier: ^1.28.0
+        version: 1.32.0
+
   packages/export:
     dependencies:
       '@onegrid/protocol':
