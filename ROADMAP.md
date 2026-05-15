@@ -505,7 +505,7 @@ Side-quests with no ordering dependency (ship anywhere in v0.0.9):
 - Header text wrap (had no home; tracks the density/typography work)
 - Loading / no-rows / skeleton overlays (depend on theme tokens)
 
-### v0.0.10 — "performance" (was v0.0.9)
+### v0.0.10 — "performance" (was v0.0.9)  ✅ **Shipped**
 
 Push the ceiling above what commercial grids can hit.
 - DBSP-grounded operator algebra spec (prerequisite for differential dataflow)
