@@ -2021,11 +2021,11 @@ export class Grid {
     this.rafHandle = null;
     if (this.destroyed) return;
     const scrollDelta = Math.abs(this.scrollTop - this.lastRenderedScrollTop);
-    if (
+    const hasWork =
       this.needsRender ||
       this.scrollTop !== this.lastRenderedScrollTop ||
-      this.scrollLeft !== this.lastRenderedScrollLeft
-    ) {
+      this.scrollLeft !== this.lastRenderedScrollLeft;
+    if (hasWork) {
       const t0 = performance.now();
       const stats = this.render();
       const t1 = performance.now();
@@ -2042,7 +2042,19 @@ export class Grid {
       if (this.isEditing()) this.repositionEditor();
       if (this.floatingFilterBandEl) this.repositionFloatingFilters();
     }
-    if (!this.destroyed) {
+    // v0.0.10 incremental-redraw discipline: stop the always-on rAF
+    // loop. Previously we re-armed unconditionally — fine for cell-
+    // pool overlays that want a steady 60 Hz pulse, terrible for
+    // battery on idle grids. Now we only re-arm when there's work
+    // queued (mid-fling scroll mismatch, cell-edit reposition window,
+    // floating filters needing layout). scheduleRender() restarts the
+    // loop on demand.
+    const stillDirty =
+      this.scrollTop !== this.lastRenderedScrollTop ||
+      this.scrollLeft !== this.lastRenderedScrollLeft ||
+      this.isEditing() ||
+      this.floatingFilterBandEl !== null;
+    if (!this.destroyed && stillDirty) {
       this.rafHandle = requestAnimationFrame(this.tick);
     }
   };
