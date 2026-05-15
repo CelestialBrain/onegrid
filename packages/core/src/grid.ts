@@ -2328,6 +2328,46 @@ export class Grid {
     }
   }
 
+  /**
+   * Narrow [colStart, colEnd) to the inclusive [first, last] visible
+   * range given the band's horizontalOffset. Returns the running `x`
+   * at `first` so the cell-paint loop can start from there. v0.0.10
+   * column virtualization: avoids iterating columns that are off-screen
+   * to the left or right of the viewport. Wins compound with column
+   * count — a 200-column grid showing 12 columns no longer pays for
+   * the other 188 in every drawn row.
+   */
+  private visibleColumnRangeInBand(
+    colStart: number,
+    colEnd: number,
+    horizontalOffset: number,
+  ): { first: number; last: number; xStart: number } {
+    // x at col c = -horizontalOffset + sum(widths[colStart..c))
+    let x = -horizontalOffset;
+    let first = colStart;
+    for (let c = colStart; c < colEnd; c++) {
+      const w = this.columns[c]?.width ?? 0;
+      if (x + w >= 0) {
+        first = c;
+        break;
+      }
+      x += w;
+      first = c + 1;
+    }
+    if (first >= colEnd) {
+      return { first: colEnd, last: colEnd - 1, xStart: x };
+    }
+    const xStart = x;
+    let last = first;
+    let xCur = xStart;
+    for (let c = first; c < colEnd; c++) {
+      if (xCur > this.viewportWidth) break;
+      last = c;
+      xCur += this.columns[c]?.width ?? 0;
+    }
+    return { first, last, xStart };
+  }
+
   private drawRows(
     start: number,
     end: number,
@@ -2343,6 +2383,14 @@ export class Grid {
 
     ctx.font = `${String(theme.fontSize)}px ${theme.fontFamily}`;
     ctx.textBaseline = 'middle';
+
+    // Column virtualization: compute once per band (horizontalOffset is
+    // constant within a drawRows call).
+    const colRange = this.visibleColumnRangeInBand(
+      colStart,
+      colEnd,
+      horizontalOffset,
+    );
 
     for (let row = start; row <= end; row++) {
       const h = this.fenwick.get(row);
@@ -2368,17 +2416,14 @@ export class Grid {
       ctx.fillStyle = row % 2 === 0 ? theme.background : theme.altRowBackground;
       ctx.fillRect(0, y, this.viewportWidth, h);
 
-      let x = -horizontalOffset;
-      if (colStart > 0) {
-        x += this.cumulativeColumnWidths[colStart] ?? 0;
-      }
+      let x = colRange.xStart;
 
-      for (let col = colStart; col < colEnd; col++) {
+      for (let col = colRange.first; col <= colRange.last; col++) {
         const column = this.columns[col];
         if (!column) continue;
         const w = column.width;
 
-        if (x + w >= 0 && x <= this.viewportWidth) {
+        {
           // Custom-renderer columns: leave the cell blank so the DOM
           // overlay paints the visual. Still draw the column divider
           // so the grid lines stay continuous.
@@ -2621,8 +2666,18 @@ export class Grid {
       }
     };
 
-    let x = -this.scrollLeft + (this.cumulativeColumnWidths[this.frozenColumnCount] ?? 0);
-    for (let col = this.frozenColumnCount; col < this.columns.length; col++) {
+    // v0.0.10 column virtualization — narrow header iteration to the
+    // visible non-frozen columns. The cumulativeColumnWidths offset is
+    // equivalent to passing horizontalOffset = scrollLeft into
+    // visibleColumnRangeInBand once the leading frozen-band gap is
+    // subtracted.
+    const headerColRange = this.visibleColumnRangeInBand(
+      this.frozenColumnCount,
+      this.columns.length,
+      this.scrollLeft,
+    );
+    let x = headerColRange.xStart;
+    for (let col = headerColRange.first; col <= headerColRange.last; col++) {
       const column = this.columns[col];
       if (!column) continue;
       ctx.fillStyle = theme.text;
