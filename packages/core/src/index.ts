@@ -48,6 +48,15 @@ import type { GridOptions } from './types';
 /** Functional alias for `new Grid(options)`. */
 export const createGrid = (options: GridOptions): Grid => new Grid(options);
 
+export {
+  defineGridOptions,
+  editingPreset,
+  mobilePreset,
+  enterprisePreset,
+  accessibilityPreset,
+} from './options';
+export type { NestedGridOptions } from './options';
+
 // Re-export DataSource shapes from @onegrid/protocol so consumers don't need
 // to know there's a separate package for the contract types.
 export type {
