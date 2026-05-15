@@ -1,0 +1,36 @@
+{
+  "name": "@onegrid/intl",
+  "version": "0.0.9",
+  "description": "oneGrid i18n / l10n / RTL — Intl.* thin wrappers, cached Collator, ICU MessageFormat (subset), BCP 47 validator, locale-aware number/date parsers, RTL helpers.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@onegrid/plugin-kit": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false
+}

@@ -327,6 +327,12 @@ importers:
         specifier: ^25.0.0
         version: 25.0.1
 
+  packages/intl:
+    dependencies:
+      '@onegrid/plugin-kit':
+        specifier: workspace:*
+        version: link:../plugin-kit
+
   packages/introspect:
     dependencies:
       '@onegrid/protocol':

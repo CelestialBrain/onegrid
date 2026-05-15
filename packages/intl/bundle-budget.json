@@ -1,0 +1,10 @@
+{
+  "name": "@onegrid/intl",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 4096,
+      "note": "Intl.* wrappers + cached factories + ICU MessageFormat subset + BCP 47 validator + RTL helper + 75 translation ids. FormatJS intentionally NOT bundled."
+    }
+  ]
+}
