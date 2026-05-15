@@ -345,6 +345,12 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
+  packages/plugin-kit:
+    dependencies:
+      '@onegrid/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
   packages/protocol: {}
 
   packages/ssrm:
