@@ -517,7 +517,7 @@ Push the ceiling above what commercial grids can hit.
 - BigInt-safe formula path
 - Range chart + sparklines
 
-### v0.0.11 — "moats" (was v0.0.10)
+### v0.0.11 — "moats" (was v0.0.10)  ✅ **Shipped**
 
 The signature features that aren't on any other grid.
 - Live ORM sync (Drizzle/Kysely/Prisma)
