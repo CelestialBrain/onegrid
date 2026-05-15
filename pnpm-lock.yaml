@@ -480,6 +480,16 @@ importers:
         specifier: ^0.1.69
         version: 0.1.69
 
+  packages/webgpu-render:
+    dependencies:
+      '@onegrid/webgpu':
+        specifier: workspace:*
+        version: link:../webgpu
+    devDependencies:
+      '@webgpu/types':
+        specifier: ^0.1.69
+        version: 0.1.69
+
   packages/worker-plugins:
     dependencies:
       '@onegrid/plugin-kit':

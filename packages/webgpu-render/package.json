@@ -1,0 +1,36 @@
+{
+  "name": "@onegrid/webgpu-render",
+  "version": "0.1.0",
+  "description": "WebGPU rendering scaffold for oneGrid — device acquisition, cell-quad pipeline, MSDF text shader, per-cell vertex buffer protocol. The scaffolding the canvas→WebGPU migration lands on in v0.1.0.x.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@onegrid/webgpu": "workspace:*"
+  },
+  "devDependencies": {
+    "@webgpu/types": "^0.1.69"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false
+}

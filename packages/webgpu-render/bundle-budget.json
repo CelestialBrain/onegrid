@@ -1,0 +1,10 @@
+{
+  "name": "@onegrid/webgpu-render",
+  "entries": [
+    {
+      "file": "dist/index.js",
+      "bytes": 3072,
+      "note": "Vertex buffer protocol + MSDF format + WGSL fragment snippet + render scaffold. The full canvas→WebGPU renderer migration lands in v0.1.0.x and will land separately under @onegrid/core/features/webgpu-render."
+    }
+  ]
+}

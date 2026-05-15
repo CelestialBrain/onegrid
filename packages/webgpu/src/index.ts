@@ -22,6 +22,7 @@
 
 export { webgpuAvailable, getGpuInfo } from './detect';
 export type { GpuInfo } from './detect';
+export { getDevice } from './device';
 
 export { gpuSumFloat32, cpuSumFloat32 } from './reduce';
 
