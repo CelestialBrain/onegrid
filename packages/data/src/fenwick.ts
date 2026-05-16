@@ -8,8 +8,19 @@
 //   indexAtOffset(y)    — first row whose top edge is > y    — O(log n)
 //   setHeight(i, h)     — replace row i's height             — O(log n)
 //
-// Storage is a Float32Array of size n + 1 (1-indexed). 10M rows uses ~40 MB,
+// Storage is a Float64Array of size n + 1 (1-indexed). 10M rows uses ~80 MB,
 // significant but tolerable, with zero allocations on the scroll hot path.
+//
+// Why Float64, not Float32: Float32 has 24 mantissa bits, exact for integers
+// up to 2^24 ≈ 16.7M. At 10M rows × ~28 px avg = 280 Mpx total height, the
+// partial sums in the Fenwick tree exceed Float32's exact-integer range and
+// each `tree[i] = tree[i] + delta` operation rounds at ~16 ULP. After
+// millions of adds the accumulated drift makes totalHeight wrong by orders
+// of magnitude — observed empirically as totalHeight reporting 28.8M
+// instead of 288M for a 10M-row dataset, with the visible-row meter
+// stalling at row 999,999 even when scrolled to the physical bottom.
+// Float64 has 53 mantissa bits, exact for integers up to 2^53 ≈ 9e15 px,
+// which covers any realistic row count × row height.
 //
 // CodeMirror 6 uses the same data structure for line heights; the technique
 // scales to multi-million-row spreadsheets without measurable cost on each
@@ -17,14 +28,14 @@
 // =============================================================================
 
 export class FenwickHeights {
-  private readonly tree: Float32Array;
-  private readonly heights: Float32Array;
+  private readonly tree: Float64Array;
+  private readonly heights: Float64Array;
   public readonly length: number;
 
   constructor(heights: ArrayLike<number>) {
     this.length = heights.length;
-    this.heights = new Float32Array(heights.length);
-    this.tree = new Float32Array(heights.length + 1);
+    this.heights = new Float64Array(heights.length);
+    this.tree = new Float64Array(heights.length + 1);
     for (let i = 0; i < heights.length; i++) {
       const h = heights[i] ?? 0;
       this.heights[i] = h;

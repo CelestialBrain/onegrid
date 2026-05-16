@@ -286,6 +286,17 @@ declare global {
       formulaGet?: (id: string) => unknown;
       formulaStats?: () => unknown;
       getColumns?: () => ReadonlyArray<ColumnDef>;
+      getViewportInfo?: () => {
+        readonly scrollTop: number;
+        readonly scrollLeft: number;
+        readonly scrollScale: number;
+        readonly totalHeight: number;
+        readonly numRows: number;
+        readonly viewportWidth: number;
+        readonly viewportHeight: number;
+        readonly firstVisibleRow: number;
+        readonly lastVisibleRow: number;
+      };
       host?: HTMLElement;
     };
   }
@@ -1524,6 +1535,7 @@ export const App = (): JSX.Element => {
         grid.scrollToRow(i);
       },
       getColumns: () => grid.getColumns(),
+      getViewportInfo: () => grid.getViewportInfo(),
       host: grid['host' as never] as unknown as HTMLElement,
       setRows: (n) => {
         setNumRows(n as (typeof ROW_OPTIONS)[number]);

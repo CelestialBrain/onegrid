@@ -47,6 +47,20 @@ declare global {
       getFilter: () => string;
       /** v1.2 — current column layout for resize / reorder tests. */
       getColumns?: () => ReadonlyArray<MinimalColumnDef>;
+      /** Logical scroll + visible-row state — for scroll-virtualization
+       *  specs that need to assert on row indices reachable at the
+       *  physical bottom of the scrollbar. */
+      getViewportInfo?: () => {
+        readonly scrollTop: number;
+        readonly scrollLeft: number;
+        readonly scrollScale: number;
+        readonly totalHeight: number;
+        readonly numRows: number;
+        readonly viewportWidth: number;
+        readonly viewportHeight: number;
+        readonly firstVisibleRow: number;
+        readonly lastVisibleRow: number;
+      };
       /** The mounted host element. Read for boundingClientRect-based
        *  coordinate math in real-Chromium specs. */
       host?: HTMLElement;

@@ -516,13 +516,60 @@ export class Grid {
     return [...this.columns];
   }
 
+  /**
+   * Read the current viewport / scroll state. Useful for E2E tests
+   * that need to assert on the *logical* scroll position (not the
+   * physical scrollHost.scrollTop, which is scaled by the virtual-
+   * scroll cap for >16 Mpx datasets).
+   */
+  getViewportInfo(): {
+    readonly scrollTop: number;
+    readonly scrollLeft: number;
+    readonly scrollScale: number;
+    readonly totalHeight: number;
+    readonly numRows: number;
+    readonly viewportWidth: number;
+    readonly viewportHeight: number;
+    readonly firstVisibleRow: number;
+    readonly lastVisibleRow: number;
+  } {
+    const dataTop = this.dataBandTop();
+    const dataBottom = this.dataBandBottom();
+    const dataHeight = Math.max(0, dataBottom - dataTop);
+    const numRows = this.rowSource.numRows;
+    const first = numRows === 0 ? 0 : this.fenwick.indexAtOffset(this.scrollTop);
+    const last =
+      numRows === 0
+        ? 0
+        : Math.min(numRows - 1, this.fenwick.indexAtOffset(this.scrollTop + dataHeight));
+    return {
+      scrollTop: this.scrollTop,
+      scrollLeft: this.scrollLeft,
+      scrollScale: this.scrollScale,
+      totalHeight: this.fenwick.totalHeight,
+      numRows,
+      viewportWidth: this.viewportWidth,
+      viewportHeight: this.viewportHeight,
+      firstVisibleRow: first,
+      lastVisibleRow: last,
+    };
+  }
+
   setRowSource(rowSource: RowSource, rowHeight: number | Float32Array): void {
     this.rowSource = rowSource;
-    this.fenwick = new FenwickHeights(
+    // Update baseHeights too — not just fenwick. Without this, a later
+    // setExpanded / toggleExpanded (which React fires when the
+    // expandedRows state resets on mode or numRows change) calls
+    // rebuildHeightsFromExpansion() which rebuilds fenwick from the
+    // STALE baseHeights, instantly reverting the fenwick to whatever
+    // size the previous dataset had. Symptom: visible-row meter caps
+    // at the previous dataset's last row even after switching to a
+    // larger dataset.
+    this.baseHeights =
       typeof rowHeight === 'number'
         ? new Float32Array(rowSource.numRows).fill(rowHeight)
-        : rowHeight,
-    );
+        : new Float32Array(rowHeight); // copy so consumer's array isn't mutated downstream
+    this.fenwick = new FenwickHeights(this.computeEffectiveHeights());
     this.scrollHost.setAttribute('aria-rowcount', String(rowSource.numRows));
     this.scrollTop = 0;
     this.scrollLeft = 0;
