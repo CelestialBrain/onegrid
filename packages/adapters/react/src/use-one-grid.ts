@@ -142,6 +142,16 @@ export function useOneGrid(options: UseOneGridOptions): UseOneGridReturn {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grid, options.rowSource, options.rowHeight]);
 
+  useEffect(() => {
+    if (!grid) return;
+    grid.setPinnedBottomRowSource(options.pinnedBottomRowSource);
+  }, [grid, options.pinnedBottomRowSource]);
+
+  useEffect(() => {
+    if (!grid) return;
+    grid.setPinnedTopRowSource(options.pinnedTopRowSource);
+  }, [grid, options.pinnedTopRowSource]);
+
   return { ref, grid };
 }
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import {
   ColumnToolPanel,
   createReactCellRenderer,
@@ -38,6 +38,7 @@ import {
   cpuSumFloat32,
 } from '@onegrid/webgpu';
 import { Grid, type RowMeta } from '@onegrid/core';
+import { createUndoManager, type UndoManager } from '@onegrid/undo';
 import { V009Demo } from './v009-demo';
 import { V010Demo } from './v010-demo';
 import { V011Demo } from './v011-demo';
@@ -861,6 +862,30 @@ export const App = (): JSX.Element => {
     setExpandedRows(new Set());
   }, [mode, numRows]);
 
+  // Per-row audit log built from real cell edits, paste, fill, undo,
+  // redo. Declared above `getDetailContent` so the detail panel can
+  // read it. Keyed by SOURCE row so it survives sort/filter.
+  type AuditEvent = {
+    readonly ts: number;
+    readonly event: 'edit' | 'paste' | 'fill' | 'undo' | 'redo';
+    readonly columnId: string;
+    readonly oldValue: string;
+    readonly newValue: string;
+  };
+  const auditLogRef = useRef<Map<number, AuditEvent[]>>(new Map());
+  const [auditTick, setAuditTick] = useState(0);
+
+  // Map a visual row index back to the source row index for the current
+  // memory view. Hoisted above `getDetailContent` so the detail panel
+  // can resolve `visualRow → sourceRow` for the audit log lookup.
+  const visualToSourceRow = useCallback(
+    (visualRow: number): number => {
+      if (memoryView?.permutation) return memoryView.permutation[visualRow] ?? visualRow;
+      return visualRow;
+    },
+    [memoryView],
+  );
+
   // Build an HTMLElement-returning detail content function only in memory
   // mode. Other modes don't need it; passing undefined is the off switch.
   const getDetailContent = useMemo<((rowIndex: number) => HTMLElement | null) | undefined>(() => {
@@ -890,23 +915,29 @@ export const App = (): JSX.Element => {
 
       const innerColumns: ColumnDef[] = [
         { id: 'ts', width: 170, displayName: 'Timestamp', format: (v) => String(v ?? '') },
-        { id: 'event', width: 140, displayName: 'Event', format: (v) => String(v ?? '') },
-        { id: 'actor', width: 130, displayName: 'Actor', format: (v) => String(v ?? '') },
-        { id: 'detail', width: 280, displayName: 'Detail', format: (v) => String(v ?? '') },
+        { id: 'event', width: 100, displayName: 'Event', format: (v) => String(v ?? '') },
+        { id: 'column', width: 110, displayName: 'Column', format: (v) => String(v ?? '') },
+        { id: 'oldValue', width: 140, displayName: 'Old', format: (v) => String(v ?? '') },
+        { id: 'newValue', width: 140, displayName: 'New', format: (v) => String(v ?? '') },
       ];
-      const baseTs = 1_700_000_000_000 + rowIndex * 60_000;
-      const events = ['login', 'edit', 'view', 'export', 'comment', 'archive', 'restore', 'share', 'edit', 'edit'];
+      const sourceRow = visualToSourceRow(rowIndex);
+      const entries = auditLogRef.current.get(sourceRow) ?? [];
       const innerRowSource: RowSource = {
-        numRows: 10,
+        numRows: Math.max(1, entries.length),
         getCell: (i, columnId) => {
+          if (entries.length === 0) {
+            if (columnId === 'event' && i === 0) return '(no edits yet)';
+            return '';
+          }
+          const e = entries[i];
+          if (!e) return '';
           if (columnId === 'ts') {
-            return new Date(baseTs - i * 3_600_000).toISOString().slice(0, 16).replace('T', ' ');
+            return new Date(e.ts).toISOString().slice(0, 19).replace('T', ' ');
           }
-          if (columnId === 'event') return events[i] ?? 'edit';
-          if (columnId === 'actor') return `user_${String((rowIndex + i) % 23)}`;
-          if (columnId === 'detail') {
-            return `r${String(rowIndex + 1)}: ${events[i] ?? 'edit'} #${String(i + 1)}`;
-          }
+          if (columnId === 'event') return e.event;
+          if (columnId === 'column') return e.columnId;
+          if (columnId === 'oldValue') return e.oldValue;
+          if (columnId === 'newValue') return e.newValue;
           return null;
         },
       };
@@ -929,7 +960,11 @@ export const App = (): JSX.Element => {
 
       return root;
     };
-  }, [mode, memoryDataset]);
+    // auditTick forces freshly-expanded detail panels to read the
+    // latest audit-log state. visualToSourceRow swaps when sort/filter
+    // changes the permutation, so detail panels must remap.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, memoryDataset, auditTick, visualToSourceRow]);
 
   const handleDetailUnmount = useCallback(
     (_rowIndex: number, el: HTMLElement): void => {
@@ -954,16 +989,97 @@ export const App = (): JSX.Element => {
   // mode (applyInput).
   const [editTick, setEditTick] = useState(0);
 
-  // Map a visual row index back to the source row index for the current
-  // memory view. Edits/paste arrive in visual coordinates; the underlying
-  // typed-array column needs the source row.
-  const visualToSourceRow = useCallback(
-    (visualRow: number): number => {
-      if (memoryView?.permutation) return memoryView.permutation[visualRow] ?? visualRow;
-      return visualRow;
+  // Undo / redo manager. Adopter (this playground) owns the data store
+  // (`memoryDataset`); the manager just keeps the stack and dispatches
+  // payloads back into `apply` on Cmd+Z / Cmd+Shift+Z.
+  type UndoPayload = {
+    readonly sourceRow: number;
+    readonly columnId: string;
+    readonly value: string;
+  };
+  const undoRef = useRef<UndoManager<UndoPayload> | null>(null);
+  // undoMode tracks whether the next apply() callback is invoked from
+  // .undo() vs .redo() vs neither, so we tag the audit-log entry
+  // correctly. The undo manager itself doesn't expose this in apply.
+  const undoModeRef = useRef<'undo' | 'redo' | null>(null);
+  if (undoRef.current === null) {
+    undoRef.current = createUndoManager<UndoPayload>({
+      apply: (p) => {
+        const ds = memoryDatasetRef.current;
+        if (!ds?.materialized) return;
+        const oldVal = ds.rowSource.getCell(p.sourceRow, p.columnId);
+        if (ds.writeCell(p.sourceRow, p.columnId, p.value)) {
+          const log = auditLogRef.current;
+          const existing = log.get(p.sourceRow);
+          const entry = {
+            ts: Date.now(),
+            event: (undoModeRef.current ?? 'edit') as AuditEvent['event'],
+            columnId: p.columnId,
+            oldValue: String(oldVal ?? ''),
+            newValue: p.value,
+          };
+          if (existing) existing.unshift(entry);
+          else log.set(p.sourceRow, [entry]);
+          setAuditTick((t) => t + 1);
+        }
+        setEditTick((t) => t + 1);
+      },
+    });
+  }
+  // memoryDataset can swap when the user changes presets / mode. Keep
+  // an always-fresh ref so the undo manager's apply() writes to the
+  // current dataset rather than a captured stale one.
+  const memoryDatasetRef = useRef(memoryDataset);
+  memoryDatasetRef.current = memoryDataset;
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent): void => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      const k = e.key.toLowerCase();
+      const t = e.target;
+      if (t instanceof HTMLElement) {
+        const tag = t.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable) return;
+      }
+      if (k === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undoModeRef.current = 'undo';
+        undoRef.current?.undo();
+        undoModeRef.current = null;
+      } else if ((k === 'z' && e.shiftKey) || k === 'y') {
+        e.preventDefault();
+        undoModeRef.current = 'redo';
+        undoRef.current?.redo();
+        undoModeRef.current = null;
+      }
+    };
+    document.addEventListener('keydown', handler, true);
+    return () => {
+      document.removeEventListener('keydown', handler, true);
+    };
+  }, []);
+
+  // Per-row audit log: see hoisted declarations above getDetailContent.
+  // `recordAudit` is co-located here with the edit handlers that use it.
+  const recordAudit = useCallback(
+    (sourceRow: number, ev: AuditEvent): void => {
+      const log = auditLogRef.current;
+      const existing = log.get(sourceRow);
+      if (existing) existing.unshift(ev);
+      else log.set(sourceRow, [ev]);
+      setAuditTick((t) => t + 1);
     },
-    [memoryView],
+    [],
   );
+
+  // Clear the stack + audit log when the underlying dataset swaps — past
+  // entries refer to row indices that no longer exist.
+  useEffect(() => {
+    undoRef.current?.clear();
+    auditLogRef.current.clear();
+    setAuditTick((t) => t + 1);
+  }, [memoryDataset]);
 
   const editable = useMemo<
     boolean | ((rowIndex: number, columnId: string) => boolean) | undefined
@@ -976,11 +1092,27 @@ export const App = (): JSX.Element => {
   }, [mode, memoryDataset]);
 
   const handleCellEdit = useCallback(
-    (rowIndex: number, columnId: string, newValue: string): void => {
+    (rowIndex: number, columnId: string, newValue: string, oldValue: unknown): void => {
       if (mode === 'memory' && memoryDataset?.materialized) {
         const sourceRow = visualToSourceRow(rowIndex);
+        const oldStr = String(oldValue ?? '');
         const ok = memoryDataset.writeCell(sourceRow, columnId, newValue);
-        if (ok) setEditTick((t) => t + 1);
+        if (ok) {
+          undoRef.current?.push({
+            kind: 'cellEdit',
+            label: 'Edit cell',
+            forward: { sourceRow, columnId, value: newValue },
+            inverse: { sourceRow, columnId, value: oldStr },
+          });
+          recordAudit(sourceRow, {
+            ts: Date.now(),
+            event: 'edit',
+            columnId,
+            oldValue: oldStr,
+            newValue,
+          });
+          setEditTick((t) => t + 1);
+        }
         return;
       }
       if (mode === 'formula' && formula) {
@@ -1040,18 +1172,40 @@ export const App = (): JSX.Element => {
     ): void => {
       if (mode === 'memory' && memoryDataset?.materialized) {
         let wrote = false;
-        for (let r = 0; r < pasted.length; r++) {
-          const row = pasted[r]!;
-          const visualRow = anchorRow + r;
-          if (visualRow >= safeRowSource.numRows) break;
-          const sourceRow = visualToSourceRow(visualRow);
-          for (let c = 0; c < row.length; c++) {
-            const colIdx = anchorCol + c;
-            const column = safeColumns[colIdx];
-            if (!column || column.id === 'rowIndex') continue;
-            if (memoryDataset.writeCell(sourceRow, column.id, row[c] ?? '')) wrote = true;
-          }
-        }
+        undoRef.current?.transaction(
+          () => {
+            for (let r = 0; r < pasted.length; r++) {
+              const row = pasted[r]!;
+              const visualRow = anchorRow + r;
+              if (visualRow >= safeRowSource.numRows) break;
+              const sourceRow = visualToSourceRow(visualRow);
+              for (let c = 0; c < row.length; c++) {
+                const colIdx = anchorCol + c;
+                const column = safeColumns[colIdx];
+                if (!column || column.id === 'rowIndex') continue;
+                const oldVal = memoryDataset.rowSource.getCell(sourceRow, column.id);
+                const newVal = row[c] ?? '';
+                if (memoryDataset.writeCell(sourceRow, column.id, newVal)) {
+                  wrote = true;
+                  const oldStr = String(oldVal ?? '');
+                  undoRef.current?.push({
+                    kind: 'paste',
+                    forward: { sourceRow, columnId: column.id, value: newVal },
+                    inverse: { sourceRow, columnId: column.id, value: oldStr },
+                  });
+                  recordAudit(sourceRow, {
+                    ts: Date.now(),
+                    event: 'paste',
+                    columnId: column.id,
+                    oldValue: oldStr,
+                    newValue: newVal,
+                  });
+                }
+              }
+            }
+          },
+          { kind: 'paste', label: 'Paste' },
+        );
         if (wrote) setEditTick((t) => t + 1);
         return;
       }
@@ -1143,28 +1297,50 @@ export const App = (): JSX.Element => {
             // is OUTSIDE the source rect with the seed value, on a
             // per-column basis (preserves the column's data type).
             if (!memoryDataset.materialized) return;
-            for (let r = fill.rowStart; r <= fill.rowEnd; r++) {
-              for (let c = fill.colStart; c <= fill.colEnd; c++) {
-                const inSource =
-                  r >= source.rowStart &&
-                  r <= source.rowEnd &&
-                  c >= source.colStart &&
-                  c <= source.colEnd;
-                if (inSource) continue;
-                const seedRow = source.rowStart;
-                const colDef = memoryDataset.columns[c];
-                if (!colDef) continue;
-                const seedVal = memoryDataset.rowSource.getCell(
-                  visualToSourceRow(seedRow),
-                  colDef.id,
-                );
-                memoryDataset.writeCell(
-                  visualToSourceRow(r),
-                  colDef.id,
-                  String(seedVal ?? ''),
-                );
-              }
-            }
+            undoRef.current?.transaction(
+              () => {
+                for (let r = fill.rowStart; r <= fill.rowEnd; r++) {
+                  for (let c = fill.colStart; c <= fill.colEnd; c++) {
+                    const inSource =
+                      r >= source.rowStart &&
+                      r <= source.rowEnd &&
+                      c >= source.colStart &&
+                      c <= source.colEnd;
+                    if (inSource) continue;
+                    const seedRow = source.rowStart;
+                    const colDef = memoryDataset.columns[c];
+                    if (!colDef) continue;
+                    const seedVal = memoryDataset.rowSource.getCell(
+                      visualToSourceRow(seedRow),
+                      colDef.id,
+                    );
+                    const sourceRow = visualToSourceRow(r);
+                    const oldVal = memoryDataset.rowSource.getCell(sourceRow, colDef.id);
+                    const newVal = String(seedVal ?? '');
+                    if (memoryDataset.writeCell(sourceRow, colDef.id, newVal)) {
+                      const oldStr = String(oldVal ?? '');
+                      undoRef.current?.push({
+                        kind: 'fillHandle',
+                        forward: { sourceRow, columnId: colDef.id, value: newVal },
+                        inverse: {
+                          sourceRow,
+                          columnId: colDef.id,
+                          value: oldStr,
+                        },
+                      });
+                      recordAudit(sourceRow, {
+                        ts: Date.now(),
+                        event: 'fill',
+                        columnId: colDef.id,
+                        oldValue: oldStr,
+                        newValue: newVal,
+                      });
+                    }
+                  }
+                }
+              },
+              { kind: 'fillHandle', label: 'Fill range' },
+            );
             setEditTick((t) => t + 1);
           },
         }
@@ -1404,73 +1580,26 @@ export const App = (): JSX.Element => {
   return (
     <div className="app">
       <div className="toolbar">
-        <h1>oneGrid · v0.0.5</h1>
+        <h1>oneGrid · v0.1.0</h1>
 
-        <div role="group" aria-label="data source mode">
-          <button
-            type="button"
-            onClick={() => {
-              setMode('memory');
+        <label className="mode-picker">
+          Mode{' '}
+          <select
+            value={mode}
+            onChange={(e) => {
+              setMode(e.target.value as typeof mode);
             }}
-            style={{ fontWeight: mode === 'memory' ? 600 : 400 }}
+            aria-label="data source mode"
           >
-            In-memory
-          </button>{' '}
-          <button
-            type="button"
-            onClick={() => {
-              setMode('ssrm');
-            }}
-            style={{ fontWeight: mode === 'ssrm' ? 600 : 400 }}
-          >
-            SSRM (localhost:3001)
-          </button>{' '}
-          <button
-            type="button"
-            onClick={() => {
-              setMode('formula');
-            }}
-            style={{ fontWeight: mode === 'formula' ? 600 : 400 }}
-          >
-            Formula
-          </button>{' '}
-          <button
-            type="button"
-            onClick={() => {
-              setMode('duckdb');
-            }}
-            style={{ fontWeight: mode === 'duckdb' ? 600 : 400 }}
-          >
-            DuckDB (in-browser)
-          </button>{' '}
-          <button
-            type="button"
-            onClick={() => {
-              setMode('pivot');
-            }}
-            style={{ fontWeight: mode === 'pivot' ? 600 : 400 }}
-          >
-            Pivot
-          </button>{' '}
-          <button
-            type="button"
-            onClick={() => {
-              setMode('tree');
-            }}
-            style={{ fontWeight: mode === 'tree' ? 600 : 400 }}
-          >
-            Tree
-          </button>{' '}
-          <button
-            type="button"
-            onClick={() => {
-              setMode('ssrm-tree');
-            }}
-            style={{ fontWeight: mode === 'ssrm-tree' ? 600 : 400 }}
-          >
-            SSRM Tree
-          </button>
-        </div>
+            <option value="memory">In-memory</option>
+            <option value="ssrm">SSRM</option>
+            <option value="formula">Formula</option>
+            <option value="duckdb">DuckDB</option>
+            <option value="pivot">Pivot</option>
+            <option value="tree">Tree</option>
+            <option value="ssrm-tree">SSRM Tree</option>
+          </select>
+        </label>
 
         {mode === 'memory' && (
           <>
@@ -1638,82 +1767,95 @@ export const App = (): JSX.Element => {
           </>
         )}
 
-        <button
-          type="button"
-          onClick={() => {
-            void runGpuBench();
-          }}
-          title={gpuStatus}
-        >
-          GPU bench
-        </button>
-        <span style={{ color: 'var(--muted)', fontSize: 11 }}>{gpuStatus}</span>
+        <details className="menu">
+          <summary>Demos</summary>
+          <div className="menu-panel">
+            <button
+              type="button"
+              data-testid="v009-demo-toggle"
+              onClick={() => {
+                setShowV009Demo((s) => !s);
+              }}
+              style={{ fontWeight: showV009Demo ? 600 : 400 }}
+            >
+              v0.0.9
+            </button>
+            <button
+              type="button"
+              data-testid="v010-demo-toggle"
+              onClick={() => {
+                setShowV010Demo((s) => !s);
+              }}
+              style={{ fontWeight: showV010Demo ? 600 : 400 }}
+            >
+              v0.0.10
+            </button>
+            <button
+              type="button"
+              data-testid="v011-demo-toggle"
+              onClick={() => {
+                setShowV011Demo((s) => !s);
+              }}
+              style={{ fontWeight: showV011Demo ? 600 : 400 }}
+            >
+              v0.0.11
+            </button>
+            <button
+              type="button"
+              data-testid="v100-demo-toggle"
+              onClick={() => {
+                setShowV100Demo((s) => !s);
+              }}
+              style={{ fontWeight: showV100Demo ? 600 : 400 }}
+            >
+              v0.1.0
+            </button>
+          </div>
+        </details>
 
-        <button
-          type="button"
-          data-testid="v010-demo-toggle"
-          onClick={() => {
-            setShowV010Demo((s) => !s);
-          }}
-          style={{ fontWeight: showV010Demo ? 600 : 400 }}
-        >
-          v0.0.10 Demo
-        </button>
-        <button
-          type="button"
-          data-testid="v011-demo-toggle"
-          onClick={() => {
-            setShowV011Demo((s) => !s);
-          }}
-          style={{ fontWeight: showV011Demo ? 600 : 400 }}
-        >
-          v0.0.11 Demo
-        </button>
-        <button
-          type="button"
-          data-testid="v100-demo-toggle"
-          onClick={() => {
-            setShowV100Demo((s) => !s);
-          }}
-          style={{ fontWeight: showV100Demo ? 600 : 400 }}
-        >
-          v0.1.0 Demo
-        </button>
+        <details className="menu">
+          <summary>Export</summary>
+          <div className="menu-panel">
+            <button type="button" onClick={handleExportCsv} disabled={!dataReady}>
+              CSV
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void handleExportXlsx();
+              }}
+              disabled={!dataReady}
+            >
+              XLSX
+            </button>
+          </div>
+        </details>
 
-        <button
-          type="button"
-          data-testid="v009-demo-toggle"
-          onClick={() => {
-            setShowV009Demo((s) => !s);
-          }}
-          style={{ fontWeight: showV009Demo ? 600 : 400 }}
-        >
-          v0.0.9 Demo
-        </button>
-
-        <button type="button" onClick={copyMetrics}>
-          Copy metrics
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            grid?.resetMetrics();
-          }}
-        >
-          Reset
-        </button>
-        <button type="button" onClick={handleExportCsv} disabled={!dataReady}>
-          Export CSV
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            void handleExportXlsx();
-          }}
-          disabled={!dataReady}
-        >
-          Export XLSX
-        </button>
+        <details className="menu">
+          <summary>Metrics</summary>
+          <div className="menu-panel">
+            <button type="button" onClick={copyMetrics}>
+              Copy
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                grid?.resetMetrics();
+              }}
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void runGpuBench();
+              }}
+              title={gpuStatus}
+            >
+              GPU bench
+            </button>
+          </div>
+        </details>
         <div className="meter">
           <span>
             FPS <strong>{stats?.fps ?? 0}</strong>

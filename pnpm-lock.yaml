@@ -128,6 +128,9 @@ importers:
       '@onegrid/touch':
         specifier: workspace:*
         version: link:../../packages/touch
+      '@onegrid/undo':
+        specifier: workspace:*
+        version: link:../../packages/undo
       '@onegrid/webgpu':
         specifier: workspace:*
         version: link:../../packages/webgpu
@@ -514,6 +517,12 @@ importers:
       '@onegrid/protocol':
         specifier: workspace:*
         version: link:../protocol
+    devDependencies:
+      jsdom:
+        specifier: ^25.0.0
+        version: 25.0.1
+
+  packages/undo:
     devDependencies:
       jsdom:
         specifier: ^25.0.0

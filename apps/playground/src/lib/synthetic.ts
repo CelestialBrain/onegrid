@@ -366,7 +366,12 @@ export function materializeSynthetic(numRows: number): MaterializedSyntheticData
   const writeCell = (sourceRow: number, columnId: string, raw: string): boolean => {
     if (sourceRow < 0 || sourceRow >= numRows) return false;
     const fn = writeBack[columnId];
-    return fn ? fn(sourceRow, raw) : false;
+    if (!fn) return false;
+    const ok = fn(sourceRow, raw);
+    if (ok && columnId !== 'updatedAt') {
+      updatedAtCol[sourceRow] = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    }
+    return ok;
   };
 
   return { columns, rowSource, heights, table, writeCell };

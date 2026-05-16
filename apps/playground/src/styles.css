@@ -31,12 +31,86 @@ html, body, #root {
 
 .toolbar {
   display: flex;
-  gap: 16px;
+  gap: 10px;
   align-items: center;
-  padding: 10px 16px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
-  font-size: 13px;
+  font-size: 12px;
+  row-gap: 6px;
+}
+
+.toolbar input[type="search"],
+.toolbar input[type="text"] {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font: inherit;
+}
+
+.toolbar label {
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbar .mode-picker select {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.toolbar .menu {
+  position: relative;
+}
+
+.toolbar .menu summary {
+  list-style: none;
+  cursor: pointer;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 4px;
+  user-select: none;
+}
+
+.toolbar .menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.toolbar .menu summary::after {
+  content: ' ▾';
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.toolbar .menu[open] summary {
+  background: var(--header-bg);
+  border-color: var(--accent);
+}
+
+.toolbar .menu-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+  padding: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.toolbar .menu-panel button {
+  text-align: left;
+  width: 100%;
 }
 
 .toolbar h1 {

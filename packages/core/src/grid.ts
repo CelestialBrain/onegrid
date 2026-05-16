@@ -33,6 +33,17 @@ import type { SortModel } from '@onegrid/protocol';
 
 let nextGridSequence = 0;
 
+/**
+ * Hard cap on the physical CSS height of the scroll spacer. Browsers
+ * cap rendered element heights (Firefox ~17.9 Mpx, Chrome ~33.5 Mpx,
+ * Safari similar). We pick a conservative cross-browser figure so a
+ * 5M-row dataset (≈140 Mpx of logical content) is still 100% reachable
+ * through native scrolling. When logical total > cap, scroll positions
+ * are scaled (physical_px × scale = logical_px) so the full scrollbar
+ * range still maps onto the full dataset.
+ */
+const VIRTUAL_SCROLL_CAP_PX = 16_000_000;
+
 interface FrameSample {
   ts: number;
   drawDurationMs: number;
@@ -79,6 +90,21 @@ export class Grid {
   private scrollLeft = 0;
   private lastRenderedScrollTop = -1;
   private lastRenderedScrollLeft = -1;
+
+  // Scroll virtualization. Browsers cap CSS element heights around
+  // 16-33 Mpx (Firefox ~17.9M, Chrome ~33.5M, Safari similar). 5M rows
+  // × 28 px = 140 Mpx — far past the cap, so the scrollbar would only
+  // reach ~24% of the dataset. We cap the physical spacer at
+  // VIRTUAL_SCROLL_CAP_PX and scale browser `scrollTop` (physical) to
+  // our internal `scrollTop` (logical, data-px). All scroll consumers
+  // stay in logical units; only the bridge to/from the DOM scrollHost
+  // multiplies/divides by `scrollScale`.
+  private scrollScale = 1;
+  // Suppress the scroll handler while we're imperatively driving the
+  // host's scrollTop (e.g., scrollToRow). Without this, the resulting
+  // scroll event would re-derive `this.scrollTop` from the rounded
+  // physical position and undo a precise jump.
+  private suppressScrollEvent = false;
 
   private rafHandle: number | null = null;
   private needsRender = true;
@@ -189,8 +215,8 @@ export class Grid {
   private readonly floatingFilterInputs = new Map<string, HTMLInputElement>();
 
   // Pinned rows + column groups + status bar.
-  private readonly pinnedTopRowSource: RowSource | undefined;
-  private readonly pinnedBottomRowSource: RowSource | undefined;
+  private pinnedTopRowSource: RowSource | undefined;
+  private pinnedBottomRowSource: RowSource | undefined;
   private readonly pinnedRowHeight: number;
   private readonly columnGroups: ReadonlyArray<import('./types').ColumnGroupDef> | undefined;
   private readonly statusBarEnabled: boolean;
@@ -504,16 +530,38 @@ export class Grid {
     this.lastRenderedScrollTop = -1;
     this.lastRenderedScrollLeft = -1;
     this.recomputeColumnLayout();
+    this.updateScrollSpacerHeight();
+    this.scheduleRender();
+  }
+
+  /**
+   * Swap the pinned-bottom row source live (e.g., a totals row whose
+   * sums depend on cell edits). Pass `undefined` to remove the pinned
+   * bottom band entirely.
+   */
+  setPinnedBottomRowSource(rowSource: RowSource | undefined): void {
+    this.pinnedBottomRowSource = rowSource;
+    this.scheduleRender();
+  }
+
+  /**
+   * Swap the pinned-top row source live. Symmetric with
+   * `setPinnedBottomRowSource`.
+   */
+  setPinnedTopRowSource(rowSource: RowSource | undefined): void {
+    this.pinnedTopRowSource = rowSource;
     this.scheduleRender();
   }
 
   scrollBy(deltaY: number): void {
-    this.scrollHost.scrollBy({ top: deltaY });
+    this.setLogicalScrollTop(this.scrollTop + deltaY);
+    this.scheduleRender();
   }
 
   scrollToRow(rowIndex: number): void {
     const clamped = Math.max(0, Math.min(rowIndex, this.rowSource.numRows - 1));
-    this.scrollHost.scrollTo({ top: this.fenwick.prefixSum(clamped) });
+    this.setLogicalScrollTop(this.fenwick.prefixSum(clamped));
+    this.scheduleRender();
   }
 
   getMetricsSnapshot(): MetricsSnapshot {
@@ -794,13 +842,49 @@ export class Grid {
     this.canvas.style.width = `${this.viewportWidth}px`;
     this.canvas.style.height = `${this.viewportHeight}px`;
     this.scrollSpacer.style.width = `${this.totalColumnsWidth}px`;
-    this.scrollSpacer.style.height = `${this.dataBandTop() + this.fenwick.totalHeight + this.pinnedBottomBandHeight() + this.statusBarHeight()}px`;
+    this.updateScrollSpacerHeight();
     this.lastRenderedScrollTop = -1;
     this.scheduleRender();
   };
 
+  /**
+   * Recompute the spacer's physical height and the virtualization
+   * scale. Call after anything that changes `fenwick.totalHeight` or
+   * the surrounding band heights (resize, setRowSource, group toggle,
+   * detail expand, etc.).
+   */
+  private updateScrollSpacerHeight(): void {
+    const bands = this.dataBandTop() + this.pinnedBottomBandHeight() + this.statusBarHeight();
+    const logicalTotal = bands + this.fenwick.totalHeight;
+    if (logicalTotal <= VIRTUAL_SCROLL_CAP_PX) {
+      this.scrollSpacer.style.height = `${logicalTotal}px`;
+      this.scrollScale = 1;
+      return;
+    }
+    // Cap the physical spacer. We keep the band rows visible at their
+    // real heights and compress only the data span: physical
+    // dataPx = CAP - bands; scale = logicalDataPx / physicalDataPx.
+    const physicalDataPx = VIRTUAL_SCROLL_CAP_PX - bands;
+    this.scrollSpacer.style.height = `${VIRTUAL_SCROLL_CAP_PX}px`;
+    this.scrollScale = this.fenwick.totalHeight / physicalDataPx;
+  }
+
+  /**
+   * Set the host's scrollTop in *logical* (data-pixel) coordinates.
+   * Internally divides by `scrollScale` so the physical scrollbar
+   * position lands at the right fraction of the spacer.
+   */
+  private setLogicalScrollTop(logicalY: number): void {
+    const clamped = Math.max(0, logicalY);
+    this.suppressScrollEvent = true;
+    this.scrollHost.scrollTop = clamped / this.scrollScale;
+    this.suppressScrollEvent = false;
+    this.scrollTop = clamped;
+  }
+
   private handleScroll = (): void => {
-    const newTop = this.scrollHost.scrollTop;
+    if (this.suppressScrollEvent) return;
+    const newTop = this.scrollHost.scrollTop * this.scrollScale;
     const newLeft = this.scrollHost.scrollLeft;
     const delta = newTop - this.scrollTop;
     this.velocity = Math.abs(delta);
@@ -900,15 +984,18 @@ export class Grid {
     if (e.key === 'PageDown') delta = pageStep * 24;
     else if (e.key === 'PageUp') delta = -pageStep * 24;
     else if (e.key === 'Home') {
-      this.scrollHost.scrollTo({ top: 0 });
+      this.setLogicalScrollTop(0);
+      this.scheduleRender();
       e.preventDefault();
       return;
     } else if (e.key === 'End') {
-      this.scrollHost.scrollTo({ top: this.fenwick.totalHeight });
+      this.setLogicalScrollTop(this.fenwick.totalHeight);
+      this.scheduleRender();
       e.preventDefault();
       return;
     } else return;
-    this.scrollHost.scrollBy({ top: delta });
+    this.setLogicalScrollTop(this.scrollTop + delta);
+    this.scheduleRender();
     e.preventDefault();
   };
 
@@ -1575,9 +1662,11 @@ export class Grid {
     const dataHeight = this.dataBandBottom() - this.dataBandTop();
     const viewportBottom = this.scrollTop + dataHeight;
     if (top < viewportTop) {
-      this.scrollHost.scrollTo({ top });
+      this.setLogicalScrollTop(top);
+      this.scheduleRender();
     } else if (bottom > viewportBottom) {
-      this.scrollHost.scrollTo({ top: bottom - dataHeight });
+      this.setLogicalScrollTop(bottom - dataHeight);
+      this.scheduleRender();
     }
   }
 
