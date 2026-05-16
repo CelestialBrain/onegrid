@@ -39,6 +39,7 @@ import {
 } from '@onegrid/webgpu';
 import { Grid, type RowMeta } from '@onegrid/core';
 import { createUndoManager, type UndoManager } from '@onegrid/undo';
+import { AuditClient, type AuditEvent } from './lib/audit-client';
 import { V009Demo } from './v009-demo';
 import { V010Demo } from './v010-demo';
 import { V011Demo } from './v011-demo';
@@ -862,18 +863,16 @@ export const App = (): JSX.Element => {
     setExpandedRows(new Set());
   }, [mode, numRows]);
 
-  // Per-row audit log built from real cell edits, paste, fill, undo,
-  // redo. Declared above `getDetailContent` so the detail panel can
-  // read it. Keyed by SOURCE row so it survives sort/filter.
-  type AuditEvent = {
-    readonly ts: number;
-    readonly event: 'edit' | 'paste' | 'fill' | 'undo' | 'redo';
-    readonly columnId: string;
-    readonly oldValue: string;
-    readonly newValue: string;
-  };
-  const auditLogRef = useRef<Map<number, AuditEvent[]>>(new Map());
-  const [auditTick, setAuditTick] = useState(0);
+  // Per-row audit log. Lives in a Worker (lib/audit-worker.ts) with a
+  // ring-buffer cap and IndexedDB persistence. Edits postMessage
+  // append; the main thread never holds the log in React state, so
+  // cell edits don't re-render the App. The detail panel queries the
+  // worker on expand and mutates the inner Grid's row source when the
+  // result arrives.
+  const auditClientRef = useRef<AuditClient | null>(null);
+  if (auditClientRef.current === null) {
+    auditClientRef.current = new AuditClient();
+  }
 
   // Map a visual row index back to the source row index for the current
   // memory view. Hoisted above `getDetailContent` so the detail panel
@@ -921,12 +920,22 @@ export const App = (): JSX.Element => {
         { id: 'newValue', width: 140, displayName: 'New', format: (v) => String(v ?? '') },
       ];
       const sourceRow = visualToSourceRow(rowIndex);
-      const entries = auditLogRef.current.get(sourceRow) ?? [];
+      // Mutable entries box. We start empty (shows "(loading…)") and
+      // swap to real entries when the worker's query resolves. The
+      // inner Grid's rowSource closes over this variable, so we can
+      // call inner.setRowSource(innerRowSource, 24) with the same
+      // object after mutation and it'll re-read the new data.
+      let entries: ReadonlyArray<AuditEvent> = [];
+      let loaded = false;
       const innerRowSource: RowSource = {
-        numRows: Math.max(1, entries.length),
+        get numRows(): number {
+          return Math.max(1, entries.length);
+        },
         getCell: (i, columnId) => {
           if (entries.length === 0) {
-            if (columnId === 'event' && i === 0) return '(no edits yet)';
+            if (columnId === 'event' && i === 0) {
+              return loaded ? '(no edits yet)' : '(loading…)';
+            }
             return '';
           }
           const e = entries[i];
@@ -953,6 +962,23 @@ export const App = (): JSX.Element => {
         rowHeight: 24,
         headerHeight: 28,
       });
+
+      // Kick off the worker query. When it resolves, mutate `entries`
+      // and re-bind the row source so the Grid re-renders with the
+      // real audit history. We guard with `inner.host` in case the
+      // panel was torn down before the worker replied.
+      const client = auditClientRef.current;
+      if (client) {
+        void client.query(sourceRow).then((result) => {
+          entries = result;
+          loaded = true;
+          try {
+            inner.setRowSource(innerRowSource, 24);
+          } catch {
+            // Inner Grid was destroyed before the query came back.
+          }
+        });
+      }
       // Stash the inner grid on the root element so onDetailUnmount
       // can find + destroy it. Using a Symbol-keyed prop avoids
       // colliding with anything the consumer might add.
@@ -960,11 +986,10 @@ export const App = (): JSX.Element => {
 
       return root;
     };
-    // auditTick forces freshly-expanded detail panels to read the
-    // latest audit-log state. visualToSourceRow swaps when sort/filter
-    // changes the permutation, so detail panels must remap.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, memoryDataset, auditTick, visualToSourceRow]);
+    // visualToSourceRow swaps when sort/filter changes the
+    // permutation, so detail panels must remap. The audit data itself
+    // flows from the worker — no React tick needed.
+  }, [mode, memoryDataset, visualToSourceRow]);
 
   const handleDetailUnmount = useCallback(
     (_rowIndex: number, el: HTMLElement): void => {
@@ -1009,18 +1034,14 @@ export const App = (): JSX.Element => {
         if (!ds?.materialized) return;
         const oldVal = ds.rowSource.getCell(p.sourceRow, p.columnId);
         if (ds.writeCell(p.sourceRow, p.columnId, p.value)) {
-          const log = auditLogRef.current;
-          const existing = log.get(p.sourceRow);
-          const entry = {
+          auditClientRef.current?.append({
+            sourceRow: p.sourceRow,
             ts: Date.now(),
-            event: (undoModeRef.current ?? 'edit') as AuditEvent['event'],
+            event: undoModeRef.current ?? 'edit',
             columnId: p.columnId,
             oldValue: String(oldVal ?? ''),
             newValue: p.value,
-          };
-          if (existing) existing.unshift(entry);
-          else log.set(p.sourceRow, [entry]);
-          setAuditTick((t) => t + 1);
+          });
         }
         setEditTick((t) => t + 1);
       },
@@ -1060,26 +1081,21 @@ export const App = (): JSX.Element => {
     };
   }, []);
 
-  // Per-row audit log: see hoisted declarations above getDetailContent.
-  // `recordAudit` is co-located here with the edit handlers that use it.
-  const recordAudit = useCallback(
-    (sourceRow: number, ev: AuditEvent): void => {
-      const log = auditLogRef.current;
-      const existing = log.get(sourceRow);
-      if (existing) existing.unshift(ev);
-      else log.set(sourceRow, [ev]);
-      setAuditTick((t) => t + 1);
-    },
-    [],
-  );
-
-  // Clear the stack + audit log when the underlying dataset swaps — past
-  // entries refer to row indices that no longer exist.
+  // Clear the undo stack + worker audit log when the underlying
+  // dataset swaps — past entries refer to row indices that no longer
+  // exist in the new dataset.
   useEffect(() => {
     undoRef.current?.clear();
-    auditLogRef.current.clear();
-    setAuditTick((t) => t + 1);
+    auditClientRef.current?.clear();
   }, [memoryDataset]);
+
+  // Terminate the worker on unmount.
+  useEffect(() => {
+    return () => {
+      auditClientRef.current?.destroy();
+      auditClientRef.current = null;
+    };
+  }, []);
 
   const editable = useMemo<
     boolean | ((rowIndex: number, columnId: string) => boolean) | undefined
@@ -1104,7 +1120,8 @@ export const App = (): JSX.Element => {
             forward: { sourceRow, columnId, value: newValue },
             inverse: { sourceRow, columnId, value: oldStr },
           });
-          recordAudit(sourceRow, {
+          auditClientRef.current?.append({
+            sourceRow,
             ts: Date.now(),
             event: 'edit',
             columnId,
@@ -1193,7 +1210,8 @@ export const App = (): JSX.Element => {
                     forward: { sourceRow, columnId: column.id, value: newVal },
                     inverse: { sourceRow, columnId: column.id, value: oldStr },
                   });
-                  recordAudit(sourceRow, {
+                  auditClientRef.current?.append({
+                    sourceRow,
                     ts: Date.now(),
                     event: 'paste',
                     columnId: column.id,
@@ -1328,7 +1346,8 @@ export const App = (): JSX.Element => {
                           value: oldStr,
                         },
                       });
-                      recordAudit(sourceRow, {
+                      auditClientRef.current?.append({
+                        sourceRow,
                         ts: Date.now(),
                         event: 'fill',
                         columnId: colDef.id,
