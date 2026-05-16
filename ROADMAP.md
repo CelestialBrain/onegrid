@@ -5,7 +5,7 @@ most capable open-source grid in the JavaScript ecosystem. Items are
 grouped by where they create leverage, not by release order — see
 "Sequencing" at the bottom for milestone framing.
 
-**Last updated:** 2026-05-15
+**Last updated:** 2026-05-16
 
 ## Status legend
 
@@ -682,6 +682,266 @@ import '@onegrid/formula';                     // 41 base functions
 import '@onegrid/formula/excel-compat';        // +460 functions
 import '@onegrid/formula/excel-compat/financial';  // just the finance subset
 ```
+
+### v1.2.0 — "interaction polish" (NEW — feature-parity track)
+
+Closes the most-visible UX gaps surfacing in adopter feedback. Each
+item is roughly half-a-session of work; the milestone is one batch.
+
+**Cell + column resize (the headline gap)**
+- **Column drag-to-resize** — pointer over the column-boundary 4–6 px
+  "resize zone" of the header enters resize mode on drag; updates
+  `column.width` per frame; emits `onColumnResize(columnId, newWidth)`.
+  Extends the v0.0.7 column-reorder pointer routing.
+- **Row drag-to-resize** — same pattern on the leftmost-gutter row
+  boundary; updates the per-row entry in the `Float32Array` row-height
+  buffer.
+- **Auto-size column to content** — double-click the resize handle OR
+  programmatic `grid.autoSizeColumn(id)`. `measureText` against the
+  column's font + max-text-width across visible rows + padding constant.
+- **Auto-size all columns** — toolbar action; loops over columns.
+
+**Interaction nuances**
+- Cell flash on update — fade animation when a CDC diff lands; opt-in
+  via `column.flashOnUpdate` or per-grid `flash: true`.
+- Find / replace within cells — modal with per-cell match highlight +
+  replace-all + scope (column / range / sheet).
+- Excel-class keyboard nav — Ctrl+Home / Ctrl+End / Ctrl+arrow to data
+  extents; Page Up/Down to viewport bounds; Tab/Shift-Tab wraps row
+  boundary correctly.
+- Multi-row drag-drop reorder — extends the column-reorder pointer
+  path to the row axis with the existing drop-indicator.
+- Dynamic mid-table row pinning — `rowMeta.pinned: 'top' | 'bottom' | null`
+  pins any row in place while scrolling.
+- Pinned column resize — currently frozen columns are fixed-width.
+
+**Customization surface expansion**
+- Zero-config helper — `<Grid data={array} />` infers `RowSource`,
+  schema, default widths from the first row.
+- Keyboard nav extension point (`keymap` registry in plugin-kit) —
+  swap arrow-key behavior per-grid.
+- Selection-model swap — `BitmapSelection` becomes one impl of a
+  `SelectionBackend` interface; sparse-rectangle backend for
+  multi-rectangle selection.
+- Render-cycle hooks: `onBeforeRender(stats)`, `onAfterLayout(stats)`,
+  `onCellMount(cell)`, `onCellUnmount(cell)`.
+- Per-row rendering override — `rowRenderer(rowIndex) → CellRenderer | null`
+  for full-row replacement (banner rows, custom group headers, etc.).
+- Per-instance font swap without raw CSS — `theme.fontFamily` first-class.
+- Documented "grid inside cell renderer" pattern — formalized lifecycle,
+  demo in the playground.
+- Tree mode + master-detail combined — undocumented today; formalize
+  the row-meta interaction.
+
+### v1.3.0 — "tool panels + UI surfaces"
+
+Surfaces every grid library is expected to ship as out-of-the-box UI.
+Today only the column tool panel exists.
+
+- **Drag-to-group toolbar bar** — pill UI above the grid; drop a
+  column-header pill in to group by that column. The current group-by
+  is a `<select>` dropdown.
+- **Pivot side panel UI** — drag rows / columns / values bins; updates
+  the PivotModel; the existing pivot compute path consumes it.
+- **Filter side panel** — every column's filter accessible from one
+  panel (current: floating filter row + per-column popovers).
+- **Aggregation side panel** — per-group-by-column aggregator picker.
+- **Status-bar plugin surface** — adopters add per-grid panels
+  (selection / row-count / KPIs); extends the existing status bar
+  which has fixed selection-aggregate slots only.
+- **Loading + no-rows overlays** — first-class overlay layer + built-in
+  default UIs + override hook. Currently up to the adopter.
+
+### v1.4.0 — "charts + advanced clipboard"
+
+- **Range chart** — select N×M cells → context-menu "Create chart" →
+  line / bar / scatter / pie rendered alongside the grid via a small
+  embedded chart engine (clean-room from public chart-rendering
+  references; not vendor-locked). Pivot chart uses the same engine
+  against a PivotModel.
+- **Sparkline column type** — `@onegrid/sparklines` shipped in v0.0.10;
+  v1.4 adds the grid-level convenience: a `kind: 'sparkline'`
+  ColumnDef shortcut that auto-wires `getData(row) → number[]`.
+- **Multi-rectangle range clipboard** — Ctrl+click extends selection
+  to disjoint rectangles; copy emits a TSV with rectangle separators
+  the paste path understands.
+- **Drag fill with series patterns** — extends the existing fill-handle
+  (currently consumer-applies-policy) with built-in linear / exponential /
+  copy / weekday / month / quarter patterns.
+
+### v1.5.0 — "editing + export depth"
+
+- **Date picker editor with calendar UI** — `createDateEditor` today
+  is a native `<input type="date">`; ship a calendar popover variant.
+- **Multi-select editor variant** — checkbox-list popover (the current
+  `createSelectEditor` is single-pick).
+- **Built-in context-menu defaults** — Copy / Paste / Cut / Delete /
+  Filter / Pin column / Group by / Export… (currently `onContextMenu`
+  is a hook with no built-in items).
+- **Excel export with styling** — header bold, currency formatting,
+  frozen rows preserved, column widths honored (`@onegrid/export`
+  XLSX path today is value-only).
+- **PDF export** — pdf-lib-driven; `@media print` paginated layout;
+  header-row repetition per page; `print-color-adjust`.
+- **Screenshot export** — html2canvas-style fallback path for the
+  visible viewport.
+- **Cell-level animations + transitions** — fade-in on first paint,
+  scale on edit commit, opt-in via theme tokens (`--og-anim-*`).
+
+### v1.6.0 — "server modes + master-detail variants"
+
+- **Infinite row model** — strict scroll-and-fetch; no cache eviction
+  (caller controls memory). Contrast with the block-cache SSRM that
+  ships today.
+- **Viewport row model** — server tracks the client's visible window
+  and pushes deltas. Alternative to client-pulled blocks; better for
+  bandwidth-constrained mobile.
+- **Master-detail variants** — side-panel mount, modal mount, below-
+  grid mount. Today only row-expand is supported.
+- **Master-detail in tree mode** — combine the two hierarchical paths;
+  today they're mutually exclusive.
+- **Real-database CI** — ephemeral Postgres / MySQL / Mongo containers
+  in CI for every adapter; current tests are unit-level over a mock.
+
+### Operational / ecosystem track (parallel to milestones)
+
+These are gates the **codebase doesn't ship** — they live in CI, infra,
+or external services. Each is a fix-it batch, not a feature milestone.
+
+**Distribution + reachability**
+- 🔴 **Publish to npm** — every dep is currently `workspace:*`;
+  nothing on the registry. Blocks every external adopter.
+- 🔴 **Live demo URL** — playground is local-only; no hosted preview.
+- 🔴 **Docs site** — `docs/*.md` are markdown only; no rendered site
+  (`docs.onegrid.dev` or similar via Astro / Nextra / VitePress).
+- **CDN / unpkg bundle** — standalone `<script>`-tag distribution.
+- **Storybook for component packages** — `@onegrid/react`'s
+  `<ColumnToolPanel>`, `<SelectAllCheckbox>`, etc.
+- **Example starter apps** beyond `apps/playground` — Next.js, Remix,
+  Vite-React, SvelteKit, Nuxt, Astro Islands.
+
+**CI gates we don't run**
+- 🟡 **Real-database CI** — covered above in v1.6.
+- 🟡 **WebGPU CI** — every WebGPU test currently `skipped` (no GPU in
+  CI env); land a `playwright-headed-gpu` runner or use Apple-silicon
+  macOS runner.
+- 🟡 **Mobile real-device CI** — `@onegrid/touch` tested in jsdom only;
+  iOS Safari `visualViewport` / Android Chrome VirtualKeyboard
+  untested on real hardware. BrowserStack / Sauce Labs integration.
+- 🟡 **Screen-reader CI** — axe-core static scan only; need NVDA /
+  VoiceOver / JAWS smoke via Guidepup or similar.
+- 🟡 **Continuous benchmarking history** — `perf-scroll.spec.ts` emits
+  numbers but they're not persisted across commits; need a dashboard.
+- 🟡 **Fuzz harness** — formula parser, cursor codec, duckdb-join SQL
+  generator, filter expression validator all accept untrusted input;
+  each needs a property-test pass.
+
+**i18n + a11y completion**
+- 🔴 **Real i18n catalogs** — `en` / `es` fixtures exist for tests;
+  no actual translated catalogs for the 75 enumerated translation
+  IDs across major locales (de, fr, pt-BR, ja, zh-Hans, ar, etc.).
+  Community contribution path: write `@onegrid/intl-locale-<tag>`
+  packages.
+- 🟡 **RTL real-world test** — `getRtlAwareScrollLeft` shipped but
+  not end-to-end-tested with an RTL locale in Playwright.
+- 🔴 **Real screen-reader smoke** — currently only the static-scan
+  axe-core gate runs.
+
+**Audit + governance**
+- 🔴 **Third-party security audit** — scheduled for v1.0.0 final;
+  external pen-test against the threat model in `docs/SECURITY.md`.
+- 🟡 **Deprecation-import lint rule** — ESLint plugin firing on
+  `@deprecated`-tagged imports.
+- 🟡 **Auto-generated API surface reports** — `docs/api/*.api.md` per
+  package via api-extractor; PR-diff gate.
+- 🟡 **`@public` / `@beta` JSDoc tags** — `docs/SURFACE.md` lists the
+  public surface; source files don't carry the tags yet.
+- 🟡 **Workspace version bump** — every package at `0.0.x`; bump to
+  `1.0.0` is the v1.0.0 final blocker.
+
+**Community + adoption**
+- 🔴 **Zero production users** — the velocity claim is unproven in
+  real workloads. First production case study is the trust ratchet.
+- 🔴 **Zero external contributors** — bug-triage process, PR-review
+  cadence, RFC template all need to exist before contributors arrive.
+- 🔴 **No bug bounty / vulnerability disclosure mechanism running** —
+  `security@onegrid.dev` mailbox + workflow.
+- **No release cadence established** — every milestone has shipped as
+  a marathon. Steady-state cadence (e.g., minor every 4–6 weeks) is
+  the v1.0.0+ commitment.
+
+### Per-milestone `.x` patches (deferred from in-flight milestones)
+
+These are work the parent milestone explicitly deferred. Each `.x`
+ships when its specific dependency soaks.
+
+**v0.0.9.x — research-pending items (8 carryovers)**
+- Error boundaries + observability — renderer/formatter/validator
+  throws not caught yet; a thrown formatter crashes the row.
+  `onError(err, context)`, error-state cell rendering, React error-
+  boundary integration, OpenTelemetry breadcrumbs.
+- Schema evolution at runtime — column added/removed mid-session:
+  selection-by-index vs by-id, formula `#REF!` on removed columns,
+  `setColumns` breaking-change detection.
+- Multi-tenancy / RLS / column permissions — server-canonical filter
+  on `BlockRequest`; client-cosmetic UI (hide / disable / read-only).
+- Backwards-compat / deprecation policy — `@deprecated` JSDoc +
+  console.warn + ESLint rule + the v1.0.0 final lint rule above.
+- Adopter testing harness — `@onegrid/test` package; "row 5 column 3
+  contains X", drive editing, wait for SSRM blocks, jsdom canvas
+  limits, Playwright + vitest browser-mode recipes.
+- Print / advanced export — covered in v1.5 above.
+- Validation system extensibility — cross-cell / row-level / sheet-
+  level validators on top of per-cell. Adapton invalidation reuse.
+- Runtime feature flags vs compile-time tree-shaking — sub-path
+  exports for `tree-data`, `pivot`, `formula`, `webgpu` opt-in.
+
+**v0.0.10.x — DBSP + perf carryovers**
+- Full DBSP join — delta-join with indexed state on both sides.
+- Red-black-tree incremental sort — currently top-K via heap baseline.
+- Operator checkpoint / resume — serialize operator state to survive
+  process restart.
+- Full dirty-rect partial canvas repaint — clip to changed regions
+  instead of full `clearRect`. Border-continuity invariant rework.
+
+**v0.0.11.x — moats carryovers**
+- Formula engine migration onto `@onegrid/reactive` (Salsa) — replace
+  the Adapton substrate; backdating cascade-protection in formula
+  recompute.
+- Derived-views package built on the reactive substrate.
+- Column-tool panel reactivity migration onto the substrate.
+- Automerge heads-based diff walking — current bridge is shallow
+  snapshot diff; fine for small workspaces, won't scale to thousands
+  of rows.
+
+**v0.1.0.x — WebGPU rendering carryovers**
+- 🔴 **Canvas → WebGPU paint-loop port** — the actual moonshot the
+  v0.1.0 scaffold was leading up to. The scaffolding (device,
+  swap chain, cell-quad pipeline, MSDF, vertex buffer protocol) is
+  in place; the renderer's `tick()` + `drawRows()` + `syncCellOverlay()`
+  rewrite onto the GPU is the work.
+- Hash-aggregate linear probing — drops the "pick numBuckets ≥ 4×
+  cardinality" constraint; works for unknown-cardinality joins.
+- Slug-style per-curve text — atlas-free fallback for arbitrary
+  zoom; complements the MSDF-atlas path.
+- WebGPU benchmark suite — 100 visible cells × 10M rows scroll at
+  60 FPS as the gate before promoting WebGPU as the default render.
+
+---
+
+## Roadmap-ahead summary
+
+| Track | Where it lives |
+| --- | --- |
+| **v1.0.0 final** (audit + version bumps + JSDoc tags + API reports) | Stability milestone |
+| **v1.1.0** spreadsheet-grade compat (~460 Excel functions + dynamic arrays + OOXML) | Above |
+| **v1.2.0** interaction polish (drag-resize columns / rows, auto-size, cell flash, find/replace, keyboard nav, zero-config, keymap, selection backend, render hooks, grid-in-cell) | v1.2 section above |
+| **v1.3.0** tool panels (drag-to-group bar, pivot side panel, filter side panel, aggregation panel, status bar plugins, overlays) | v1.3 section |
+| **v1.4.0** charts + advanced clipboard (range chart, pivot chart, multi-rect clipboard, drag-fill patterns) | v1.4 section |
+| **v1.5.0** editing + export depth (calendar editor, multi-select editor, context-menu defaults, styled Excel export, PDF, screenshot, cell animations) | v1.5 section |
+| **v1.6.0** server modes + master-detail variants (infinite row model, viewport row model, side/modal/below-grid master-detail, MD-in-tree, real-DB CI) | v1.6 section |
+| **Operational track** (npm publish, docs site, live demo, CDN, Storybook, starters, real-DB CI, GPU CI, mobile CI, SR CI, perf history, fuzz, real i18n catalogs, audit, version bump, public-tagging, API reports, deprecation lint, community/adoption) | Operational section |
+| **`.x` patches** (v0.0.9.x research-pending, v0.0.10.x DBSP/perf, v0.0.11.x reactive migration, v0.1.0.x WebGPU paint port) | Per-milestone `.x` section |
 
 ---
 
