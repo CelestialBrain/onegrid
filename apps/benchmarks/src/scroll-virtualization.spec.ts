@@ -53,7 +53,18 @@ test('scrolling to the physical bottom reaches the last logical row', async ({ p
     if (!grid) throw new Error('no scrollHost');
     grid.scrollTop = grid.scrollHeight;
   });
-  await page.waitForTimeout(80);
+  // Wait for handleScroll to actually fire and propagate logical scrollTop.
+  // WebKit's scroll event dispatch is slower than Chromium's — a fixed
+  // 80 ms wait works on Chromium but flakes on WebKit (observed:
+  // lastVisibleRow stuck at 18 after 80 ms, but reaches 9999999 by 300 ms).
+  await page.waitForFunction(
+    (target) => {
+      const i = window.__onegrid?.getViewportInfo?.();
+      return i != null && i.lastVisibleRow >= target - 1;
+    },
+    TARGET_NUM_ROWS,
+    { timeout: 5_000 },
+  );
 
   const info = await page.evaluate(() => window.__onegrid!.getViewportInfo!());
   // The last visible row should be the actual last row index. Pre-fix,
