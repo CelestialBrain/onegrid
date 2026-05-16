@@ -856,26 +856,44 @@ export class Grid {
   private updateScrollSpacerHeight(): void {
     const bands = this.dataBandTop() + this.pinnedBottomBandHeight() + this.statusBarHeight();
     const logicalTotal = bands + this.fenwick.totalHeight;
+    const previousScale = this.scrollScale;
     if (logicalTotal <= VIRTUAL_SCROLL_CAP_PX) {
       this.scrollSpacer.style.height = `${logicalTotal}px`;
-      this.scrollScale = 1;
+      if (previousScale !== 1) {
+        this.scrollScale = 1;
+        // Re-derive logical scrollTop from the current physical scroll
+        // position so the next handleScroll doesn't compute a bogus
+        // delta against a stale-scale value.
+        this.scrollTop = this.scrollHost.scrollTop;
+      }
       return;
     }
-    // Cap the physical spacer. Scale maps the *scrollable range* of
-    // the host (scrollHeight - clientHeight) to the scrollable range
-    // of the logical layout (totalLogical - viewportHeight), so the
-    // two endpoints line up:
-    //   physical scrollTop = 0       → logical scrollTop = 0       (top)
-    //   physical scrollTop = physMax → logical scrollTop = logMax  (bottom)
-    // Without subtracting viewportHeight from both, the bottom of the
-    // physical scrollbar would translate to a logical position
-    // ~`viewport × scale` short of the true end, hiding the final
-    // ~hundreds of rows from the visible-row meter and rendering.
     const vp = Math.max(1, this.viewportHeight);
-    const physMax = Math.max(1, VIRTUAL_SCROLL_CAP_PX - vp);
-    const logMax = Math.max(1, logicalTotal - vp);
     this.scrollSpacer.style.height = `${VIRTUAL_SCROLL_CAP_PX}px`;
-    this.scrollScale = logMax / physMax;
+    // Read back the *actually rendered* spacer height. Browsers cap
+    // CSS element heights below our requested value on some engines
+    // (Firefox ~17.9 Mpx, mobile Safari lower). If the browser clamped
+    // to e.g. 10 Mpx, scale must be derived from that clamped value
+    // — otherwise the physical scrollbar's max maps to only a fraction
+    // of the logical data, the bottom rows become unreachable, and
+    // (worse) the scrollbar can appear to "reset" because handleScroll
+    // sees a smaller physical max than we expect.
+    //
+    // Reading offsetHeight forces a layout flush so we get the
+    // post-clamp value in the same turn.
+    const physicalSpacer = this.scrollSpacer.offsetHeight;
+    const physMax = Math.max(1, physicalSpacer - vp);
+    const logMax = Math.max(1, logicalTotal - vp);
+    const newScale = logMax / physMax;
+    if (newScale !== previousScale) {
+      this.scrollScale = newScale;
+      // Keep this.scrollTop in sync with the new scale. Without this,
+      // a mid-session resize (toolbar wrap, FPS-pill widening, host
+      // pane resize) would leave handleScroll computing deltas across
+      // two different scales, which appears to the user as the row
+      // counter going backwards while scrolling down.
+      this.scrollTop = this.scrollHost.scrollTop * newScale;
+    }
   }
 
   /**
