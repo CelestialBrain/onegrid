@@ -541,6 +541,13 @@ The flagship moonshot.
 Surface freeze, full a11y audit, every adapter promoted from
 experimental, semver guarantees, security review.
 
+RC posture upgrade (configuration-only, no implementation cost): claim
+**WCAG 2.2 AA** conformance in `docs/SURFACE.md` + `docs/SECURITY.md`.
+Bump `a11y-modes.spec.ts` to
+`withTags(['wcag2a','wcag2aa','wcag21a','wcag21aa','wcag22aa'])`.
+Marketable since the broader commercial-grid market typically claims
+only WCAG 2.0 AA.
+
 RC ([docs/v1.0.0.md](./docs/v1.0.0.md)) ships:
 - [`docs/SURFACE.md`](./docs/SURFACE.md) — four stability tiers (`@public`/`@beta`/`@internal`/`@deprecated`); public surface enumerated for every package.
 - [`docs/SEMVER.md`](./docs/SEMVER.md) — semver policy (what counts as breaking) + deprecation lifecycle + wire-protocol stability rule.
@@ -630,6 +637,26 @@ existing spreadsheets evaluate the same number):
   existent date. Match the bug; let opt-out via
   `formula.dateSystem: '1904'` (Mac mode) or
   `'1900-strict'` (no bug — breaks .xlsx round-trip).
+- **Volatile function semantics** — `NOW()` / `TODAY()` / `RAND()` /
+  `RANDBETWEEN()` / `OFFSET()` / `INDIRECT()` / `INFO()` /
+  `CELL()` re-evaluate on EVERY recompute, not just when their
+  dependencies change. Adapton's demand-driven path needs an opt-in
+  "volatile" marker per function — without it, value-equivalent-skip
+  would incorrectly cache stale `NOW()` results. Same applies after
+  the Salsa migration in v0.0.11.x.
+- **Iterative calculation** for circular references —
+  `formula.iteration: { max: 100, epsilon: 0.001 }` per Excel's
+  manual-iteration mode. Without iteration enabled, circular refs
+  emit `#REF!` and stop. Load-bearing knob for accounting-style
+  depreciation workbooks.
+- **15-digit display precision rule** — Excel rounds at the cell
+  level to suppress `0.1 + 0.2 = 0.30000000000000004`. The
+  underlying stored value keeps full f64 precision; only the
+  displayed value rounds. Different from the v0.0.10 BigInt path —
+  this is float-precision display specifically.
+- **Spill collision emits `#SPILL!`** (Excel-spec compliant) on
+  dynamic-array overlap. Differentiates from non-compliant
+  implementations that emit `#VALUE!` for spill conflicts.
 - **DATE serial number epoch** — 1900-01-01 = 1 in 1900 mode,
   1904-01-01 = 0 in 1904 mode.
 - **Float-precision display rules** — Excel rounds at the cell
@@ -732,6 +759,30 @@ item is roughly half-a-session of work; the milestone is one batch.
   demo in the playground.
 - Tree mode + master-detail combined — undocumented today; formalize
   the row-meta interaction.
+- **`PullRowSource` interface** — pull-model row sourcing alongside the
+  existing eager `RowSource`. Caller implements
+  `getCellContent(rowIndex, columnId) → CellValue` + an
+  `onVisibleRegionChanged(start, end)` prefetch event. Memory scales
+  with viewport, not dataset. Maps onto `@onegrid/reactive` substrate.
+- **Finer-grained `CellRenderer`** — extend with optional
+  `measure(value, column) → number` + `themeOverride(rowIndex, columnId)
+  → Partial<GridTheme>` hooks. Backwards-compatible; existing
+  renderers keep working. Lets plugins compose grid-wide overrides
+  without CSS-recalc cost.
+- **`ColumnMeta` + `GridMeta` declaration-merging interfaces** — empty
+  `interface ColumnMeta {}` / `interface GridMeta {}` in
+  `@onegrid/core` so adopters augment column/grid context with
+  strongly-typed custom fields. Zero runtime cost; immediate
+  ergonomic win.
+- **`@onegrid/react` slot props** — `<OneGrid slots={{ toolbar:
+  MyToolbar, noRowsOverlay: MyEmpty, columnToolPanel: MyPanel }}
+  slotProps={{...}} />` for the toolbar / status bar / overlays /
+  column-tool panel / filter panel. `useGridApiContext()` +
+  `useGridSelector()` hooks for slot components to read state.
+  Module-augmentation escape hatch via
+  `${SlotPascalCase}PropsOverrides`. Complements `@onegrid/plugin-kit`
+  (which covers compute-time customization; slots cover render-time
+  component substitution).
 
 ### v1.3.0 — "tool panels + UI surfaces"
 
@@ -751,6 +802,14 @@ Today only the column tool panel exists.
   which has fixed selection-aggregate slots only.
 - **Loading + no-rows overlays** — first-class overlay layer + built-in
   default UIs + override hook. Currently up to the adopter.
+- **Controlled-state overlay per feature** — `defineGridOptions`
+  accepts optional `state.sort` / `onSortChange(updater)` style
+  controlled state per feature (sorting / filtering / pagination /
+  selection / column visibility). Mechanical binding to external
+  stores (URL-sync, Redux, Zustand, Jotai) becomes trivial; the
+  existing imperative `setSort` / `setFilter` API stays as the
+  uncontrolled path. Per-feature controlled-vs-uncontrolled is the
+  axis (URL-synced sort + in-memory filter coexists out of the box).
 
 ### v1.4.0 — "charts + advanced clipboard"
 
