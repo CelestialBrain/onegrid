@@ -2491,8 +2491,17 @@ export class Grid {
     colEnd: number,
     horizontalOffset: number,
   ): { first: number; last: number; xStart: number } {
-    // x at col c = -horizontalOffset + sum(widths[colStart..c))
-    let x = -horizontalOffset;
+    // x at col c in viewport coords =
+    //   -horizontalOffset + cumulativeColumnWidths[c]
+    //
+    // (The pre-v0.0.10 drawRows did `x = -horizontalOffset; if (colStart
+    // > 0) x += cumulativeColumnWidths[colStart]`, then advanced by
+    // widths in the loop. This helper preserves the same invariant —
+    // the leading `cumulativeColumnWidths[colStart]` term is what
+    // accounts for the frozen-column gap when the scrolling band is
+    // drawn after the frozen band.)
+    const base = this.cumulativeColumnWidths[colStart] ?? 0;
+    let x = -horizontalOffset + base;
     let first = colStart;
     for (let c = colStart; c < colEnd; c++) {
       const w = this.columns[c]?.width ?? 0;
