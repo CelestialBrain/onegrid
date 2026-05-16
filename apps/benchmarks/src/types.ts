@@ -28,6 +28,11 @@ interface SortField {
   readonly nulls?: 'first' | 'last';
 }
 
+interface MinimalColumnDef {
+  readonly id: string;
+  readonly width: number;
+}
+
 declare global {
   interface Window {
     __onegrid?: {
@@ -40,6 +45,11 @@ declare global {
       getSort: () => ReadonlyArray<SortField>;
       setFilter: (query: string) => void;
       getFilter: () => string;
+      /** v1.2 — current column layout for resize / reorder tests. */
+      getColumns?: () => ReadonlyArray<MinimalColumnDef>;
+      /** The mounted host element. Read for boundingClientRect-based
+       *  coordinate math in real-Chromium specs. */
+      host?: HTMLElement;
     };
   }
 }

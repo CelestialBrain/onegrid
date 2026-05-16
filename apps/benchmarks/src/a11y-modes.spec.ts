@@ -31,7 +31,7 @@ for (const mode of MODES) {
     await page.waitForTimeout(300);
 
     const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
       .disableRules(['color-contrast']) // same exemption as a11y.spec.ts
       .analyze();
     const critical = results.violations.filter(
@@ -49,7 +49,7 @@ test('axe-core: zero critical/serious violations with the column tool panel open
   await page.locator('button:has-text("Columns")').click();
   await page.waitForTimeout(150);
   const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .disableRules(['color-contrast'])
     .analyze();
   const critical = results.violations.filter(
@@ -66,7 +66,7 @@ test('axe-core: zero critical/serious violations with floating filter row + filt
   await page.locator('button:has-text("Filters")').click();
   await page.waitForTimeout(150);
   const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .disableRules(['color-contrast'])
     .analyze();
   const critical = results.violations.filter(
@@ -83,7 +83,7 @@ test('axe-core: zero critical/serious violations with group-by + sticky group ro
   await page.locator('label:has-text("Group by") select').selectOption('status');
   await page.waitForTimeout(300);
   const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .disableRules(['color-contrast'])
     .analyze();
   const critical = results.violations.filter(

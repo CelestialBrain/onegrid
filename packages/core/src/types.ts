@@ -9,6 +9,38 @@ import type { SortModel } from '@onegrid/protocol';
  * Per-column configuration. Width is the only required visual property; the
  * rest is callbacks the renderer invokes per cell.
  */
+/**
+ * Empty interface adopters augment via TypeScript declaration merging
+ * to add strongly-typed per-column context (zero runtime cost):
+ *
+ * ```ts
+ * declare module '@onegrid/core' {
+ *   interface ColumnMeta {
+ *     glAccount?: string;
+ *     analyticsTag?: 'pii' | 'public';
+ *   }
+ * }
+ * ```
+ *
+ * `column.meta.glAccount` then type-checks across the codebase.
+ */
+export interface ColumnMeta {}
+
+/**
+ * Empty interface adopters augment via TypeScript declaration merging
+ * to add strongly-typed grid-instance context:
+ *
+ * ```ts
+ * declare module '@onegrid/core' {
+ *   interface GridMeta {
+ *     tenantId: string;
+ *     featureFlags: ReadonlyArray<string>;
+ *   }
+ * }
+ * ```
+ */
+export interface GridMeta {}
+
 export interface ColumnDef<TValue = unknown> {
   readonly id: string;
   readonly width: number;
@@ -16,6 +48,10 @@ export interface ColumnDef<TValue = unknown> {
   readonly minWidth?: number;
   readonly maxWidth?: number;
   readonly pinned?: 'left' | 'right';
+  /** Adopter-augmented context (declaration-merged via the
+   *  `ColumnMeta` interface above). Zero runtime cost; carries
+   *  strongly-typed custom fields. */
+  readonly meta?: ColumnMeta;
   /** Formatter the renderer invokes to convert a cell value to display text. */
   readonly format?: (value: TValue, rowIndex: number) => string;
   /** Optional per-cell foreground color. */
@@ -91,6 +127,26 @@ export interface CellRenderer {
   readonly mount: (context: CellRenderContext) => HTMLElement;
   readonly update: (el: HTMLElement, context: CellRenderContext) => void;
   readonly reset?: (el: HTMLElement) => void;
+  /**
+   * v1.2 — optional content-width measurement for auto-size-column.
+   * Returns the natural pixel width the renderer would prefer for the
+   * given value (e.g., text width + padding). When set, the grid's
+   * `autoSizeColumn(id)` path consults this to derive the new
+   * `column.width`. Defaults to the canvas `measureText` over
+   * `column.format?.(value)` when omitted.
+   */
+  readonly measure?: (context: CellRenderContext) => number;
+  /**
+   * v1.2 — optional per-cell theme overrides. Returns a partial
+   * GridTheme that overlays the grid-wide theme for THIS cell only.
+   * Resolved at paint time; lets a plugin compose grid-wide visual
+   * overrides without CSS-recalc cost (e.g., highlight every cell
+   * matching a query without injecting a class). Return `undefined`
+   * for cells that don't need an override (the common case).
+   */
+  readonly themeOverride?: (
+    context: CellRenderContext,
+  ) => Partial<GridTheme> | undefined;
 }
 
 /**
@@ -266,6 +322,23 @@ export interface GridOptions {
   readonly rowSource: RowSource;
   /** Per-row heights. If a single number, applied uniformly. */
   readonly rowHeight: number | Float32Array;
+  /** Adopter-augmented grid-instance context (declaration-merged via
+   *  the `GridMeta` interface). Zero runtime cost. */
+  readonly meta?: GridMeta;
+  /** Allow dragging the right edge of a column header to resize.
+   *  Default: false. Resize respects `column.minWidth` and `column.maxWidth`
+   *  if set. Emits `onColumnResize(columnId, newWidth, finalCommit)`
+   *  during the drag (finalCommit=false) and on drop (true). */
+  readonly enableColumnResize?: boolean;
+  /** Fires while the user drags a column-resize handle and again on
+   *  drop. `finalCommit=false` during the drag (for UI feedback);
+   *  `finalCommit=true` on pointer-up. Consumers should persist the
+   *  width on finalCommit only. */
+  readonly onColumnResize?: (
+    columnId: string,
+    newWidth: number,
+    finalCommit: boolean,
+  ) => void;
   /** Header band height in CSS pixels. Default 32. */
   readonly headerHeight?: number;
   /** Number of left-pinned columns. Default 0. */

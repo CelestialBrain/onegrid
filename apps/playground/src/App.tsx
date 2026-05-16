@@ -283,6 +283,8 @@ declare global {
       formulaSet?: (id: string, input: string) => void;
       formulaGet?: (id: string) => unknown;
       formulaStats?: () => unknown;
+      getColumns?: () => ReadonlyArray<ColumnDef>;
+      host?: HTMLElement;
     };
   }
 }
@@ -1099,7 +1101,7 @@ export const App = (): JSX.Element => {
     // is intentionally side-effect-free here — the Grid owns the
     // post-drag order.
     ...(mode === 'memory' || mode === 'ssrm' || mode === 'duckdb'
-      ? { enableColumnReorder: true }
+      ? { enableColumnReorder: true, enableColumnResize: true }
       : {}),
     ...(mode === 'memory' && memoryDataset?.materialized
       ? {
@@ -1298,6 +1300,8 @@ export const App = (): JSX.Element => {
       scrollToRow: (i) => {
         grid.scrollToRow(i);
       },
+      getColumns: () => grid.getColumns(),
+      host: grid['host' as never] as unknown as HTMLElement,
       setRows: (n) => {
         setNumRows(n as (typeof ROW_OPTIONS)[number]);
       },

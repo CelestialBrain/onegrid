@@ -239,6 +239,17 @@ export class Grid {
   private dragCandidateClientX = 0;
   private dragActiveColumn: number | null = null;
   private dragIndicatorEl: HTMLDivElement | null = null;
+
+  // Column resize state. v1.2 — pointer enters resize mode when it
+  // lands inside the rightmost RESIZE_HANDLE_PX of a column header.
+  // We then track the width delta per frame until pointerup.
+  private readonly columnResizeEnabled: boolean;
+  private readonly onColumnResize:
+    | ((columnId: string, newWidth: number, finalCommit: boolean) => void)
+    | undefined;
+  private resizeColumn: number | null = null;
+  private resizeStartClientX = 0;
+  private resizeStartWidth = 0;
   /** Drag insertion index (the column index where the dragged column
    *  would land if dropped now). Range: [0, this.columns.length]. */
   private dragInsertIndex = 0;
@@ -259,6 +270,8 @@ export class Grid {
     this.sort = options.sort ?? [];
     this.columnReorderEnabled = options.enableColumnReorder ?? false;
     this.onColumnReorder = options.onColumnReorder;
+    this.columnResizeEnabled = options.enableColumnResize ?? false;
+    this.onColumnResize = options.onColumnResize;
     this.onContextMenu = options.onContextMenu;
 
     this.dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
@@ -911,6 +924,30 @@ export class Grid {
     const fullHeader = this.fullHeaderHeight();
     const dataTop = this.dataBandTop();
 
+    // Column resize hit-test (highest priority in the header band):
+    // pointer landing inside the rightmost RESIZE_HANDLE_PX of a
+    // column header enters resize mode. Hit-zone is 6 px on either
+    // side of the boundary so the cursor finds it without precision.
+    if (
+      this.columnResizeEnabled &&
+      localY >= 0 &&
+      localY < fullHeader
+    ) {
+      const colAtBoundary = this.columnAtRightBoundary(localX);
+      if (colAtBoundary !== null && this.columns[colAtBoundary]) {
+        this.resizeColumn = colAtBoundary;
+        this.resizeStartClientX = e.clientX;
+        this.resizeStartWidth = this.columns[colAtBoundary]!.width;
+        this.suppressSelectionUntilUp = true;
+        try {
+          this.scrollHost.setPointerCapture(e.pointerId);
+        } catch {
+          // capture refused — fall back to window pointerup
+        }
+        return;
+      }
+    }
+
     // Header click? When column reorder is enabled, capture a drag
     // candidate and defer the onHeaderClick fire to pointerup — that
     // way a tap still toggles sort while a drag enters reorder mode.
@@ -1083,7 +1120,68 @@ export class Grid {
     );
   }
 
+  /**
+   * Resize-handle hit-test. Returns the column whose RIGHT edge falls
+   * within the rightmost `RESIZE_HANDLE_PX` of its own header (i.e.,
+   * the cursor lands in the column's own resize-zone strip, NOT in
+   * the next column). Standard UX convention: resize handle belongs
+   * to the column on the LEFT side of the boundary.
+   *
+   * Used by `handlePointerDown` to enter column-resize mode before
+   * reorder / sort / selection paths claim the event.
+   */
+  private columnAtRightBoundary(localX: number): number | null {
+    const RESIZE_HANDLE_PX = 6;
+    // Frozen band: boundaries live in absolute viewport coords.
+    if (localX <= this.frozenWidth) {
+      for (let i = 0; i < this.frozenColumnCount; i++) {
+        const boundary = this.cumulativeColumnWidths[i + 1] ?? 0;
+        if (localX >= boundary - RESIZE_HANDLE_PX && localX < boundary) {
+          return i;
+        }
+      }
+      return null;
+    }
+    // Scrolling band: account for scrollLeft + the gap before the
+    // first non-frozen column.
+    const baseOffset = this.cumulativeColumnWidths[this.frozenColumnCount] ?? 0;
+    for (let i = this.frozenColumnCount; i < this.columns.length; i++) {
+      const boundaryInLayout = this.cumulativeColumnWidths[i + 1] ?? 0;
+      const boundaryInViewport =
+        boundaryInLayout - baseOffset - this.scrollLeft + this.frozenWidth;
+      if (
+        localX >= boundaryInViewport - RESIZE_HANDLE_PX &&
+        localX < boundaryInViewport
+      ) {
+        return i;
+      }
+      if (boundaryInViewport > this.viewportWidth + RESIZE_HANDLE_PX) break;
+    }
+    return null;
+  }
+
   private handlePointerMove = (e: PointerEvent): void => {
+    // Column resize tracking: update the column width per-frame as
+    // the pointer moves; fire onColumnResize with finalCommit=false.
+    if (this.resizeColumn !== null) {
+      const col = this.columns[this.resizeColumn];
+      if (col) {
+        const delta = e.clientX - this.resizeStartClientX;
+        const minW = col.minWidth ?? 24;
+        const maxW = col.maxWidth ?? 4096;
+        const nextWidth = Math.max(minW, Math.min(maxW, this.resizeStartWidth + delta));
+        if (nextWidth !== col.width) {
+          // Splice an updated ColumnDef in place. cumulativeColumnWidths
+          // is rebuilt by recomputeColumnWidths(); setColumns() also
+          // calls scheduleRender().
+          const next = [...this.columns];
+          next[this.resizeColumn] = { ...col, width: nextWidth };
+          this.setColumns(next);
+          this.onColumnResize?.(col.id, nextWidth, false);
+        }
+      }
+      return;
+    }
     if (this.isPointerDragging) {
       const cell = this.cellAtClient(e.clientX, e.clientY);
       if (cell) {
@@ -1129,6 +1227,20 @@ export class Grid {
   };
 
   private handlePointerUp = (e: PointerEvent): void => {
+    // Column resize finalize: fire onColumnResize one more time
+    // with finalCommit=true so consumers can persist on the drop.
+    if (this.resizeColumn !== null) {
+      const col = this.columns[this.resizeColumn];
+      if (col) this.onColumnResize?.(col.id, col.width, true);
+      this.resizeColumn = null;
+      this.suppressSelectionUntilUp = false;
+      try {
+        this.scrollHost.releasePointerCapture(e.pointerId);
+      } catch {
+        // release may fail; harmless
+      }
+      return;
+    }
     this.isPointerDragging = false;
     this.suppressSelectionUntilUp = false;
     // Fill-handle drag finalize. Compute the *fill* rectangle

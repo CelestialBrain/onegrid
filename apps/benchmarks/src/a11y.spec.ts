@@ -33,7 +33,7 @@ test('axe-core: zero critical / serious violations on the in-memory grid', async
   page,
 }) => {
   const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     // The "color-contrast" rule is rule-of-thumb and the grid's dark
     // theme tokens are intentional; skip until light theme + density
     // variants ship in a later v0.0.6 commit.
