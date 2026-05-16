@@ -834,9 +834,25 @@ export class Grid {
 
   private handleResize = (): void => {
     const rect = this.host.getBoundingClientRect();
-    this.dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
-    this.viewportWidth = Math.max(0, Math.floor(rect.width));
-    this.viewportHeight = Math.max(0, Math.floor(rect.height));
+    const newDpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+    const newViewportWidth = Math.max(0, Math.floor(rect.width));
+    const newViewportHeight = Math.max(0, Math.floor(rect.height));
+    const dimensionsChanged =
+      newViewportWidth !== this.viewportWidth ||
+      newViewportHeight !== this.viewportHeight ||
+      newDpr !== this.dpr;
+    if (!dimensionsChanged) {
+      // ResizeObserver fired but the host didn't actually change size
+      // (and DPR didn't shift). Reassigning canvas.width / .height
+      // clears the canvas to transparent — a single-frame full-grid
+      // flash. During a column-resize drag, any unrelated reflow
+      // (scrollbar visibility flip, sibling element layout) would
+      // trigger this and produce a visible flicker every frame.
+      return;
+    }
+    this.dpr = newDpr;
+    this.viewportWidth = newViewportWidth;
+    this.viewportHeight = newViewportHeight;
     this.canvas.width = Math.floor(this.viewportWidth * this.dpr);
     this.canvas.height = Math.floor(this.viewportHeight * this.dpr);
     this.canvas.style.width = `${this.viewportWidth}px`;
