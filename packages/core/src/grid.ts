@@ -871,7 +871,19 @@ export class Grid {
     this.scrollSpacer.style.width = `${this.totalColumnsWidth}px`;
     this.updateScrollSpacerHeight();
     this.lastRenderedScrollTop = -1;
-    this.scheduleRender();
+    // Reassigning canvas.width / .height clears the canvas to
+    // transparent. If we waited for the next rAF to redraw, the
+    // browser would paint the blank canvas in between — visible as
+    // a head-to-toe flicker on every window resize tick. Render
+    // synchronously inside the same task so the canvas is never
+    // observably blank.
+    if (!isJitter) {
+      this.render();
+      this.lastRenderedScrollTop = this.scrollTop;
+      this.lastRenderedScrollLeft = this.scrollLeft;
+    } else {
+      this.scheduleRender();
+    }
   };
 
   /**
