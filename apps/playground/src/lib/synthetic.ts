@@ -399,10 +399,17 @@ export function buildMemoryView(
 ): MemoryView {
   let perm: Int32Array | null = null;
 
+  // Defensive: drop sort entries that reference columns absent from
+  // this table. Happens when the user switches modes (e.g. tree → memory)
+  // and the prior sort state carries a column id ("name") that doesn't
+  // exist in the new mode. Without this guard, sortIndex throws and
+  // takes down the whole React tree on mode switch.
+  const safeSort: SortModel = sort.filter((f) => table.hasColumn(f.columnId));
+
   if (filter !== null) {
     const sel = filterIndex(table, filter);
-    if (sort.length > 0) {
-      const fullPerm = sortIndex(table, sort);
+    if (safeSort.length > 0) {
+      const fullPerm = sortIndex(table, safeSort);
       const out = new Int32Array(sel.cardinality);
       let j = 0;
       for (let i = 0; i < fullPerm.length; i++) {
@@ -413,8 +420,8 @@ export function buildMemoryView(
     } else {
       perm = sel.toIndices();
     }
-  } else if (sort.length > 0) {
-    perm = sortIndex(table, sort);
+  } else if (safeSort.length > 0) {
+    perm = sortIndex(table, safeSort);
   }
 
   if (perm === null) {

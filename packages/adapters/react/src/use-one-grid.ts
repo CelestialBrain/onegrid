@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Grid } from '@onegrid/core';
-import type { GridOptions } from '@onegrid/core';
+import type { ColumnDef, GridOptions } from '@onegrid/core';
 
 export type UseOneGridOptions = Omit<GridOptions, 'host'>;
 
@@ -64,6 +64,15 @@ export function useOneGrid(options: UseOneGridOptions): UseOneGridReturn {
   const onFillHandleRef = useRef(options.onFillHandle);
   onFillHandleRef.current = options.onFillHandle;
 
+  // Stable "column shape" key. Changes when the COLUMN SET changes
+  // (id / order / count) — NOT when only widths change. Used to gate
+  // Grid recreation: shape change → destroy + recreate; width-only
+  // change → imperative setColumns().
+  const columnsShapeKey = useMemo(
+    () => deriveColumnsShapeKey(options.columns),
+    [options.columns],
+  );
+
   useEffect(() => {
     if (!ref.current) return;
     if (options.columns.length === 0 || options.rowSource.numRows === 0) return;
@@ -97,15 +106,35 @@ export function useOneGrid(options: UseOneGridOptions): UseOneGridReturn {
       instance.destroy();
       setGrid(null);
     };
-    // Intentionally NOT depending on rowSource / rowHeight / callbacks
-    // — those flow imperatively (setRowSource) or via refs.
+    // Grid is recreated on column-SHAPE change (column id set / count
+    // / header / frozen-count / theme). Within-shape changes (just
+    // widths / formatters / renderers) flow imperatively via the
+    // setColumns useEffect below. The shape-key derivation lives in
+    // `columnsShapeKey` so we don't recreate the Grid on every render.
+    //
+    // Recreating the Grid on a columns identity change destroyed every
+    // piece of in-flight interaction state (drag-to-resize / drag-to-
+    // reorder / selection / scroll / pending edits). With this shape-
+    // aware diff, drag-to-resize updates only trigger setColumns().
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    options.columns,
+    columnsShapeKey,
     options.headerHeight,
     options.frozenColumnCount,
     options.theme,
   ]);
+
+  // Within-shape column updates (width changes, formatter / color /
+  // renderer swaps, etc.) flow imperatively. setColumns rebuilds the
+  // cumulativeColumnWidths and triggers a render but DOES NOT destroy
+  // any in-progress interaction state. Critical for drag-to-resize:
+  // without this, unrelated re-renders mid-drag (e.g., FPS state
+  // updates from onFrame) would snap the Grid back to prior widths.
+  useEffect(() => {
+    if (!grid) return;
+    grid.setColumns(options.columns);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grid, options.columns]);
 
   useEffect(() => {
     if (!grid) return;
@@ -114,4 +143,23 @@ export function useOneGrid(options: UseOneGridOptions): UseOneGridReturn {
   }, [grid, options.rowSource, options.rowHeight]);
 
   return { ref, grid };
+}
+
+/**
+ * Derive a stable key that changes when the column SET changes (id
+ * sequence) but stays the same when only widths / formatters / etc.
+ * change. Used by `useOneGrid` to distinguish "shape change → recreate
+ * Grid" from "incremental update → call setColumns()".
+ *
+ * Cheap — joins the column ids into one string. For typical grids
+ * (< 100 columns) this is sub-microsecond.
+ */
+function deriveColumnsShapeKey(columns: ReadonlyArray<ColumnDef>): string {
+  // Pipe is reserved as a separator; column ids are simple identifiers.
+  let s = '';
+  for (let i = 0; i < columns.length; i++) {
+    if (i > 0) s += '|';
+    s += columns[i]?.id ?? '';
+  }
+  return s;
 }

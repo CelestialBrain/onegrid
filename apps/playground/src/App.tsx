@@ -767,11 +767,22 @@ export const App = (): JSX.Element => {
     [checkedRows],
   );
 
+  // Per-id width overrides applied on top of the dataset's default
+  // widths. v1.2 column drag-to-resize commits widths here via
+  // `onColumnResize` so width changes survive React re-renders.
+  const [columnWidthOverrides, setColumnWidthOverrides] = useState<
+    Record<string, number>
+  >({});
+
   const memoryColumnsWithRenderer = useMemo(() => {
     if (!memoryDataset) return null;
-    const baseColumns = memoryDataset.columns.map((c) =>
-      c.id === 'status' ? { ...c, renderer: statusPillRenderer } : c,
-    );
+    const baseColumns = memoryDataset.columns.map((c) => {
+      const overridden = columnWidthOverrides[c.id];
+      const withWidth = overridden !== undefined ? { ...c, width: overridden } : c;
+      return c.id === 'status'
+        ? { ...withWidth, renderer: statusPillRenderer }
+        : withWidth;
+    });
     return showCheckboxColumn
       ? [selectionCheckboxColumn, ...baseColumns]
       : baseColumns;
@@ -780,7 +791,7 @@ export const App = (): JSX.Element => {
     // identity of this column ref doesn't need to change for the
     // checkbox state to update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [memoryDataset, showCheckboxColumn]);
+  }, [memoryDataset, showCheckboxColumn, columnWidthOverrides]);
 
   const safeColumns: ReadonlyArray<ColumnDef> = !dataReady
     ? EMPTY_COLUMNS
@@ -1101,7 +1112,24 @@ export const App = (): JSX.Element => {
     // is intentionally side-effect-free here — the Grid owns the
     // post-drag order.
     ...(mode === 'memory' || mode === 'ssrm' || mode === 'duckdb'
-      ? { enableColumnReorder: true, enableColumnResize: true }
+      ? {
+          enableColumnReorder: true,
+          enableColumnResize: true,
+          onColumnResize: (
+            columnId: string,
+            newWidth: number,
+          ): void => {
+            // Commit on every callback (not just finalCommit) so the
+            // React-level columns memo stays in sync with the Grid's
+            // internal widths. Without this, unrelated re-renders mid-
+            // drag (e.g., FPS state updates) snap the Grid back to
+            // its original widths because useOneGrid sees stale
+            // options.columns.
+            setColumnWidthOverrides((prev) =>
+              prev[columnId] === newWidth ? prev : { ...prev, [columnId]: newWidth },
+            );
+          },
+        }
       : {}),
     ...(mode === 'memory' && memoryDataset?.materialized
       ? {
