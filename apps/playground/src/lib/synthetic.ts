@@ -90,7 +90,7 @@ export function generateSynthetic(numRows: number): SyntheticDataset {
       id: 'rowIndex',
       width: 80,
       displayName: '#',
-      format: (_v, i) => i.toString(),
+      format: (_v, i) => (i + 1).toString(),
       color: () => '#8b929c',
     },
     {
@@ -197,7 +197,12 @@ export function materializeSynthetic(numRows: number): MaterializedSyntheticData
       id: 'rowIndex',
       width: 80,
       displayName: '#',
-      format: (v) => String(v ?? ''),
+      // Show VISUAL row position (1-based), not the source-row index
+      // stored in rowIndexCol. The source index is still queryable
+      // through the materialized table (rowIndexCol[sourceRow] = i)
+      // but the # column tracks the user's visible position so it
+      // ascends as you scroll and matches the visible-row meter.
+      format: (_v, i) => (i + 1).toString(),
       color: () => '#8b929c',
     },
     {

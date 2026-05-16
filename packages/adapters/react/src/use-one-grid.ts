@@ -124,17 +124,29 @@ export function useOneGrid(options: UseOneGridOptions): UseOneGridReturn {
     options.theme,
   ]);
 
-  // Within-shape column updates (width changes, formatter / color /
-  // renderer swaps, etc.) flow imperatively. setColumns rebuilds the
-  // cumulativeColumnWidths and triggers a render but DOES NOT destroy
-  // any in-progress interaction state. Critical for drag-to-resize:
-  // without this, unrelated re-renders mid-drag (e.g., FPS state
-  // updates from onFrame) would snap the Grid back to prior widths.
+  // Within-shape column updates flow imperatively, BUT only when the
+  // shape actually changed (column id sequence, count, header, group).
+  // Width changes during a drag round-trip back through React state
+  // (onColumnResize → setState → re-render → fresh options.columns
+  // reference). Echoing those widths into setColumns is a race:
+  // mid-drag, an unrelated re-render (FPS pill update, hover state,
+  // etc.) carries a STALE columns reference where the latest dragged
+  // width hasn't been committed yet, so setColumns snaps the Grid
+  // back to the previous width — visible as a head-to-toe flicker
+  // across header, rows, and pinned bands.
+  //
+  // Resolution: the Grid owns column widths during interaction
+  // (drag-resize, drag-reorder). React state mirrors them for
+  // survival across mounts. We only push columns INTO the Grid on
+  // shape changes; the Grid pushes width changes OUT through
+  // onColumnResize. If you need to programmatically set a width from
+  // React, expose a separate imperative API on the Grid (future).
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
   useEffect(() => {
     if (!grid) return;
-    grid.setColumns(options.columns);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [grid, options.columns]);
+    grid.setColumns(optionsRef.current.columns);
+  }, [grid, columnsShapeKey]);
 
   useEffect(() => {
     if (!grid) return;
