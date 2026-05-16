@@ -61,6 +61,38 @@ declare global {
         readonly firstVisibleRow: number;
         readonly lastVisibleRow: number;
       };
+      setMode?: (m: string) => void;
+      getMode?: () => string;
+      undo?: () => void;
+      redo?: () => void;
+      undoState?: () =>
+        | {
+            readonly canUndo: boolean;
+            readonly canRedo: boolean;
+            readonly undoCount: number;
+            readonly redoCount: number;
+          }
+        | undefined;
+      auditQuery?: (sourceRow: number) => Promise<
+        ReadonlyArray<{
+          readonly ts: number;
+          readonly event: string;
+          readonly columnId: string;
+          readonly oldValue: string;
+          readonly newValue: string;
+        }>
+      >;
+      auditAppend?: (
+        sourceRow: number,
+        ts: number,
+        event: 'edit' | 'paste' | 'fill' | 'undo' | 'redo',
+        columnId: string,
+        oldValue: string,
+        newValue: string,
+      ) => void;
+      auditClear?: () => void;
+      writeCell?: (visualRow: number, columnId: string, newValue: string) => boolean;
+      readCell?: (visualRow: number, columnId: string) => unknown;
       /** The mounted host element. Read for boundingClientRect-based
        *  coordinate math in real-Chromium specs. */
       host?: HTMLElement;

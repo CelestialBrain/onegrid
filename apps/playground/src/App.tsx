@@ -297,6 +297,38 @@ declare global {
         readonly firstVisibleRow: number;
         readonly lastVisibleRow: number;
       };
+      setMode?: (m: string) => void;
+      getMode?: () => string;
+      undo?: () => void;
+      redo?: () => void;
+      undoState?: () =>
+        | {
+            readonly canUndo: boolean;
+            readonly canRedo: boolean;
+            readonly undoCount: number;
+            readonly redoCount: number;
+          }
+        | undefined;
+      auditQuery?: (sourceRow: number) => Promise<
+        ReadonlyArray<{
+          readonly ts: number;
+          readonly event: string;
+          readonly columnId: string;
+          readonly oldValue: string;
+          readonly newValue: string;
+        }>
+      >;
+      auditAppend?: (
+        sourceRow: number,
+        ts: number,
+        event: 'edit' | 'paste' | 'fill' | 'undo' | 'redo',
+        columnId: string,
+        oldValue: string,
+        newValue: string,
+      ) => void;
+      auditClear?: () => void;
+      writeCell?: (visualRow: number, columnId: string, newValue: string) => boolean;
+      readCell?: (visualRow: number, columnId: string) => unknown;
       host?: HTMLElement;
     };
   }
@@ -1521,6 +1553,16 @@ export const App = (): JSX.Element => {
     setFormulaInput(formula.getDisplaySource(formulaActiveCell));
   }, [formula, formulaActiveCell, formulaInput]);
 
+  // Keep refs to anything the __onegrid test bridge dereferences, so
+  // its closures always see the latest values even though the bridge
+  // useEffect only re-binds on `grid`. Without this, e.g. visualToSourceRow
+  // would be frozen at the first-mount permutation and readCell(0)
+  // would skip past the user's sort.
+  const visualToSourceRowRef = useRef(visualToSourceRow);
+  visualToSourceRowRef.current = visualToSourceRow;
+  const memoryDatasetBridgeRef = useRef(memoryDataset);
+  memoryDatasetBridgeRef.current = memoryDataset;
+
   useEffect(() => {
     if (!grid) return;
     window.__onegrid = {
@@ -1554,6 +1596,62 @@ export const App = (): JSX.Element => {
       },
       formulaGet: (id) => formula?.engine.getValue(id),
       formulaStats: () => formula?.engine.getStats(),
+      // Test bridges:
+      setMode: (m) => {
+        setMode(m as typeof mode);
+      },
+      getMode: () => mode,
+      undo: () => {
+        undoModeRef.current = 'undo';
+        undoRef.current?.undo();
+        undoModeRef.current = null;
+      },
+      redo: () => {
+        undoModeRef.current = 'redo';
+        undoRef.current?.redo();
+        undoModeRef.current = null;
+      },
+      undoState: () => undoRef.current?.state(),
+      auditQuery: async (sourceRow: number) => {
+        return (await auditClientRef.current?.query(sourceRow)) ?? [];
+      },
+      auditAppend: (sourceRow, ts, event, columnId, oldValue, newValue) => {
+        auditClientRef.current?.append({ sourceRow, ts, event, columnId, oldValue, newValue });
+      },
+      auditClear: () => {
+        auditClientRef.current?.clear();
+      },
+      writeCell: (visualRow, columnId, newValue) => {
+        const ds = memoryDatasetBridgeRef.current;
+        if (!ds?.materialized) return false;
+        const sourceRow = visualToSourceRowRef.current(visualRow);
+        const oldValue = ds.rowSource.getCell(sourceRow, columnId);
+        const ok = ds.writeCell(sourceRow, columnId, newValue);
+        if (ok) {
+          undoRef.current?.push({
+            kind: 'cellEdit',
+            label: 'Edit cell',
+            forward: { sourceRow, columnId, value: newValue },
+            inverse: { sourceRow, columnId, value: String(oldValue ?? '') },
+          });
+          auditClientRef.current?.append({
+            sourceRow,
+            ts: Date.now(),
+            event: 'edit',
+            columnId,
+            oldValue: String(oldValue ?? ''),
+            newValue,
+          });
+          setEditTick((t) => t + 1);
+        }
+        return ok;
+      },
+      readCell: (visualRow, columnId) => {
+        const ds = memoryDatasetBridgeRef.current;
+        if (!ds?.materialized) return null;
+        const sourceRow = visualToSourceRowRef.current(visualRow);
+        return ds.rowSource.getCell(sourceRow, columnId);
+      },
     };
     return () => {
       delete window.__onegrid;
