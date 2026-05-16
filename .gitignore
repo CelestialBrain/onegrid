@@ -29,3 +29,10 @@ test-results/
 
 # Claude Code runtime state.
 .claude/
+
+# Local-only competitor probe artifacts (restored from commit 99c7e4d^).
+# Reverse-engineered library docs used for gap planning + roadmap input.
+# Per the clean-room MIT discipline these files MUST NOT land in the
+# published tree — they reference specific commercial grid libraries
+# by name. Keep here for local planning; restore via `scripts/restore-research.sh`.
+.research/
