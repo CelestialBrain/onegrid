@@ -837,26 +837,37 @@ export class Grid {
     const newDpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
     const newViewportWidth = Math.max(0, Math.floor(rect.width));
     const newViewportHeight = Math.max(0, Math.floor(rect.height));
-    const dimensionsChanged =
-      newViewportWidth !== this.viewportWidth ||
-      newViewportHeight !== this.viewportHeight ||
-      newDpr !== this.dpr;
-    if (!dimensionsChanged) {
-      // ResizeObserver fired but the host didn't actually change size
-      // (and DPR didn't shift). Reassigning canvas.width / .height
-      // clears the canvas to transparent — a single-frame full-grid
-      // flash. During a column-resize drag, any unrelated reflow
-      // (scrollbar visibility flip, sibling element layout) would
-      // trigger this and produce a visible flicker every frame.
-      return;
-    }
+    const sameDimensions =
+      newViewportWidth === this.viewportWidth &&
+      newViewportHeight === this.viewportHeight &&
+      newDpr === this.dpr;
+    if (sameDimensions) return;
+    // Distinguish a "real" resize (user resized window, sidebar toggled,
+    // DPR changed) from "jitter" (toolbar reflowing by 1-2 px because a
+    // sibling element's text content changed digit count). The canvas
+    // buffer only needs to be reallocated for real resizes — jitter
+    // just needs the layout-dependent state updated.
+    //
+    // Reassigning canvas.width / .height CLEARS the canvas to
+    // transparent regardless of whether the value changed. During a
+    // column-resize drag the toolbar's FPS / draw-ms / visible-row
+    // meter fluctuates digit count each frame, the toolbar's
+    // flex-wrap repacks, and the host height ticks ±1 px. Treating
+    // those as real resizes would flash the entire canvas on every
+    // drag frame — exactly the head-to-toe flicker the user reports.
+    const widthJitter = Math.abs(newViewportWidth - this.viewportWidth);
+    const heightJitter = Math.abs(newViewportHeight - this.viewportHeight);
+    const dprChanged = newDpr !== this.dpr;
+    const isJitter = !dprChanged && widthJitter <= 2 && heightJitter <= 2;
     this.dpr = newDpr;
     this.viewportWidth = newViewportWidth;
     this.viewportHeight = newViewportHeight;
-    this.canvas.width = Math.floor(this.viewportWidth * this.dpr);
-    this.canvas.height = Math.floor(this.viewportHeight * this.dpr);
-    this.canvas.style.width = `${this.viewportWidth}px`;
-    this.canvas.style.height = `${this.viewportHeight}px`;
+    if (!isJitter) {
+      this.canvas.width = Math.floor(this.viewportWidth * this.dpr);
+      this.canvas.height = Math.floor(this.viewportHeight * this.dpr);
+      this.canvas.style.width = `${this.viewportWidth}px`;
+      this.canvas.style.height = `${this.viewportHeight}px`;
+    }
     this.scrollSpacer.style.width = `${this.totalColumnsWidth}px`;
     this.updateScrollSpacerHeight();
     this.lastRenderedScrollTop = -1;

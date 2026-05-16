@@ -140,6 +140,19 @@ html, body, #root {
   color: var(--muted);
 }
 
+.toolbar .meter > span {
+  /* Pin each meter cell so the digit count flicker doesn't reflow the
+     toolbar. Without this, draw-ms changing from "1.6" to "11.2"
+     widens the pill by ~6 px, which causes flex-wrap to re-pack the
+     row, which changes the toolbar height by 1-2 px, which fires the
+     grid host's ResizeObserver mid-drag — the canvas clears and you
+     see a head-to-toe flicker on every drag frame. */
+  min-width: 100px;
+  display: inline-flex;
+  gap: 4px;
+  align-items: baseline;
+}
+
 .toolbar .meter strong {
   color: var(--text);
   font-weight: 600;
