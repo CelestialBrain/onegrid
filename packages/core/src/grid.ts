@@ -861,12 +861,21 @@ export class Grid {
       this.scrollScale = 1;
       return;
     }
-    // Cap the physical spacer. We keep the band rows visible at their
-    // real heights and compress only the data span: physical
-    // dataPx = CAP - bands; scale = logicalDataPx / physicalDataPx.
-    const physicalDataPx = VIRTUAL_SCROLL_CAP_PX - bands;
+    // Cap the physical spacer. Scale maps the *scrollable range* of
+    // the host (scrollHeight - clientHeight) to the scrollable range
+    // of the logical layout (totalLogical - viewportHeight), so the
+    // two endpoints line up:
+    //   physical scrollTop = 0       → logical scrollTop = 0       (top)
+    //   physical scrollTop = physMax → logical scrollTop = logMax  (bottom)
+    // Without subtracting viewportHeight from both, the bottom of the
+    // physical scrollbar would translate to a logical position
+    // ~`viewport × scale` short of the true end, hiding the final
+    // ~hundreds of rows from the visible-row meter and rendering.
+    const vp = Math.max(1, this.viewportHeight);
+    const physMax = Math.max(1, VIRTUAL_SCROLL_CAP_PX - vp);
+    const logMax = Math.max(1, logicalTotal - vp);
     this.scrollSpacer.style.height = `${VIRTUAL_SCROLL_CAP_PX}px`;
-    this.scrollScale = this.fenwick.totalHeight / physicalDataPx;
+    this.scrollScale = logMax / physMax;
   }
 
   /**
