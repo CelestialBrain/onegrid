@@ -1218,16 +1218,24 @@ export class Grid {
    * reorder / sort / selection paths claim the event.
    */
   private columnAtRightBoundary(localX: number): number | null {
+    // Hit zone straddles the column boundary so the cursor doesn't have
+    // to land precisely on the 1-px edge. 6 px each side = 12 px total
+    // — wide enough to find easily, narrow enough that two adjacent
+    // boundaries don't overlap at typical column widths.
     const RESIZE_HANDLE_PX = 6;
     // Frozen band: boundaries live in absolute viewport coords.
-    if (localX <= this.frozenWidth) {
+    if (localX <= this.frozenWidth + RESIZE_HANDLE_PX) {
       for (let i = 0; i < this.frozenColumnCount; i++) {
         const boundary = this.cumulativeColumnWidths[i + 1] ?? 0;
-        if (localX >= boundary - RESIZE_HANDLE_PX && localX < boundary) {
+        if (
+          localX >= boundary - RESIZE_HANDLE_PX &&
+          localX <= boundary + RESIZE_HANDLE_PX
+        ) {
           return i;
         }
       }
-      return null;
+      // Fall through if no frozen boundary matched but the pointer is
+      // in the seam between frozen + scrolling bands — check scrolling.
     }
     // Scrolling band: account for scrollLeft + the gap before the
     // first non-frozen column.
@@ -1238,7 +1246,7 @@ export class Grid {
         boundaryInLayout - baseOffset - this.scrollLeft + this.frozenWidth;
       if (
         localX >= boundaryInViewport - RESIZE_HANDLE_PX &&
-        localX < boundaryInViewport
+        localX <= boundaryInViewport + RESIZE_HANDLE_PX
       ) {
         return i;
       }
@@ -1268,6 +1276,24 @@ export class Grid {
         }
       }
       return;
+    }
+
+    // Hover affordance: when the pointer is inside the header band and
+    // over a resize-handle hit zone (but not yet actively resizing),
+    // show the col-resize cursor so the user can find the handle. We
+    // only mutate cursor style when it actually changes — avoids
+    // thrashing the style attribute on every pointermove.
+    if (this.columnResizeEnabled && !this.isPointerDragging && this.dragActiveColumn === null) {
+      const rect = this.host.getBoundingClientRect();
+      const localY = e.clientY - rect.top;
+      const localX = e.clientX - rect.left;
+      const inHeader = localY >= 0 && localY < this.fullHeaderHeight();
+      const overHandle =
+        inHeader && this.columnAtRightBoundary(localX) !== null;
+      const desired = overHandle ? 'col-resize' : '';
+      if (this.scrollHost.style.cursor !== desired) {
+        this.scrollHost.style.cursor = desired;
+      }
     }
     if (this.isPointerDragging) {
       const cell = this.cellAtClient(e.clientX, e.clientY);
@@ -1477,6 +1503,9 @@ export class Grid {
 
   private handlePointerLeave = (): void => {
     this.hideTooltip();
+    if (this.scrollHost.style.cursor !== '') {
+      this.scrollHost.style.cursor = '';
+    }
   };
 
   /** Native contextmenu event → resolve the target (cell / header /
