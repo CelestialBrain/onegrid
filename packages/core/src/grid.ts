@@ -31,18 +31,14 @@ import {
 import { SelectionModel, type CellPosition, type SelectionSnapshot } from './selection';
 import type { SortModel } from '@onegrid/protocol';
 
-let nextGridSequence = 0;
+import {
+  VIRTUAL_SCROLL_CAP_PX,
+  computeScrollScale,
+  logicalToPhysical,
+  physicalToLogical,
+} from './scroll-math';
 
-/**
- * Hard cap on the physical CSS height of the scroll spacer. Browsers
- * cap rendered element heights (Firefox ~17.9 Mpx, Chrome ~33.5 Mpx,
- * Safari similar). We pick a conservative cross-browser figure so a
- * 5M-row dataset (≈140 Mpx of logical content) is still 100% reachable
- * through native scrolling. When logical total > cap, scroll positions
- * are scaled (physical_px × scale = logical_px) so the full scrollbar
- * range still maps onto the full dataset.
- */
-const VIRTUAL_SCROLL_CAP_PX = 16_000_000;
+let nextGridSequence = 0;
 
 interface FrameSample {
   ts: number;
@@ -986,7 +982,7 @@ export class Grid {
     const logicalTotal = bands + this.fenwick.totalHeight;
     const previousScale = this.scrollScale;
     if (logicalTotal <= VIRTUAL_SCROLL_CAP_PX) {
-      this.scrollSpacer.style.height = `${logicalTotal}px`;
+      this.scrollSpacer.style.height = `${String(logicalTotal)}px`;
       if (previousScale !== 1) {
         this.scrollScale = 1;
         // Re-derive logical scrollTop from the current physical scroll
@@ -996,8 +992,7 @@ export class Grid {
       }
       return;
     }
-    const vp = Math.max(1, this.viewportHeight);
-    this.scrollSpacer.style.height = `${VIRTUAL_SCROLL_CAP_PX}px`;
+    this.scrollSpacer.style.height = `${String(VIRTUAL_SCROLL_CAP_PX)}px`;
     // Read back the *actually rendered* spacer height. Browsers cap
     // CSS element heights below our requested value on some engines
     // (Firefox ~17.9 Mpx, mobile Safari lower). If the browser clamped
@@ -1010,9 +1005,7 @@ export class Grid {
     // Reading offsetHeight forces a layout flush so we get the
     // post-clamp value in the same turn.
     const physicalSpacer = this.scrollSpacer.offsetHeight;
-    const physMax = Math.max(1, physicalSpacer - vp);
-    const logMax = Math.max(1, logicalTotal - vp);
-    const newScale = logMax / physMax;
+    const newScale = computeScrollScale(logicalTotal, this.viewportHeight, physicalSpacer);
     if (newScale !== previousScale) {
       this.scrollScale = newScale;
       // Keep this.scrollTop in sync with the new scale. Without this,
@@ -1032,14 +1025,14 @@ export class Grid {
   private setLogicalScrollTop(logicalY: number): void {
     const clamped = Math.max(0, logicalY);
     this.suppressScrollEvent = true;
-    this.scrollHost.scrollTop = clamped / this.scrollScale;
+    this.scrollHost.scrollTop = logicalToPhysical(clamped, this.scrollScale);
     this.suppressScrollEvent = false;
     this.scrollTop = clamped;
   }
 
   private handleScroll = (): void => {
     if (this.suppressScrollEvent) return;
-    const newTop = this.scrollHost.scrollTop * this.scrollScale;
+    const newTop = physicalToLogical(this.scrollHost.scrollTop, this.scrollScale);
     const newLeft = this.scrollHost.scrollLeft;
     const delta = newTop - this.scrollTop;
     this.velocity = Math.abs(delta);

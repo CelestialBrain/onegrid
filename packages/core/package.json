@@ -27,11 +27,12 @@
     "lint": "eslint src"
   },
   "dependencies": {
-    "@onegrid/protocol": "workspace:*",
+    "@onegrid/a11y": "workspace:*",
     "@onegrid/data": "workspace:*",
-    "@onegrid/a11y": "workspace:*"
+    "@onegrid/protocol": "workspace:*"
   },
   "devDependencies": {
+    "fast-check": "^4.8.0",
     "jsdom": "^25.0.0"
   },
   "publishConfig": {
