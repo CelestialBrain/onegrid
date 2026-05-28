@@ -587,7 +587,14 @@ export class Grid {
    * bottom band entirely.
    */
   setPinnedBottomRowSource(rowSource: RowSource | undefined): void {
+    const hadBefore = this.pinnedBottomRowSource;
     this.pinnedBottomRowSource = rowSource;
+    // Mounting / unmounting the pinned-bottom band changes the data
+    // band height, so the cell-overlay clip needs to shrink/grow to
+    // match. (Re-applying inset() with the same numbers is cheap.)
+    if (!hadBefore !== !rowSource) {
+      this.updateCellOverlayBounds();
+    }
     this.scheduleRender();
   }
 
@@ -596,7 +603,11 @@ export class Grid {
    * `setPinnedBottomRowSource`.
    */
   setPinnedTopRowSource(rowSource: RowSource | undefined): void {
+    const hadBefore = this.pinnedTopRowSource;
     this.pinnedTopRowSource = rowSource;
+    if (!hadBefore !== !rowSource) {
+      this.updateCellOverlayBounds();
+    }
     this.scheduleRender();
   }
 
@@ -917,6 +928,7 @@ export class Grid {
     }
     this.scrollSpacer.style.width = `${this.totalColumnsWidth}px`;
     this.updateScrollSpacerHeight();
+    this.updateCellOverlayBounds();
     this.lastRenderedScrollTop = -1;
     // Reassigning canvas.width / .height clears the canvas to
     // transparent. If we waited for the next rAF to redraw, the
@@ -932,6 +944,36 @@ export class Grid {
       this.scheduleRender();
     }
   };
+
+  /**
+   * Clip the DOM cell overlay (status pills, score bars, sparklines)
+   * to the data band only — below the header + floating filter band,
+   * above the pinned-bottom totals row + status bar. Without this clip
+   * the overlay's `inset:0` made it cover the whole host and DOM cells
+   * positioned at canvas-row coordinates could paint over the header
+   * or the totals row when they were physically inside those bands
+   * (visible as status / score pills appearing above the totals row
+   * and the filter row during scroll).
+   *
+   * Uses CSS `clip-path: inset(...)` so the overlay's coordinate
+   * system stays host-relative — `syncCellOverlay` positions each
+   * DOM cell with the same `top` value that the canvas renderer
+   * draws into, and the clip-path simply hides anything outside the
+   * data band region. No coordinate rebase needed.
+   *
+   * Called from handleResize. Pinned-band height changes route through
+   * handleResize too via the existing pinned-source setters.
+   */
+  private updateCellOverlayBounds(): void {
+    if (!this.cellOverlayEl) return;
+    const top = this.dataBandTop();
+    const bottomBands =
+      this.pinnedBottomBandHeight() + this.statusBarHeight();
+    // `inset(top right bottom left)` — DOM cells outside this rectangle
+    // are not painted. The overlay itself still spans the host, so cell
+    // positioning math (which expects host-relative top) is unchanged.
+    this.cellOverlayEl.style.clipPath = `inset(${top}px 0px ${bottomBands}px 0px)`;
+  }
 
   /**
    * Recompute the spacer's physical height and the virtualization
