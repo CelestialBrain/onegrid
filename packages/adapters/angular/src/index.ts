@@ -1,19 +1,42 @@
 // =============================================================================
 // @onegrid/angular
 //
-// Angular adapter. Standalone component + signals integration over the
-// framework-agnostic core.
+// Angular adapter. Standalone directive over the framework-agnostic core.
+// Targets Angular 17+ (standalone components + signals).
 //
-// Public API surface (planned). Implementations TODO.
+// Public surface:
+//   - OneGridDirective — `<div oneGrid [oneGrid]="opts()"></div>`
+//   - OneGridOptions — the bound options type
 // =============================================================================
 
-import type { Grid } from '@onegrid/core';
+export { OneGridDirective } from './one-grid.directive';
+export type { OneGridOptions } from './one-grid.directive';
 
-export declare class OneGridComponent {
-  readonly grid: Grid | null;
-}
+export type {
+  CellRenderContext,
+  CellRenderer,
+  ColumnDef,
+  ColumnGroupDef,
+  ContextMenuTarget,
+  FrameStats,
+  Grid,
+  GridOptions,
+  GridTheme,
+  MetricsSnapshot,
+  RowGroupMeta,
+  RowMeta,
+  RowSource,
+  ValidationContext,
+  ValidationResult,
+} from '@onegrid/core';
 
-/** @beta */
-export const ANGULAR_ADAPTER_NOT_IMPLEMENTED = (): never => {
-  throw new Error('@onegrid/angular: implementation pending.');
-};
+export type {
+  BlockRequest,
+  BlockResponse,
+  DataSource,
+  FilterModel,
+  FilterNode,
+  Schema,
+  SortField,
+  SortModel,
+} from '@onegrid/protocol';

@@ -36,5 +36,10 @@
   "publishConfig": {
     "access": "public"
   },
-  "sideEffects": false
+  "sideEffects": false,
+  "devDependencies": {
+    "@angular/core": "^17",
+    "rxjs": "^7",
+    "zone.js": "^0.14"
+  }
 }

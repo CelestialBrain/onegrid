@@ -36,5 +36,9 @@
   "publishConfig": {
     "access": "public"
   },
-  "sideEffects": false
+  "sideEffects": false,
+  "devDependencies": {
+    "jsdom": "^25",
+    "solid-js": "^1.8.0"
+  }
 }

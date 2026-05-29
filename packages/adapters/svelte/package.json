@@ -36,5 +36,9 @@
   "publishConfig": {
     "access": "public"
   },
-  "sideEffects": false
+  "sideEffects": false,
+  "devDependencies": {
+    "jsdom": "^25",
+    "svelte": "^5.0.0"
+  }
 }

@@ -4,11 +4,95 @@
 
 ```ts
 
-// @public (undocumented)
-export const defineOneGridElement: (_tag?: string) => void;
+import { BlockRequest } from '@onegrid/protocol';
+import { BlockResponse } from '@onegrid/protocol';
+import { CellRenderContext } from '@onegrid/core';
+import { CellRenderer } from '@onegrid/core';
+import { ColumnDef } from '@onegrid/core';
+import { ColumnGroupDef } from '@onegrid/core';
+import { ContextMenuTarget } from '@onegrid/core';
+import { DataSource } from '@onegrid/protocol';
+import { FilterModel } from '@onegrid/protocol';
+import { FilterNode } from '@onegrid/protocol';
+import { FrameStats } from '@onegrid/core';
+import { Grid } from '@onegrid/core';
+import { GridOptions } from '@onegrid/core';
+import { GridTheme } from '@onegrid/core';
+import { MetricsSnapshot } from '@onegrid/core';
+import { RowGroupMeta } from '@onegrid/core';
+import { RowMeta } from '@onegrid/core';
+import { RowSource } from '@onegrid/core';
+import { Schema } from '@onegrid/protocol';
+import { SortField } from '@onegrid/protocol';
+import { SortModel } from '@onegrid/protocol';
+import { ValidationContext } from '@onegrid/core';
+import { ValidationResult } from '@onegrid/core';
+
+export { BlockRequest }
+
+export { BlockResponse }
+
+export { CellRenderContext }
+
+export { CellRenderer }
+
+export { ColumnDef }
+
+export { ColumnGroupDef }
+
+export { ContextMenuTarget }
+
+export { DataSource }
+
+// @public
+export function defineOneGridElement(tag?: string): void;
+
+export { FilterModel }
+
+export { FilterNode }
+
+export { FrameStats }
+
+export { Grid }
+
+export { GridOptions }
+
+export { GridTheme }
+
+export { MetricsSnapshot }
 
 // @public (undocumented)
 export const ONE_GRID_TAG_NAME: "one-grid";
+
+// @public (undocumented)
+export class OneGridElement extends HTMLElement {
+    // (undocumented)
+    connectedCallback(): void;
+    // (undocumented)
+    disconnectedCallback(): void;
+    get grid(): Grid | null;
+    get options(): OneGridElementOptions | null;
+    set options(value: OneGridElementOptions | null);
+}
+
+// @public (undocumented)
+export type OneGridElementOptions = Omit<GridOptions, 'host'>;
+
+export { RowGroupMeta }
+
+export { RowMeta }
+
+export { RowSource }
+
+export { Schema }
+
+export { SortField }
+
+export { SortModel }
+
+export { ValidationContext }
+
+export { ValidationResult }
 
 // (No @packageDocumentation comment for this package)
 

@@ -4,16 +4,95 @@
 
 ```ts
 
+import { BlockRequest } from '@onegrid/protocol';
+import { BlockResponse } from '@onegrid/protocol';
+import { CellRenderContext } from '@onegrid/core';
+import { CellRenderer } from '@onegrid/core';
+import { ColumnDef } from '@onegrid/core';
+import { ColumnGroupDef } from '@onegrid/core';
+import { ContextMenuTarget } from '@onegrid/core';
+import { DataSource } from '@onegrid/protocol';
+import { ElementRef } from '@angular/core';
+import { FilterModel } from '@onegrid/protocol';
+import { FilterNode } from '@onegrid/protocol';
+import { FrameStats } from '@onegrid/core';
 import { Grid } from '@onegrid/core';
+import { GridOptions } from '@onegrid/core';
+import { GridTheme } from '@onegrid/core';
+import { MetricsSnapshot } from '@onegrid/core';
+import { OnChanges } from '@angular/core';
+import { OnDestroy } from '@angular/core';
+import { RowGroupMeta } from '@onegrid/core';
+import { RowMeta } from '@onegrid/core';
+import { RowSource } from '@onegrid/core';
+import { Schema } from '@onegrid/protocol';
+import { SimpleChanges } from '@angular/core';
+import { SortField } from '@onegrid/protocol';
+import { SortModel } from '@onegrid/protocol';
+import { ValidationContext } from '@onegrid/core';
+import { ValidationResult } from '@onegrid/core';
+import { WritableSignal } from '@angular/core';
+
+export { BlockRequest }
+
+export { BlockResponse }
+
+export { CellRenderContext }
+
+export { CellRenderer }
+
+export { ColumnDef }
+
+export { ColumnGroupDef }
+
+export { ContextMenuTarget }
+
+export { DataSource }
+
+export { FilterModel }
+
+export { FilterNode }
+
+export { FrameStats }
+
+export { Grid }
+
+export { GridOptions }
+
+export { GridTheme }
+
+export { MetricsSnapshot }
 
 // @public (undocumented)
-export const ANGULAR_ADAPTER_NOT_IMPLEMENTED: () => never;
-
-// @public (undocumented)
-export class OneGridComponent {
+export class OneGridDirective implements OnChanges, OnDestroy {
+    constructor(elementRef: ElementRef<HTMLDivElement>);
+    readonly grid: WritableSignal<Grid | null>;
     // (undocumented)
-    readonly grid: Grid | null;
+    ngOnChanges(_changes: SimpleChanges): void;
+    // (undocumented)
+    ngOnDestroy(): void;
+    // (undocumented)
+    oneGrid: OneGridOptions;
 }
+
+// @public (undocumented)
+export type OneGridOptions = Omit<GridOptions, 'host'>;
+
+export { RowGroupMeta }
+
+export { RowMeta }
+
+export { RowSource }
+
+export { Schema }
+
+export { SortField }
+
+export { SortModel }
+
+export { ValidationContext }
+
+export { ValidationResult }
 
 // (No @packageDocumentation comment for this package)
 
