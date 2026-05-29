@@ -22,6 +22,7 @@ import './functions/info';
 import './functions/lookup';
 import './functions/stats';
 import './functions/financial';
+import './functions/engineering';
 import './functions/_aliases';
 
 export {
