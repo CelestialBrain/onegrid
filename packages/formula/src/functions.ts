@@ -24,6 +24,7 @@ import './functions/stats';
 import './functions/financial';
 import './functions/engineering';
 import './functions/database';
+import './functions/web';
 import './functions/_aliases';
 
 export {
