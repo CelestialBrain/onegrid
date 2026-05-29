@@ -33,7 +33,12 @@
   "publishConfig": {
     "access": "public"
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/index.js",
+    "./dist/index.cjs",
+    "./src/functions.ts",
+    "./src/functions/**"
+  ],
   "devDependencies": {
     "fast-check": "^4.8.0"
   }
