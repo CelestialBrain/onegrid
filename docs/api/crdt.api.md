@@ -6,23 +6,49 @@
 
 import { RowDiff } from '@onegrid/protocol';
 
-// @public
+// @beta
 export function applyLocalToYjs(map: YMapLike, diff: Pick<RowDiff, 'kind' | 'pkey' | 'fields'>): void;
 
-// @public
+// @beta
 export interface AutomergeDocLike<TRow> {
     readonly getRows: () => Readonly<Record<string, TRow>>;
 }
 
-// @public (undocumented)
+// @beta (undocumented)
 export interface AutomergeWatcherLike {
     readonly subscribe: (handler: () => void) => () => void;
 }
 
-// @public (undocumented)
+// @beta (undocumented)
+export interface AwarenessChangesLike {
+    // (undocumented)
+    readonly added: ReadonlyArray<number>;
+    // (undocumented)
+    readonly removed: ReadonlyArray<number>;
+    // (undocumented)
+    readonly updated: ReadonlyArray<number>;
+}
+
+// @beta (undocumented)
+export interface AwarenessLike {
+    readonly clientID: number;
+    // (undocumented)
+    readonly getLocalState: () => Readonly<Record<string, unknown>> | null;
+    // (undocumented)
+    readonly getStates: () => ReadonlyMap<number, Readonly<Record<string, unknown>>>;
+    // (undocumented)
+    readonly off: (event: 'change' | 'update', handler: (changes: AwarenessChangesLike, origin: unknown) => void) => void;
+    readonly on: (event: 'change' | 'update', handler: (changes: AwarenessChangesLike, origin: unknown) => void) => void;
+    // (undocumented)
+    readonly setLocalState: (state: Record<string, unknown> | null) => void;
+    // (undocumented)
+    readonly setLocalStateField: (field: string, value: unknown) => void;
+}
+
+// @beta (undocumented)
 export function bindAutomergeRows<TRow>(opts: BindAutomergeRowsOptions<TRow>): CrdtBridge;
 
-// @public (undocumented)
+// @beta (undocumented)
 export interface BindAutomergeRowsOptions<TRow> {
     // (undocumented)
     readonly doc: AutomergeDocLike<TRow>;
@@ -34,11 +60,25 @@ export interface BindAutomergeRowsOptions<TRow> {
     readonly watcher: AutomergeWatcherLike;
 }
 
-// @public (undocumented)
+// @beta
+export function bindYjsPresence<TState = Record<string, unknown>>(opts: BindYjsPresenceOptions<TState>): CrdtBridge;
+
+// @beta (undocumented)
+export interface BindYjsPresenceOptions<TState = Record<string, unknown>> {
+    // (undocumented)
+    readonly awareness: AwarenessLike;
+    // (undocumented)
+    readonly onError?: (err: unknown) => void;
+    // (undocumented)
+    readonly onPeers: (peers: ReadonlyArray<PresencePeer<TState>>) => void;
+}
+
+// @beta (undocumented)
 export function bindYjsRows(opts: BindYjsRowsOptions): CrdtBridge;
 
-// @public (undocumented)
+// @beta (undocumented)
 export interface BindYjsRowsOptions {
+    readonly granularity?: 'row' | 'field';
     // (undocumented)
     readonly map: YMapLike;
     // (undocumented)
@@ -46,13 +86,29 @@ export interface BindYjsRowsOptions {
     readonly onError?: (err: unknown) => void;
 }
 
-// @public (undocumented)
+// @beta
+export function clearLocalPresence(awareness: AwarenessLike): void;
+
+// @beta (undocumented)
 export interface CrdtBridge {
     readonly close: () => void;
     readonly lastVersion: () => number;
 }
 
-// @public (undocumented)
+// @beta
+export interface PresencePeer<TState = Record<string, unknown>> {
+    // (undocumented)
+    readonly clientID: number;
+    // (undocumented)
+    readonly isSelf: boolean;
+    // (undocumented)
+    readonly state: Readonly<TState>;
+}
+
+// @beta
+export function setLocalPresence(awareness: AwarenessLike, field: string, value: unknown): void;
+
+// @beta (undocumented)
 export interface YMapEventLike {
     // (undocumented)
     readonly changes: {
@@ -63,7 +119,7 @@ export interface YMapEventLike {
     };
 }
 
-// @public
+// @beta
 export interface YMapLike {
     // (undocumented)
     readonly delete: (key: string) => void;
