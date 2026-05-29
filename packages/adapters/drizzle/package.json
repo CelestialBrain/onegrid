@@ -35,5 +35,12 @@
   "publishConfig": {
     "access": "public"
   },
-  "sideEffects": false
+  "sideEffects": false,
+  "devDependencies": {
+    "@testcontainers/postgresql": "^12.0.1",
+    "@types/pg": "^8.20.0",
+    "drizzle-orm": "^0.36.4",
+    "pg": "^8.20.0",
+    "testcontainers": "^12.0.1"
+  }
 }

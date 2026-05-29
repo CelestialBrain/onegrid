@@ -110,7 +110,10 @@ describe('createKyselyDataSource', () => {
       filter: null,
     });
     expect(captured.selectAllCalled).toBe(true);
-    expect(captured.whereCallCount).toBe(1);
+    // No filter, no cursor → no .where() call. Always-on WHERE was the
+    // old (buggy) shape; kysely interpreted the placeholder column ref
+    // as a real column and Postgres rejected it.
+    expect(captured.whereCallCount).toBe(0);
     expect(captured.orderBy).toEqual([
       { column: 'age', direction: 'asc' },
       { column: 'id', direction: 'asc' },

@@ -111,20 +111,28 @@ export function createKyselyDataSource(options: KyselyDataSourceOptions): DataSo
 
     let qb = options.db.selectFrom(options.tableName).selectAll();
 
-    qb = qb.where((eb) => {
-      const conditions: KyselyExpression[] = [];
-      const filterCondition = translateFilter(req.filter, eb);
-      if (filterCondition) conditions.push(filterCondition);
-      if (req.cursor) {
-        const cur = decodeCursor(req.cursor);
-        const cursorCondition = translateCursor(sort, options.idColumn, cur, direction, eb);
-        if (cursorCondition) conditions.push(cursorCondition);
-      }
-      if (conditions.length === 0) {
-        return eb('1', '=', 1);
-      }
-      return conditions.length === 1 ? conditions[0]! : eb.and(conditions);
-    });
+    // Only attach a WHERE clause when we actually have something to constrain.
+    // The previous "always-true" fallback (`eb('1', '=', 1)`) round-tripped
+    // through kysely as the literal column `"1"`, which Postgres rejects
+    // with "column \"1\" does not exist".
+    if (req.filter !== null || req.cursor != null) {
+      qb = qb.where((eb) => {
+        const conditions: KyselyExpression[] = [];
+        const filterCondition = translateFilter(req.filter, eb);
+        if (filterCondition) conditions.push(filterCondition);
+        if (req.cursor) {
+          const cur = decodeCursor(req.cursor);
+          const cursorCondition = translateCursor(sort, options.idColumn, cur, direction, eb);
+          if (cursorCondition) conditions.push(cursorCondition);
+        }
+        if (conditions.length === 0) {
+          // Filter/cursor translated to nothing — provide a tautology that
+          // kysely will render as a SQL literal rather than a column ref.
+          return eb.and([]);
+        }
+        return conditions.length === 1 ? conditions[0]! : eb.and(conditions);
+      });
+    }
 
     for (const order of buildOrderBy(sort, options.idColumn, direction)) {
       qb = qb.orderBy(order.column, order.direction);

@@ -32,5 +32,10 @@
   "publishConfig": {
     "access": "public"
   },
-  "sideEffects": false
+  "sideEffects": false,
+  "devDependencies": {
+    "@testcontainers/mongodb": "^12.0.1",
+    "mongodb": "^6.10.0",
+    "testcontainers": "^12.0.1"
+  }
 }
