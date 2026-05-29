@@ -30,6 +30,7 @@ import './functions/matrix';
 import './functions/arrayshape';
 import './functions/stubs';
 import './functions/stats_extras';
+import './functions/financial_extras';
 import './functions/_aliases';
 
 export {
