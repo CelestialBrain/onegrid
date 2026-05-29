@@ -27,6 +27,7 @@ import type { ColumnType } from '@onegrid/protocol';
 // Gesture recognizer
 // -----------------------------------------------------------------------------
 
+/** @public */
 export interface GestureOptions {
   /** Long-press threshold in ms. Default 500 (matches platform conventions). */
   readonly longPressMs?: number;
@@ -48,6 +49,7 @@ const DEFAULTS: Required<GestureOptions> = {
   edgeBand: 20,
 };
 
+/** @public */
 export type GestureKind =
   | 'tap'
   | 'doubleTap'
@@ -57,8 +59,10 @@ export type GestureKind =
   | 'pan'
   | 'panEnd';
 
+/** @public */
 export type GestureEdge = 'top' | 'right' | 'bottom' | 'left';
 
+/** @public */
 export interface GestureEvent {
   readonly kind: GestureKind;
   readonly x: number;
@@ -71,6 +75,7 @@ export interface GestureEvent {
   readonly edge?: GestureEdge;
 }
 
+/** @public */
 export type GestureListener = (e: GestureEvent) => void;
 
 interface PointerState {
@@ -92,6 +97,7 @@ interface PointerState {
  * Bind a Pointer-Events-3-based gesture recognizer to a target.
  * Returns a cleanup function. Idempotent re-bind on the same target
  * is intentionally NOT supported — call cleanup() first.
+ * @public
  */
 export function bindGestures(
   target: Element,
@@ -304,6 +310,7 @@ export function bindGestures(
  *   (pointer: coarse) bumps the row height + chevron hit-zone to
  *   `--og-size-touch-hit-zone` so Apple HIG 44pt / Material 48dp is
  *   met without forcing density="spacious" on desktop.
+ * @public
  */
 export function touchCss(
   selector: string = '[data-og-root]',
@@ -333,6 +340,7 @@ export function touchCss(
 // VirtualKeyboard adapter
 // -----------------------------------------------------------------------------
 
+/** @public */
 export type VirtualKeyboardListener = (insetPx: number) => void;
 
 interface VirtualKeyboardLike {
@@ -351,6 +359,7 @@ interface VirtualKeyboardLike {
  * Attach a virtual-keyboard-aware inset listener. Prefers the
  * VirtualKeyboard API (Chromium); falls back to visualViewport
  * resize tracking for iOS Safari. Returns a cleanup function.
+ * @public
  */
 export function attachVirtualKeyboard(
   onInset: VirtualKeyboardListener,
@@ -391,6 +400,7 @@ export function attachVirtualKeyboard(
 // inputmode mapping (HTML attribute on cell editors)
 // -----------------------------------------------------------------------------
 
+/** @public */
 export type HtmlInputMode =
   | 'text'
   | 'numeric'
@@ -401,7 +411,10 @@ export type HtmlInputMode =
   | 'search'
   | 'none';
 
-/** Pick the best inputmode value for a given protocol ColumnType. */
+/**
+ * Pick the best inputmode value for a given protocol ColumnType.
+ * @public
+ */
 export function inputmodeForColumn(type: ColumnType): HtmlInputMode {
   switch (type) {
     case 'int8':
@@ -436,5 +449,7 @@ export function inputmodeForColumn(type: ColumnType): HtmlInputMode {
 // Convenience — defaults for the `touch.longPressAction` option
 // -----------------------------------------------------------------------------
 
+/** @public */
 export type LongPressAction = 'context-menu' | 'row-drag';
+/** @public */
 export const DEFAULT_LONG_PRESS_ACTION: LongPressAction = 'context-menu';

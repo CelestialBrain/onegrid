@@ -28,6 +28,7 @@ import type { FilterModel, SortModel } from '@onegrid/protocol';
 // Event surface
 // -----------------------------------------------------------------------------
 
+/** @public */
 export type HeadlessEvent =
   | 'selectionChange'
   | 'sortChange'
@@ -39,6 +40,7 @@ export type HeadlessEvent =
   | 'mount'
   | 'unmount';
 
+/** @public */
 export interface HeadlessEventPayload {
   selectionChange: SelectionSnapshot;
   sortChange: SortModel;
@@ -59,6 +61,7 @@ type Listener<E extends HeadlessEvent> = (
 // HeadlessGrid — the controller object
 // -----------------------------------------------------------------------------
 
+/** @public */
 export interface HeadlessGridConfig {
   /** Either the flat or nested form. */
   readonly options: GridOptions | NestedGridOptions;
@@ -86,6 +89,7 @@ interface InvalidationRequest {
  *   grid.hostDisconnected();      // destroy
  *
  * Hosts that want push-based events instead call grid.subscribe(event, fn).
+ * @public
  */
 export class HeadlessGrid {
   private grid: Grid | null = null;
@@ -353,6 +357,7 @@ function escapeHtml(s: string): string {
 // Convenience factory
 // -----------------------------------------------------------------------------
 
+/** @public */
 export function createHeadlessGrid(
   config: HeadlessGridConfig,
 ): HeadlessGrid {

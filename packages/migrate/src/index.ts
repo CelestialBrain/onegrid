@@ -27,12 +27,15 @@
 import { transform as runTransform } from './transforms/ag-grid';
 import { transform as runTanStack } from './transforms/tanstack';
 
+/** @public */
 export type SourceLibrary = 'ag-grid' | 'tanstack';
 
+/** @public */
 export interface TransformOptions {
   readonly source: SourceLibrary;
 }
 
+/** @public */
 export interface TransformResult {
   /** Rewritten source. Identical to input when nothing matched. */
   readonly output: string;
@@ -45,6 +48,7 @@ export interface TransformResult {
   }>;
 }
 
+/** @public */
 export function transform(input: string, options: TransformOptions): TransformResult {
   switch (options.source) {
     case 'ag-grid':

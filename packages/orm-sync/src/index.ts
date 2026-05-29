@@ -32,19 +32,24 @@ import type {
 // Model descriptor
 // -----------------------------------------------------------------------------
 
+/** @beta */
 export interface OrmColumnDescriptor {
   readonly id: string;
   readonly type: ColumnType;
   readonly nullable?: boolean;
 }
 
+/** @beta */
 export interface OrmModelDescriptor<TRow = Record<string, unknown>> {
   readonly table: string;
   readonly primaryKey: keyof TRow & string;
   readonly columns: ReadonlyArray<OrmColumnDescriptor>;
 }
 
-/** Project a descriptor into oneGrid's protocol Schema. */
+/**
+ * Project a descriptor into oneGrid's protocol Schema.
+ * @beta
+ */
 export function toSchema(model: OrmModelDescriptor): Schema {
   return model.columns.map((c) => ({
     id: c.id,
@@ -63,6 +68,7 @@ type Schema = ReadonlyArray<ColumnSchema>;
  * Drizzle exposes column metadata via `getTableColumns(table)`. We don't
  * import the runtime to keep the package dep-free; callers pass the
  * already-extracted map.
+ * @beta
  */
 export interface DrizzleColumnLike {
   readonly name: string;
@@ -71,12 +77,14 @@ export interface DrizzleColumnLike {
   readonly notNull?: boolean;
 }
 
+/** @beta */
 export interface ExtractFromDrizzleOptions<TRow> {
   readonly table: string;
   readonly primaryKey: keyof TRow & string;
   readonly columns: ReadonlyArray<DrizzleColumnLike>;
 }
 
+/** @beta */
 export function extractFromDrizzle<TRow>(
   opts: ExtractFromDrizzleOptions<TRow>,
 ): OrmModelDescriptor<TRow> {
@@ -136,6 +144,7 @@ function drizzleColumnToType(c: DrizzleColumnLike): ColumnType {
  * Kysely is type-level only — there's no runtime metadata. The
  * extractor accepts a manually-specified column list because that's
  * the honest contract.
+ * @beta
  */
 export function extractFromKysely<TRow>(
   opts: ExtractFromDrizzleOptions<TRow>,
@@ -147,18 +156,21 @@ export function extractFromKysely<TRow>(
 // Prisma extractor — DMMF shape
 // -----------------------------------------------------------------------------
 
+/** @beta */
 export interface PrismaFieldLike {
   readonly name: string;
   readonly type: string; // 'Int' | 'BigInt' | 'String' | ...
   readonly isRequired?: boolean;
 }
 
+/** @beta */
 export interface ExtractFromPrismaOptions<TRow> {
   readonly table: string;
   readonly primaryKey: keyof TRow & string;
   readonly fields: ReadonlyArray<PrismaFieldLike>;
 }
 
+/** @beta */
 export function extractFromPrisma<TRow>(
   opts: ExtractFromPrismaOptions<TRow>,
 ): OrmModelDescriptor<TRow> {
@@ -205,6 +217,7 @@ function prismaTypeToColumnType(t: string): ColumnType {
 // bindOrmSync — wrap a CdcAdapter so callbacks fire with ORM-typed rows
 // -----------------------------------------------------------------------------
 
+/** @beta */
 export interface TypedRowDiff<TRow> {
   readonly kind: 'insert' | 'update' | 'delete';
   readonly version: number;
@@ -214,6 +227,7 @@ export interface TypedRowDiff<TRow> {
   readonly row?: Partial<TRow>;
 }
 
+/** @beta */
 export interface BindOrmSyncOptions<TRow> {
   readonly cdc: CdcAdapter;
   readonly model: OrmModelDescriptor<TRow>;
@@ -228,6 +242,7 @@ export interface BindOrmSyncOptions<TRow> {
   readonly onError?: (err: unknown) => void;
 }
 
+/** @beta */
 export interface OrmSyncHandle {
   /** Stop subscribing; release transport resources. */
   readonly close: () => Promise<void> | void;
@@ -237,7 +252,10 @@ export interface OrmSyncHandle {
   readonly resync: (req: ResyncRequest) => Promise<ResyncResponse>;
 }
 
-/** Wire a CDC adapter to typed-row callbacks for the ORM model. */
+/**
+ * Wire a CDC adapter to typed-row callbacks for the ORM model.
+ * @beta
+ */
 export function bindOrmSync<TRow>(
   opts: BindOrmSyncOptions<TRow>,
 ): OrmSyncHandle {

@@ -28,6 +28,7 @@ import type { Extension } from '@onegrid/plugin-kit';
  * Validate and canonicalize a BCP 47 locale tag using `Intl.Locale`.
  * Returns the canonical form (case-normalized, subtags ordered) or
  * `undefined` if invalid.
+ * @public
  */
 export function canonicalizeLocale(tag: string): string | undefined {
   try {
@@ -37,6 +38,7 @@ export function canonicalizeLocale(tag: string): string | undefined {
   }
 }
 
+/** @public */
 export function isValidLocale(tag: string): boolean {
   return canonicalizeLocale(tag) !== undefined;
 }
@@ -55,6 +57,7 @@ function keyFor(locale: string, opts: object): string {
   return `${locale}|${JSON.stringify(opts)}`;
 }
 
+/** @public */
 export function formatNumber(
   value: number | bigint,
   locale: string = 'en-US',
@@ -69,6 +72,7 @@ export function formatNumber(
   return fmt.format(value);
 }
 
+/** @public */
 export function formatDate(
   value: Date | number,
   locale: string = 'en-US',
@@ -83,6 +87,7 @@ export function formatDate(
   return fmt.format(value);
 }
 
+/** @public */
 export type RelativeUnit =
   | 'year'
   | 'quarter'
@@ -93,6 +98,7 @@ export type RelativeUnit =
   | 'minute'
   | 'second';
 
+/** @public */
 export function formatRelative(
   value: number,
   unit: RelativeUnit,
@@ -108,6 +114,7 @@ export function formatRelative(
   return fmt.format(value, unit);
 }
 
+/** @public */
 export function formatList(
   items: ReadonlyArray<string>,
   locale: string = 'en-US',
@@ -122,7 +129,10 @@ export function formatList(
   return fmt.format([...items]);
 }
 
-/** Cached `Intl.Collator` — use for any user-visible string sort. */
+/**
+ * Cached `Intl.Collator` — use for any user-visible string sort.
+ * @public
+ */
 export function getCollator(
   locale: string = 'en-US',
   opts: Intl.CollatorOptions = {},
@@ -147,6 +157,7 @@ export function getCollator(
  * locale decimal with `.` before `Number()`.
  *
  * Returns `NaN` if the cleaned string fails `Number()`.
+ * @public
  */
 export function parseLocalizedNumber(
   input: string,
@@ -185,7 +196,10 @@ interface Catalog {
 
 const loadedCatalogs = new Map<string, Catalog>();
 
-/** Load an inline catalog. Last write wins per locale. */
+/**
+ * Load an inline catalog. Last write wins per locale.
+ * @public
+ */
 export function loadCatalog(catalog: Catalog): void {
   if (!isValidLocale(catalog.locale)) {
     throw new Error(
@@ -213,6 +227,7 @@ function resolveMessage(messageId: string, locale: string): string {
  * Translate a message. `params` keys substitute into `{name}`
  * placeholders; numeric params drive plural arms via
  * `Intl.PluralRules`.
+ * @public
  */
 export function t(
   messageId: string,
@@ -233,6 +248,7 @@ function getPluralRules(locale: string): Intl.PluralRules {
   return pr;
 }
 
+/** @public */
 export function formatTemplate(
   template: string,
   params: Readonly<Record<string, string | number>>,
@@ -371,6 +387,7 @@ function parseArms(arms: string): Record<string, string> {
  * Returns the LTR-equivalent scrollLeft (0 = start of content in
  * logical reading order). Maps cleanly onto `inset-inline-start`
  * positioning.
+ * @public
  */
 export function getRtlAwareScrollLeft(el: Element): number {
   const dir = (el as HTMLElement).dir ||
@@ -399,6 +416,7 @@ function getComputedStyleSafe(el: Element): CSSStyleDeclaration | undefined {
  * adopters can prove their custom catalog covers the full surface
  * (the test suite asserts every id is present in the bundled
  * locales).
+ * @public
  */
 export const TRANSLATION_IDS = [
   // chevron + grouping
@@ -495,13 +513,17 @@ export const TRANSLATION_IDS = [
   'currency.format',
 ] as const;
 
+/** @public */
 export type TranslationId = (typeof TRANSLATION_IDS)[number];
 
 // -----------------------------------------------------------------------------
 // Plugin-kit integration
 // -----------------------------------------------------------------------------
 
-/** Register a translation catalog into @onegrid/plugin-kit's i18nCatalogRegistry. */
+/**
+ * Register a translation catalog into @onegrid/plugin-kit's i18nCatalogRegistry.
+ * @public
+ */
 export function registerCatalog(catalog: Catalog): Extension {
   return i18nCatalogRegistry.register(catalog.locale, {
     locale: catalog.locale,

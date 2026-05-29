@@ -49,7 +49,10 @@ export {
 import { Grid } from './grid';
 import type { GridOptions } from './types';
 
-/** Functional alias for `new Grid(options)`. */
+/**
+ * Functional alias for `new Grid(options)`.
+ * @public
+ */
 export const createGrid = (options: GridOptions): Grid => new Grid(options);
 
 export {

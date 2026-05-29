@@ -14,7 +14,9 @@
 // Versioning
 // -----------------------------------------------------------------------------
 
+/** @public */
 export const PROTOCOL_VERSION = '0.0.1' as const;
+/** @public */
 export type ProtocolVersion = typeof PROTOCOL_VERSION;
 
 // -----------------------------------------------------------------------------
@@ -33,6 +35,7 @@ export type ProtocolVersion = typeof PROTOCOL_VERSION;
  * `SsrmRowSource`'s synchronous random-access bridge and the v0.0.7 mock
  * server) is supported during the v0.0.8 migration window via
  * `parseLegacyOffsetCursor`; new database adapters should NOT emit it.
+ * @public
  */
 export type Cursor = string;
 
@@ -47,6 +50,7 @@ export type Cursor = string;
  * across volatile data — without it, two rows whose sort values tie would
  * collide and clients would skip or duplicate rows when paginating across an
  * insertion or deletion.
+ * @public
  */
 export interface KeysetCursor {
   readonly sortValues: ReadonlyArray<unknown>;
@@ -57,10 +61,13 @@ export interface KeysetCursor {
 // Sort
 // -----------------------------------------------------------------------------
 
+/** @public */
 export type SortDirection = 'asc' | 'desc';
 
+/** @public */
 export type SortNullHandling = 'first' | 'last';
 
+/** @public */
 export interface SortField {
   readonly columnId: string;
   readonly direction: SortDirection;
@@ -68,13 +75,17 @@ export interface SortField {
   readonly nulls?: SortNullHandling;
 }
 
-/** Multi-column sort, ordered by priority (leftmost = highest priority). */
+/**
+ * Multi-column sort, ordered by priority (leftmost = highest priority).
+ * @public
+ */
 export type SortModel = ReadonlyArray<SortField>;
 
 // -----------------------------------------------------------------------------
 // Filters
 // -----------------------------------------------------------------------------
 
+/** @public */
 export type ComparisonOperator =
   | 'eq'
   | 'neq'
@@ -93,6 +104,7 @@ export type ComparisonOperator =
   | 'between'
   | 'notBetween';
 
+/** @public */
 export interface ComparisonFilter {
   readonly type: 'comparison';
   readonly columnId: string;
@@ -105,21 +117,27 @@ export interface ComparisonFilter {
   readonly caseSensitive?: boolean;
 }
 
+/** @public */
 export interface LogicalFilter {
   readonly type: 'logical';
   readonly op: 'and' | 'or' | 'not';
   readonly filters: ReadonlyArray<FilterNode>;
 }
 
+/** @public */
 export type FilterNode = ComparisonFilter | LogicalFilter;
 
-/** Null = no filter applied. */
+/**
+ * Null = no filter applied.
+ * @public
+ */
 export type FilterModel = FilterNode | null;
 
 // -----------------------------------------------------------------------------
 // Grouping
 // -----------------------------------------------------------------------------
 
+/** @public */
 export interface GroupingModel {
   /** Columns to group by, in nesting order (outer → inner). */
   readonly columns: ReadonlyArray<string>;
@@ -131,6 +149,7 @@ export interface GroupingModel {
 // Aggregation
 // -----------------------------------------------------------------------------
 
+/** @public */
 export type AggregationType =
   | 'sum'
   | 'avg'
@@ -141,6 +160,7 @@ export type AggregationType =
   | 'first'
   | 'last';
 
+/** @public */
 export interface Aggregation {
   readonly columnId: string;
   /** Built-in type or a string key registered as a custom aggregator. */
@@ -148,12 +168,14 @@ export interface Aggregation {
   readonly alias?: string;
 }
 
+/** @public */
 export type AggregationModel = ReadonlyArray<Aggregation>;
 
 // -----------------------------------------------------------------------------
 // Pivot
 // -----------------------------------------------------------------------------
 
+/** @public */
 export interface PivotModel {
   readonly rows: ReadonlyArray<string>;
   readonly columns: ReadonlyArray<string>;
@@ -164,6 +186,7 @@ export interface PivotModel {
 // Schema
 // -----------------------------------------------------------------------------
 
+/** @public */
 export type ColumnType =
   | 'int8'
   | 'int16'
@@ -191,6 +214,7 @@ export type ColumnType =
   | 'json'
   | 'unknown';
 
+/** @public */
 export interface ColumnSchema {
   readonly id: string;
   readonly type: ColumnType;
@@ -205,14 +229,17 @@ export interface ColumnSchema {
   readonly children?: ReadonlyArray<ColumnSchema>;
 }
 
+/** @public */
 export type Schema = ReadonlyArray<ColumnSchema>;
 
 // -----------------------------------------------------------------------------
 // SSRM block fetch (the central contract)
 // -----------------------------------------------------------------------------
 
+/** @public */
 export type FetchDirection = 'after' | 'before';
 
+/** @public */
 export interface BlockRequest {
   /** Null = first block. Server-defined opaque string otherwise. */
   readonly cursor: Cursor | null;
@@ -262,6 +289,7 @@ export interface BlockRequest {
  * `BlockResponse.rows`. Servers populate this on hierarchical fetches
  * (where `BlockRequest.parentId` semantics are in play); flat responses
  * may omit it.
+ * @public
  */
 export interface HierarchyEntry {
   /** Stable node id; passed back as `parentId` to fetch this node's children. */
@@ -273,13 +301,16 @@ export interface HierarchyEntry {
 /**
  * Wire encoding for row data. Arrow IPC is canonical (zero-copy on the client);
  * JSON is the fallback for non-binary transports and debugging.
+ * @public
  */
 export type RowEncoding = 'arrow-ipc' | 'json';
 
+/** @public */
 export type EncodedRows<TEncoding extends RowEncoding> = TEncoding extends 'arrow-ipc'
   ? Uint8Array
   : ReadonlyArray<Record<string, unknown>>;
 
+/** @public */
 export interface BlockResponse<TEncoding extends RowEncoding = RowEncoding> {
   readonly encoding: TEncoding;
   readonly rows: EncodedRows<TEncoding>;
@@ -306,13 +337,16 @@ export interface BlockResponse<TEncoding extends RowEncoding = RowEncoding> {
 // DataSource interface
 // -----------------------------------------------------------------------------
 
+/** @public */
 export interface FetchOptions {
   /** Cancel in-flight requests on scroll/filter change. */
   readonly signal?: AbortSignal;
 }
 
+/** @public */
 export type Unsubscribe = () => void;
 
+/** @public */
 export interface DataSource {
   /** Schema is required up-front; the grid binds columns to fields. */
   readonly schema: () => Promise<Schema> | Schema;
@@ -331,8 +365,10 @@ export interface DataSource {
 // Mutations
 // -----------------------------------------------------------------------------
 
+/** @public */
 export type MutationKind = 'insert' | 'update' | 'delete';
 
+/** @public */
 export interface InsertMutation {
   readonly kind: 'insert';
   /** Client-generated id; server echoes back in MutationResult for reconciliation. */
@@ -340,6 +376,7 @@ export interface InsertMutation {
   readonly row: Record<string, unknown>;
 }
 
+/** @public */
 export interface UpdateMutation {
   readonly kind: 'update';
   readonly clientId: string;
@@ -349,20 +386,24 @@ export interface UpdateMutation {
   readonly expected?: Record<string, unknown>;
 }
 
+/** @public */
 export interface DeleteMutation {
   readonly kind: 'delete';
   readonly clientId: string;
   readonly rowId: string | number;
 }
 
+/** @public */
 export type Mutation = InsertMutation | UpdateMutation | DeleteMutation;
 
+/** @public */
 export interface MutationOk {
   readonly kind: 'ok';
   readonly clientId: string;
   readonly rowId: string | number;
 }
 
+/** @public */
 export interface MutationConflict {
   readonly kind: 'conflict';
   readonly clientId: string;
@@ -370,6 +411,7 @@ export interface MutationConflict {
   readonly server: Record<string, unknown>;
 }
 
+/** @public */
 export interface MutationError {
   readonly kind: 'error';
   readonly clientId: string;
@@ -377,14 +419,17 @@ export interface MutationError {
   readonly code?: string;
 }
 
+/** @public */
 export type MutationResultEntry = MutationOk | MutationConflict | MutationError;
 
+/** @public */
 export type MutationResult = ReadonlyArray<MutationResultEntry>;
 
 // -----------------------------------------------------------------------------
 // Patches (live updates)
 // -----------------------------------------------------------------------------
 
+/** @public */
 export interface RowInsertPatch {
   readonly kind: 'rowInsert';
   /** Position to insert after. Null = append. */
@@ -392,28 +437,33 @@ export interface RowInsertPatch {
   readonly rows: ReadonlyArray<Record<string, unknown>>;
 }
 
+/** @public */
 export interface RowUpdatePatch {
   readonly kind: 'rowUpdate';
   readonly rowId: string | number;
   readonly fields: Record<string, unknown>;
 }
 
+/** @public */
 export interface RowDeletePatch {
   readonly kind: 'rowDelete';
   readonly rowId: string | number;
 }
 
+/** @public */
 export interface SchemaPatch {
   readonly kind: 'schema';
   readonly schema: Schema;
 }
 
+/** @public */
 export interface InvalidatePatch {
   readonly kind: 'invalidate';
   /** Null = invalidate entire cache. */
   readonly scope: { columnId: string } | null;
 }
 
+/** @public */
 export type Patch =
   | RowInsertPatch
   | RowUpdatePatch
@@ -435,6 +485,7 @@ export type Patch =
  * Wire shape is deliberately flat (no nested `patch`) so the
  * envelope cost is minimal — high-throughput change streams may emit
  * thousands of these per second.
+ * @public
  */
 export interface RowDiff {
   readonly kind: 'insert' | 'update' | 'delete';
@@ -454,6 +505,7 @@ export interface RowDiff {
  * onwards. Sent when the client detects a version gap (last seen
  * version + 1 ≠ next received version) or after a transport
  * reconnect.
+ * @public
  */
 export interface ResyncRequest {
   readonly fromVersion: number;
@@ -466,6 +518,7 @@ export interface ResyncRequest {
  * large to keep history for (`snapshot: true`), the client MUST
  * drop its cache and re-fetch from scratch — the server is telling
  * it that a coherent replay isn't possible.
+ * @public
  */
 export interface ResyncResponse {
   readonly fromVersion: number;
@@ -481,6 +534,7 @@ export interface ResyncResponse {
 // Errors
 // -----------------------------------------------------------------------------
 
+/** @public */
 export type ProtocolErrorCode =
   | 'INVALID_CURSOR'
   | 'INVALID_FILTER'
@@ -491,6 +545,7 @@ export type ProtocolErrorCode =
   | 'CANCELED'
   | 'INTERNAL';
 
+/** @public */
 export interface ProtocolError {
   readonly code: ProtocolErrorCode;
   readonly message: string;

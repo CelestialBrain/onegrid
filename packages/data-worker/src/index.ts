@@ -35,12 +35,14 @@ import type {
   PivotModel,
 } from '@onegrid/protocol';
 
+/** @public */
 export interface DataWorkerOptions {
   readonly worker: WorkerLike;
   /** Per-call timeout in ms. Default 60 000 (1M-row sort allowance). */
   readonly timeoutMs?: number;
 }
 
+/** @public */
 export class DataWorker {
   private readonly host: WorkerPluginHost;
 
@@ -97,6 +99,7 @@ export class DataWorker {
   }
 }
 
+/** @public */
 export function createDataWorker(opts: DataWorkerOptions): DataWorker {
   return new DataWorker(opts);
 }

@@ -29,6 +29,7 @@ import {
 } from './functions';
 import { isFormulaError, FormulaError } from './errors';
 
+/** @public */
 export interface FormulaEngine {
   /** Parse a formula string and return its AST. Throws on syntax errors. */
   readonly parse: (input: string) => ReturnType<typeof parseFormula>;
@@ -40,6 +41,7 @@ export interface FormulaEngine {
   readonly listFunctions: () => string[];
 }
 
+/** @public */
 export function createFormulaEngine(): FormulaEngine {
   return {
     parse: parseFormula,

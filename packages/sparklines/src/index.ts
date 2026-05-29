@@ -9,8 +9,10 @@
 // works for a one-shot cell render or a batched per-row pass.
 // =============================================================================
 
+/** @public */
 export type SparklineKind = 'line' | 'bar' | 'winloss';
 
+/** @public */
 export interface SparklineOptions {
   /** Stroke color for line; positive fill for bar/winloss. Default '#0969da'. */
   readonly color?: string;
@@ -45,6 +47,7 @@ export interface SparklineOptions {
   readonly barGap?: number;
 }
 
+/** @public */
 export interface SparklineRect {
   readonly x: number;
   readonly y: number;
@@ -78,6 +81,7 @@ interface MinimalCtx {
  * Draw a sparkline into the given rect. The chart is clamped to the
  * inner area (rect minus padding). Pass `kind: 'line'` for a continuous
  * line, `'bar'` for a column chart, `'winloss'` for +1/-1 lollipops.
+ * @public
  */
 export function drawSparkline(
   ctx: MinimalCtx,
@@ -271,17 +275,20 @@ function withAlpha(hex: string, alpha: number): string {
 //   });
 // -----------------------------------------------------------------------------
 
+/** @public */
 export interface SparklineRendererInput<T = unknown> {
   readonly kind?: SparklineKind;
   readonly getData: (row: T) => ReadonlyArray<number>;
   readonly options?: SparklineOptions;
 }
 
+/** @public */
 export interface SparklineRenderResult {
   /** Call with a canvas context + cell rect to paint the sparkline. */
   readonly paint: (ctx: MinimalCtx, rect: SparklineRect, row: unknown) => void;
 }
 
+/** @public */
 export function createSparklineRenderer<T>(
   input: SparklineRendererInput<T>,
 ): SparklineRenderResult {

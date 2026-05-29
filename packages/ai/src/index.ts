@@ -29,16 +29,19 @@ import type {
 // Intent shapes
 // -----------------------------------------------------------------------------
 
+/** @beta */
 export interface FilterIntent {
   readonly kind: 'filter';
   readonly filter: FilterNode;
 }
 
+/** @beta */
 export interface SortIntent {
   readonly kind: 'sort';
   readonly sort: ReadonlyArray<SortField>;
 }
 
+/** @beta */
 export interface FormulaIntent {
   readonly kind: 'formula';
   /** Target column id (the column the formula populates). */
@@ -47,6 +50,7 @@ export interface FormulaIntent {
   readonly expression: string;
 }
 
+/** @beta */
 export interface MutationIntent {
   readonly kind: 'mutation';
   readonly rowKey: string | number;
@@ -54,12 +58,14 @@ export interface MutationIntent {
   readonly value: unknown;
 }
 
+/** @beta */
 export type Intent =
   | FilterIntent
   | SortIntent
   | FormulaIntent
   | MutationIntent;
 
+/** @beta */
 export interface IntentResult {
   readonly intents: ReadonlyArray<Intent>;
   /** Free-text explanation the LLM produced; useful for confirmation UIs. */
@@ -70,6 +76,7 @@ export interface IntentResult {
 // LLM contract — BYO model
 // -----------------------------------------------------------------------------
 
+/** @beta */
 export interface LlmClient {
   /**
    * Produce a single text completion. Implementations decide whether to
@@ -87,6 +94,7 @@ export interface LlmClient {
  * Build the structured prompt the LLM sees. Output is grammar-checked
  * by `parseLlmResponse`; system prompt steers the model toward strict
  * JSON.
+ * @beta
  */
 export function buildPrompt(
   text: string,
@@ -133,6 +141,7 @@ const COMPARISON_OPS: ReadonlySet<ComparisonOperator> = new Set([
  * Parse the LLM's text response and validate against the grid's
  * protocol. Throws on malformed JSON or schema violations — adopters
  * surface this to the user as "I didn't understand that".
+ * @beta
  */
 export function parseLlmResponse(
   text: string,
@@ -278,6 +287,7 @@ function validateFilterNode(
  * End-to-end: build the prompt, call the LLM, parse + validate the
  * response. Throws on any structural problem; the caller decides
  * whether to retry, surface to the user, or fall back to a heuristic.
+ * @beta
  */
 export async function interpretIntent(
   text: string,
@@ -304,6 +314,7 @@ export async function interpretIntent(
  * Anything it doesn't recognize returns `{ intents: [] }`. Adopters
  * fall back to this when no LLM is configured OR when they want to
  * short-circuit obvious cases without paying the model latency.
+ * @beta
  */
 export function parseIntentHeuristic(
   text: string,

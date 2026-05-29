@@ -9,8 +9,10 @@
 
 import type { Grid, GridOptions } from '@onegrid/core';
 
+/** @beta */
 export interface CreateOneGridOptions extends Omit<GridOptions, 'container'> {}
 
+/** @beta */
 export const createOneGrid = (_options: CreateOneGridOptions): Grid => {
   throw new Error('@onegrid/svelte: createOneGrid is not implemented yet.');
 };

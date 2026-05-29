@@ -23,21 +23,31 @@ import type { SortModel } from '@onegrid/protocol';
 // Z-sets and Diffs
 // -----------------------------------------------------------------------------
 
+/** @public */
 export type Row = Readonly<Record<string, unknown>>;
 
-/** A Z-set entry: a row with integer weight (signed multiplicity). */
+/**
+ * A Z-set entry: a row with integer weight (signed multiplicity).
+ * @public
+ */
 export interface ZEntry {
   readonly key: string;
   readonly row: Row;
   readonly weight: number;
 }
 
-/** A diff is the stream's per-tick Z-set delta. */
+/**
+ * A diff is the stream's per-tick Z-set delta.
+ * @public
+ */
 export interface Diff {
   readonly entries: ReadonlyArray<ZEntry>;
 }
 
-/** Coalesce duplicate keys: sums weights, last row wins. Drops weight-0. */
+/**
+ * Coalesce duplicate keys: sums weights, last row wins. Drops weight-0.
+ * @public
+ */
 export function coalesce(entries: ReadonlyArray<ZEntry>): ZEntry[] {
   const m = new Map<string, ZEntry>();
   for (const e of entries) {
@@ -53,7 +63,10 @@ export function coalesce(entries: ReadonlyArray<ZEntry>): ZEntry[] {
   return [...m.values()];
 }
 
-/** Integrate a stream of diffs into a snapshot map. */
+/**
+ * Integrate a stream of diffs into a snapshot map.
+ * @public
+ */
 export function integrate(diffs: ReadonlyArray<Diff>): Map<string, Row> {
   const snap = new Map<string, Row>();
   for (const d of diffs) {
@@ -72,6 +85,7 @@ export function integrate(diffs: ReadonlyArray<Diff>): Map<string, Row> {
 // Operator interface
 // -----------------------------------------------------------------------------
 
+/** @public */
 export interface Operator {
   /** Apply an input diff, return the corresponding output diff. */
   applyDiff(diff: Diff): Diff;
@@ -85,6 +99,7 @@ export interface Operator {
 // Source — passthrough; the entry point of every plan
 // -----------------------------------------------------------------------------
 
+/** @public */
 export function createSource(): Operator {
   const state = new Map<string, Row>();
   return {
@@ -104,6 +119,7 @@ export function createSource(): Operator {
 // Map — project each row
 // -----------------------------------------------------------------------------
 
+/** @public */
 export function createMap(project: (r: Row) => Row): Operator {
   const state = new Map<string, Row>();
   return {
@@ -126,6 +142,7 @@ export function createMap(project: (r: Row) => Row): Operator {
 // Filter — predicate keep/drop
 // -----------------------------------------------------------------------------
 
+/** @public */
 export function createFilter(predicate: (r: Row) => boolean): Operator {
   const state = new Map<string, Row>();
   return {
@@ -148,6 +165,7 @@ export function createFilter(predicate: (r: Row) => boolean): Operator {
 // Union — sum two diff streams pointwise
 // -----------------------------------------------------------------------------
 
+/** @public */
 export function createUnion(): {
   readonly left: Operator;
   readonly right: Operator;
@@ -185,6 +203,7 @@ export function createUnion(): {
 // Distinct — collapse weights to {-1, +1}
 // -----------------------------------------------------------------------------
 
+/** @public */
 export function createDistinct(): Operator {
   const weights = new Map<string, number>();
   const rows = new Map<string, Row>();
@@ -225,8 +244,10 @@ export function createDistinct(): Operator {
 // GroupAgg — group by keys + per-group aggregate
 // -----------------------------------------------------------------------------
 
+/** @public */
 export type AggKind = 'sum' | 'count' | 'avg' | 'min' | 'max';
 
+/** @public */
 export interface AggSpec {
   /** Output column name. */
   readonly out: string;
@@ -289,6 +310,7 @@ function readAgg(state: AggState, spec: AggSpec): number | null {
   }
 }
 
+/** @public */
 export function createGroupAgg(
   keys: ReadonlyArray<string>,
   aggs: ReadonlyArray<AggSpec>,
@@ -385,6 +407,7 @@ function compareSort(a: Row, b: Row, sort: SortModel): number {
   return 0;
 }
 
+/** @public */
 export function createTopK(sort: SortModel, k: number): Operator {
   const state = new Map<string, Row>();
   let lastEmittedKeys: Set<string> = new Set();
@@ -440,6 +463,7 @@ export function createTopK(sort: SortModel, k: number): Operator {
 // Operator graph — chain operators by feeding output diff into the next.
 // -----------------------------------------------------------------------------
 
+/** @public */
 export class Pipeline {
   private readonly ops: Operator[];
 

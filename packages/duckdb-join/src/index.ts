@@ -25,6 +25,7 @@ import type {
 // Source-registration shapes
 // -----------------------------------------------------------------------------
 
+/** @beta */
 export interface RowsSource {
   readonly kind: 'rows';
   /** View name inside DuckDB. */
@@ -33,6 +34,7 @@ export interface RowsSource {
   readonly rows: ReadonlyArray<Readonly<Record<string, unknown>>>;
 }
 
+/** @beta */
 export interface ArrowBytesSource {
   readonly kind: 'arrow';
   readonly name: string;
@@ -40,6 +42,7 @@ export interface ArrowBytesSource {
   readonly bytes: Uint8Array;
 }
 
+/** @beta */
 export interface SqlSource {
   readonly kind: 'sql';
   readonly name: string;
@@ -47,6 +50,7 @@ export interface SqlSource {
   readonly query: string;
 }
 
+/** @beta */
 export type JoinSource = RowsSource | ArrowBytesSource | SqlSource;
 
 // -----------------------------------------------------------------------------
@@ -64,6 +68,7 @@ export type JoinSource = RowsSource | ArrowBytesSource | SqlSource;
  *               `read_arrow` semantics by registering as a file and
  *               creating a VIEW that reads from it.
  *   - `sql`   — wraps an arbitrary SELECT in CREATE OR REPLACE VIEW.
+ * @beta
  */
 export async function registerSource(
   db: AsyncDuckDB,
@@ -107,7 +112,10 @@ export async function registerSource(
   }
 }
 
-/** Drop a previously-registered view (and its file buffer if any). */
+/**
+ * Drop a previously-registered view (and its file buffer if any).
+ * @beta
+ */
 export async function unregisterSource(
   db: AsyncDuckDB,
   source: JoinSource,
@@ -131,6 +139,7 @@ export async function unregisterSource(
 // JoinQuery — execute a join across registered sources
 // -----------------------------------------------------------------------------
 
+/** @beta */
 export interface JoinQueryOptions {
   readonly db: AsyncDuckDB;
   readonly sources: ReadonlyArray<JoinSource>;
@@ -138,6 +147,7 @@ export interface JoinQueryOptions {
   readonly query: string;
 }
 
+/** @beta */
 export interface JoinQueryResult {
   readonly rows: ReadonlyArray<Readonly<Record<string, unknown>>>;
   readonly columns: ReadonlyArray<string>;
@@ -149,6 +159,7 @@ export interface JoinQueryResult {
  * Register every source, run the join, return rows as plain JS objects.
  * Sources are dropped after the query completes — call `registerSource`
  * directly if you want long-lived views.
+ * @beta
  */
 export async function executeJoinQuery(
   opts: JoinQueryOptions,

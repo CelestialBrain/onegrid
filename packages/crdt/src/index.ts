@@ -24,6 +24,7 @@ import type { RowDiff } from '@onegrid/protocol';
 // Shared shape
 // -----------------------------------------------------------------------------
 
+/** @beta */
 export interface CrdtBridge {
   /** Stop observing changes; release any subscription handles. */
   readonly close: () => void;
@@ -39,6 +40,7 @@ export interface CrdtBridge {
  * Minimal structural subset of `Y.Map<unknown>` we need. The real Y.Map
  * has many more methods; we type-narrow to what the bridge actually
  * calls so adopters can pass the real instance without imports here.
+ * @beta
  */
 export interface YMapLike {
   readonly get: (key: string) => unknown;
@@ -53,6 +55,7 @@ export interface YMapLike {
   ) => void;
 }
 
+/** @beta */
 export interface YMapEventLike {
   readonly changes: {
     readonly keys: ReadonlyMap<string, {
@@ -62,6 +65,7 @@ export interface YMapEventLike {
   };
 }
 
+/** @beta */
 export interface BindYjsRowsOptions {
   readonly map: YMapLike;
   readonly onDiff: (diff: RowDiff) => void;
@@ -69,6 +73,7 @@ export interface BindYjsRowsOptions {
   readonly onError?: (err: unknown) => void;
 }
 
+/** @beta */
 export function bindYjsRows(opts: BindYjsRowsOptions): CrdtBridge {
   let version = 0;
   const handler = (event: YMapEventLike): void => {
@@ -107,6 +112,7 @@ export function bindYjsRows(opts: BindYjsRowsOptions): CrdtBridge {
 }
 
 /** Apply a local insert / update / delete through the CRDT — propagates
+ * @beta
  *  via Yjs sync just like a remote edit. */
 export function applyLocalToYjs(
   map: YMapLike,
@@ -132,17 +138,20 @@ export function applyLocalToYjs(
  * Automerge document shape we depend on. Adopters keep the real
  * Automerge document outside this package; the bridge hooks into the
  * heads-diff pattern.
+ * @beta
  */
 export interface AutomergeDocLike<TRow> {
   /** Read the row map as a plain JS dictionary. */
   readonly getRows: () => Readonly<Record<string, TRow>>;
 }
 
+/** @beta */
 export interface AutomergeWatcherLike {
   /** Subscribe; the handler fires after each remote-or-local change. */
   readonly subscribe: (handler: () => void) => () => void;
 }
 
+/** @beta */
 export interface BindAutomergeRowsOptions<TRow> {
   readonly doc: AutomergeDocLike<TRow>;
   readonly watcher: AutomergeWatcherLike;
@@ -150,6 +159,7 @@ export interface BindAutomergeRowsOptions<TRow> {
   readonly onError?: (err: unknown) => void;
 }
 
+/** @beta */
 export function bindAutomergeRows<TRow>(
   opts: BindAutomergeRowsOptions<TRow>,
 ): CrdtBridge {

@@ -20,14 +20,20 @@
 
 import type { ColumnType, Schema } from '@onegrid/protocol';
 
-/** Current plugin/core interface version. Bump on breaking changes. */
+/**
+ * Current plugin/core interface version. Bump on breaking changes.
+ * @public
+ */
 export const INTERFACE_VERSION = 1 as const;
 
 // -----------------------------------------------------------------------------
 // Extension / Facet / Compartment primitives
 // -----------------------------------------------------------------------------
 
-/** Opaque extension marker. Plugins return these; nothing else creates them. */
+/**
+ * Opaque extension marker. Plugins return these; nothing else creates them.
+ * @public
+ */
 export type Extension = ExtensionNode | readonly Extension[];
 
 interface ExtensionNode {
@@ -42,7 +48,10 @@ interface ExtensionNode {
 
 let extensionSeq = 0;
 
-/** Precedence tiers. Lower number = higher precedence (resolved first). */
+/**
+ * Precedence tiers. Lower number = higher precedence (resolved first).
+ * @public
+ */
 export const Precedence = {
   highest: 0,
   high: 1,
@@ -50,6 +59,7 @@ export const Precedence = {
   low: 3,
   lowest: 4,
 } as const;
+/** @public */
 export type PrecedenceLevel = (typeof Precedence)[keyof typeof Precedence];
 
 function withPrecedence(ext: Extension, level: PrecedenceLevel): Extension {
@@ -60,7 +70,10 @@ function withPrecedence(ext: Extension, level: PrecedenceLevel): Extension {
   return { ...node, precedence: level, seq: extensionSeq++ };
 }
 
-/** Re-tag an extension subtree with a different precedence level. */
+/**
+ * Re-tag an extension subtree with a different precedence level.
+ * @public
+ */
 export const precedence = {
   highest: (ext: Extension): Extension => withPrecedence(ext, Precedence.highest),
   high: (ext: Extension): Extension => withPrecedence(ext, Precedence.high),
@@ -68,6 +81,7 @@ export const precedence = {
   lowest: (ext: Extension): Extension => withPrecedence(ext, Precedence.lowest),
 };
 
+/** @public */
 export interface FacetConfig<Input, Output> {
   /** Reduce all registered inputs into a single output. Default: array. */
   readonly combine?: (inputs: readonly Input[]) => Output;
@@ -80,6 +94,7 @@ export interface FacetConfig<Input, Output> {
 /**
  * A typed combination point. Plugins register `Input` values via `facet.of(v)`;
  * `state.facet(facet)` returns the combined `Output`.
+ * @public
  */
 export class Facet<Input, Output = readonly Input[]> {
   private constructor(
@@ -112,6 +127,7 @@ export class Facet<Input, Output = readonly Input[]> {
  * Swappable extension slot. Wrap a sub-extension in a Compartment, then
  * reconfigure later without rebuilding the whole state tree. Used by
  * theme/density/locale swaps.
+ * @public
  */
 export class Compartment {
   readonly id = Symbol('compartment');
@@ -141,11 +157,13 @@ export class Compartment {
 // PluginState — the resolved tree
 // -----------------------------------------------------------------------------
 
+/** @public */
 export interface PluginStateConfig {
   readonly extensions: readonly Extension[];
   readonly interfaceVersion?: number;
 }
 
+/** @public */
 export interface ReconfigureOptions {
   /** Append new extensions. */
   readonly append?: readonly Extension[];
@@ -157,6 +175,7 @@ interface ResolvedInputs {
   readonly byFacet: Map<symbol, unknown[]>;
 }
 
+/** @public */
 export class PluginState {
   /** Internal: compartment → its inner extension, for `Compartment.get`. */
   readonly compartments: ReadonlyMap<Compartment, Extension>;
@@ -278,6 +297,7 @@ function resolveExtensions(extensions: readonly Extension[]): {
   return { resolved: { byFacet }, compartments };
 }
 
+/** @public */
 export function assertInterfaceVersion(version: number): void {
   if (!Number.isInteger(version) || version < 1) {
     throw new Error(
@@ -295,6 +315,7 @@ export function assertInterfaceVersion(version: number): void {
 // PluginContext — narrow surface plugins are allowed to touch
 // -----------------------------------------------------------------------------
 
+/** @public */
 export interface PluginContext {
   readonly interfaceVersion: number;
   readonly facet: <I, O>(facet: Facet<I, O>) => O;
@@ -302,6 +323,7 @@ export interface PluginContext {
   readonly resolve: <T>(registry: PluginRegistry<T>, id: string) => T | undefined;
 }
 
+/** @public */
 export function createPluginContext(state: PluginState): PluginContext {
   return {
     interfaceVersion: state.interfaceVersion,
@@ -317,6 +339,7 @@ export function createPluginContext(state: PluginState): PluginContext {
 /**
  * A keyed plugin registry. Backed by a Facet whose combine step folds
  * `{ id, value }` registrations into a `Map<string, T>`.
+ * @public
  */
 export class PluginRegistry<T> {
   readonly facet: Facet<{ readonly id: string; readonly value: T }, ReadonlyMap<string, T>>;
@@ -355,99 +378,127 @@ export class PluginRegistry<T> {
 // Ten domain registries
 // -----------------------------------------------------------------------------
 
+/** @public */
 export interface CellRendererPlugin {
   readonly render: (cell: CellRenderInput) => string | { html: string };
 }
+/** @public */
 export interface CellRenderInput {
   readonly value: unknown;
   readonly rowIndex: number;
   readonly columnId: string;
   readonly columnType: ColumnType;
 }
+/** @public */
 export const cellRendererRegistry = new PluginRegistry<CellRendererPlugin>('cellRenderer');
 
+/** @public */
 export interface CellEditorPlugin {
   readonly mount: (ctx: CellEditorMountInput) => CellEditorHandle;
 }
+/** @public */
 export interface CellEditorMountInput {
   readonly initialValue: unknown;
   readonly columnId: string;
   readonly columnType: ColumnType;
 }
+/** @public */
 export interface CellEditorHandle {
   readonly commit: () => unknown;
   readonly cancel: () => void;
   readonly element: () => HTMLElement | null;
 }
+/** @public */
 export const cellEditorRegistry = new PluginRegistry<CellEditorPlugin>('cellEditor');
 
+/** @public */
 export interface ExporterPlugin {
   readonly mimeType: string;
   readonly extension: string;
   readonly export: (input: ExportInput) => Uint8Array | string | Promise<Uint8Array | string>;
 }
+/** @public */
 export interface ExportInput {
   readonly rows: ReadonlyArray<ReadonlyArray<unknown>>;
   readonly schema: Schema;
 }
+/** @public */
 export const exporterRegistry = new PluginRegistry<ExporterPlugin>('exporter');
 
+/** @public */
 export interface DataSourcePlugin {
   readonly kind: string;
 }
+/** @public */
 export const dataSourceRegistry = new PluginRegistry<DataSourcePlugin>('dataSource');
 
+/** @public */
 export interface ThemePlugin {
   readonly tokens: Readonly<Record<string, string>>;
   readonly inheritsFrom?: string;
 }
+/** @public */
 export const themeRegistry = new PluginRegistry<ThemePlugin>('theme');
 
+/** @public */
 export interface FormulaFunctionPlugin {
   readonly arity: number | 'variadic';
   readonly evaluate: (args: readonly unknown[]) => unknown;
   readonly pure?: boolean;
 }
+/** @public */
 export const formulaFunctionRegistry = new PluginRegistry<FormulaFunctionPlugin>('formulaFunction');
 
+/** @public */
 export interface AggregatorPlugin {
   readonly init: () => unknown;
   readonly step: (acc: unknown, value: unknown) => unknown;
   readonly finalize: (acc: unknown) => unknown;
 }
+/** @public */
 export const aggregatorRegistry = new PluginRegistry<AggregatorPlugin>('aggregator');
 
+/** @public */
 export interface FilterOperatorPlugin {
   readonly arity: 1 | 2;
   readonly match: (cellValue: unknown, operand: unknown) => boolean;
   readonly sqlTemplate?: (col: string, params: readonly string[]) => string;
 }
+/** @public */
 export const filterOperatorRegistry = new PluginRegistry<FilterOperatorPlugin>('filterOperator');
 
+/** @public */
 export interface ColumnToolPlugin {
   readonly label: string;
   readonly icon?: string;
   readonly onActivate: (columnId: string) => void;
 }
+/** @public */
 export const columnToolRegistry = new PluginRegistry<ColumnToolPlugin>('columnTool');
 
+/** @public */
 export interface I18nCatalogPlugin {
   readonly locale: string;
   readonly messages: Readonly<Record<string, string>>;
 }
+/** @public */
 export const i18nCatalogRegistry = new PluginRegistry<I18nCatalogPlugin>('i18nCatalog');
 
 // -----------------------------------------------------------------------------
 // Convenience: build a plugin module
 // -----------------------------------------------------------------------------
 
+/** @public */
 export interface PluginManifest {
   readonly name: string;
   readonly interfaceVersion: number;
   readonly extensions: readonly Extension[];
 }
 
-/** Author-facing helper. Asserts interface compat at module load. */
+/**
+ * Author-facing helper. Asserts interface compat at module load.
+ * @public
+ */
 export function definePlugin(manifest: PluginManifest): PluginManifest {
   assertInterfaceVersion(manifest.interfaceVersion);
   return manifest;

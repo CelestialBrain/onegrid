@@ -40,6 +40,7 @@ import type { FilterModel, SortModel } from '@onegrid/protocol';
 // MCP JSON-RPC primitives (minimal — we don't pin the official SDK shape)
 // -----------------------------------------------------------------------------
 
+/** @beta */
 export interface JsonRpcRequest {
   readonly jsonrpc: '2.0';
   readonly id: number | string | null;
@@ -47,12 +48,14 @@ export interface JsonRpcRequest {
   readonly params?: unknown;
 }
 
+/** @beta */
 export interface JsonRpcResponseOk {
   readonly jsonrpc: '2.0';
   readonly id: number | string | null;
   readonly result: unknown;
 }
 
+/** @beta */
 export interface JsonRpcResponseError {
   readonly jsonrpc: '2.0';
   readonly id: number | string | null;
@@ -63,6 +66,7 @@ export interface JsonRpcResponseError {
   };
 }
 
+/** @beta */
 export type JsonRpcResponse = JsonRpcResponseOk | JsonRpcResponseError;
 
 // MCP error codes
@@ -77,12 +81,14 @@ const ERR_DENIED = -32005; // host rejected the call
 // Grid bridge — what the host provides to the server
 // -----------------------------------------------------------------------------
 
+/** @beta */
 export interface ColumnInfo {
   readonly id: string;
   readonly displayName: string;
   readonly type: string;
 }
 
+/** @beta */
 export interface SelectionInfo {
   readonly rowStart: number;
   readonly rowEnd: number;
@@ -90,12 +96,14 @@ export interface SelectionInfo {
   readonly colEnd: number;
 }
 
+/** @beta */
 export interface ViewportInfo {
   readonly visibleRowStart: number;
   readonly visibleRowEnd: number;
   readonly totalRowCount: number;
 }
 
+/** @beta */
 export interface ProposedMutation {
   readonly rowKey: string | number;
   readonly columnId: string;
@@ -103,6 +111,7 @@ export interface ProposedMutation {
   readonly source: 'llm';
 }
 
+/** @beta */
 export interface McpGridBridge {
   /** Schema-level introspection. */
   readonly getColumns: () => ReadonlyArray<ColumnInfo>;
@@ -133,6 +142,7 @@ export interface McpGridBridge {
 // Server
 // -----------------------------------------------------------------------------
 
+/** @beta */
 export interface McpServerOptions {
   readonly bridge: McpGridBridge;
   /**
@@ -150,6 +160,7 @@ export interface McpServerOptions {
  * request through `handle(req)`; it returns the matching
  * response. Stateless across calls except for the bridge state
  * the host owns.
+ * @beta
  */
 export function createMcpServer(opts: McpServerOptions): {
   readonly handle: (req: JsonRpcRequest) => Promise<JsonRpcResponse>;
@@ -466,6 +477,7 @@ function err(
 
 // Re-export the JSON-RPC error code constants for adopters who want to
 // match against them (e.g. for retry vs surface-to-user decisions).
+/** @beta */
 export const MCP_ERR = {
   PARSE: ERR_PARSE,
   METHOD_NOT_FOUND: ERR_METHOD_NOT_FOUND,

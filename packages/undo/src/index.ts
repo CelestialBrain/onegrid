@@ -16,6 +16,7 @@
 //   - Default cap is 100 entries. Older entries are dropped FIFO.
 // =============================================================================
 
+/** @public */
 export interface UndoEntry<T = unknown> {
   /** Domain-specific kind tag adopters dispatch on. */
   readonly kind: string;
@@ -29,6 +30,7 @@ export interface UndoEntry<T = unknown> {
   readonly ts: number;
 }
 
+/** @public */
 export interface UndoManagerOptions<T> {
   /** Apply a payload to the adopter's data store. Called on undo (with
    *  the entry's `inverse`) and on redo (with `forward`). */
@@ -40,6 +42,7 @@ export interface UndoManagerOptions<T> {
   readonly onChange?: (state: UndoState) => void;
 }
 
+/** @public */
 export interface UndoState {
   readonly canUndo: boolean;
   readonly canRedo: boolean;
@@ -50,6 +53,7 @@ export interface UndoState {
   readonly nextRedoLabel: string | undefined;
 }
 
+/** @public */
 export interface UndoManager<T> {
   /** Push a new entry. Drops the redo stack. Bundle multi-step ops via
    *  `transaction()` so the whole op reverses as one Cmd+Z. */
@@ -94,6 +98,7 @@ interface InternalEntry<T> extends UndoEntry<T> {
   readonly inverseList?: ReadonlyArray<T>;
 }
 
+/** @public */
 export function createUndoManager<T>(
   opts: UndoManagerOptions<T>,
 ): UndoManager<T> {

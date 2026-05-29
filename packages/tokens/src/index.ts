@@ -20,6 +20,7 @@ import type { Extension } from '@onegrid/plugin-kit';
 // DTCG types (minimal — we only consume colors, dimensions, fontFamilies)
 // -----------------------------------------------------------------------------
 
+/** @public */
 export type DtcgType =
   | 'color'
   | 'dimension'
@@ -29,18 +30,21 @@ export type DtcgType =
   | 'number'
   | 'string';
 
+/** @public */
 export interface DtcgToken {
   readonly $type?: DtcgType;
   readonly $value: string | number;
   readonly $description?: string;
 }
 
+/** @public */
 export interface DtcgGroup {
   readonly $type?: DtcgType;
   readonly $description?: string;
   readonly [key: string]: DtcgToken | DtcgGroup | string | undefined;
 }
 
+/** @public */
 export type DtcgBundle = DtcgGroup;
 
 // -----------------------------------------------------------------------------
@@ -52,6 +56,7 @@ export type DtcgBundle = DtcgGroup;
  * Group `$type` propagates down; `$value` strings of the form
  * `{group.subgroup.leaf}` are resolved as aliases (single-pass; cycles
  * throw with `OG_TOKEN_CYCLE`).
+ * @public
  */
 export function flattenDtcg(bundle: DtcgBundle): Map<string, string | number> {
   const flat = new Map<string, string | number>();
@@ -108,6 +113,7 @@ function resolveAliases(
 /**
  * Format a flat token map into `--og-name: value` CSS custom-property
  * declarations. `color.background` → `--og-color-background`.
+ * @public
  */
 export function toCssCustomProperties(
   flat: ReadonlyMap<string, string | number>,
@@ -120,6 +126,7 @@ export function toCssCustomProperties(
   return lines.join('\n');
 }
 
+/** @public */
 export interface CompileThemeOptions {
   /** Scope selector. Default: `[data-og-root]`. */
   readonly selector?: string;
@@ -133,6 +140,7 @@ export interface CompileThemeOptions {
  * Compile a DTCG bundle straight to a CSS rule block. The result is
  * `<scope-selector>[<theme/density-attr>] { --og-*: ...; }` and can be
  * injected via a `<style>` tag or adopted-stylesheet.
+ * @public
  */
 export function compileTheme(
   bundle: DtcgBundle,
@@ -151,12 +159,14 @@ export function compileTheme(
 // prefers-color-scheme watcher
 // -----------------------------------------------------------------------------
 
+/** @public */
 export type ColorScheme = 'light' | 'dark';
 
 /**
  * Watch `prefers-color-scheme`. Returns a cleanup function. Safe to
  * call in non-DOM environments — it short-circuits when `matchMedia`
  * is undefined.
+ * @public
  */
 export function watchPrefersColorScheme(
   onChange: (scheme: ColorScheme) => void,
@@ -180,6 +190,7 @@ export function watchPrefersColorScheme(
 /**
  * Emit a `@media (forced-colors: active)` block mapping our tokens to
  * the CSS system color keywords. Used by the high-contrast bundle.
+ * @public
  */
 export function forcedColorsBlock(
   selector: string = '[data-og-root]',
@@ -206,6 +217,7 @@ export function forcedColorsBlock(
 // Register a theme bundle with @onegrid/plugin-kit
 // -----------------------------------------------------------------------------
 
+/** @public */
 export interface ThemeBundle {
   readonly name: string;
   readonly dtcg: DtcgBundle;
@@ -215,6 +227,7 @@ export interface ThemeBundle {
 /**
  * Register a theme bundle so the grid can `[data-og-theme]`-switch to
  * it. Returns an Extension the consumer attaches to their PluginState.
+ * @public
  */
 export function registerTheme(bundle: ThemeBundle): Extension {
   const flat = flattenDtcg(bundle.dtcg);
@@ -239,6 +252,7 @@ export function registerTheme(bundle: ThemeBundle): Extension {
 // + line heights.
 // -----------------------------------------------------------------------------
 
+/** @public */
 export const COLOR_TOKEN_NAMES = [
   'color.background',
   'color.background-alt',
@@ -272,6 +286,7 @@ export const COLOR_TOKEN_NAMES = [
   'color.context-menu-background',
 ] as const;
 
+/** @public */
 export const DENSITY_TOKEN_NAMES = [
   'size.row-height',
   'size.header-height',
@@ -290,5 +305,7 @@ export const DENSITY_TOKEN_NAMES = [
   'size.icon',
 ] as const;
 
+/** @public */
 export type ColorTokenName = (typeof COLOR_TOKEN_NAMES)[number];
+/** @public */
 export type DensityTokenName = (typeof DENSITY_TOKEN_NAMES)[number];

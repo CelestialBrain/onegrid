@@ -17,6 +17,7 @@ import type { ColumnSchema, ColumnType, Schema } from '@onegrid/protocol';
 
 /** Subset of ColumnDef the introspector emits. Structurally
  *  compatible with `@onegrid/core`'s ColumnDef so consumers can
+ * @public
  *  cast directly. */
 export interface MinimalColumnDef {
   readonly id: string;
@@ -26,6 +27,7 @@ export interface MinimalColumnDef {
   readonly color?: (value: unknown, rowIndex: number) => string | undefined;
 }
 
+/** @public */
 export interface InferColumnsOptions {
   /** Default column width when no per-column override applies. */
   readonly defaultWidth?: number;
@@ -47,6 +49,7 @@ export interface InferColumnsOptions {
  * Default widths track column type — strings get 160, numerics
  * 120, dates / booleans 100, ids 80. Override per-column via
  * `opts.widths`.
+ * @public
  */
 export function columnsFromSchema(
   schema: Schema,
@@ -80,6 +83,7 @@ function columnFromSchemaEntry(
  * Map a SQL `data_type` name (from `information_schema.columns` or
  * SQLite `pragma_table_info`) to the protocol's `ColumnType`. Used
  * by the database-introspection helpers below.
+ * @public
  */
 export function columnTypeFromSql(dataType: string): ColumnType {
   const t = dataType.toLowerCase().trim();
@@ -127,6 +131,7 @@ export function columnTypeFromSql(dataType: string): ColumnType {
  * Build a `Schema` from `information_schema.columns`-style rows.
  * Works against Postgres / MySQL identically; SQLite has its own
  * `pragma_table_info` shape mapped via `schemaFromSqliteRows`.
+ * @public
  */
 export function schemaFromSqlRows(
   rows: ReadonlyArray<{
@@ -152,6 +157,7 @@ export function schemaFromSqlRows(
 /**
  * Build a `Schema` from SQLite's `PRAGMA table_info(table)` rows.
  * The `notnull` field is `0` (nullable) or `1` (not nullable).
+ * @public
  */
 export function schemaFromSqliteRows(
   rows: ReadonlyArray<{

@@ -9,8 +9,10 @@
 // Public API surface (planned). Implementations TODO.
 // =============================================================================
 
+/** @beta */
 export const ONE_GRID_TAG_NAME = 'one-grid' as const;
 
+/** @beta */
 export const defineOneGridElement = (_tag: string = ONE_GRID_TAG_NAME): void => {
   throw new Error('@onegrid/wc: defineOneGridElement is not implemented yet.');
 };

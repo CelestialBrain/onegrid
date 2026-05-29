@@ -62,6 +62,7 @@ import {
 
 import { encodeCursor, decodeCursor, type KeysetCursor } from './cursor';
 
+/** @public */
 export interface DrizzleDataSourceOptions<TTable extends Table = Table> {
   /**
    * The Drizzle database client (e.g. `drizzle(pgClient)`). The adapter
@@ -83,14 +84,17 @@ export interface DrizzleDataSourceOptions<TTable extends Table = Table> {
   readonly defaultLimit?: number;
 }
 
+/** @public */
 export interface DrizzleClient {
   select: (fields?: Record<string, unknown>) => DrizzleSelect;
 }
 
+/** @public */
 export interface DrizzleSelect {
   from: (table: Table) => DrizzleQueryBuilder;
 }
 
+/** @public */
 export interface DrizzleQueryBuilder {
   where: (condition: SQL) => DrizzleQueryBuilder;
   orderBy: (...fields: SQL[]) => DrizzleQueryBuilder;
@@ -102,6 +106,7 @@ export interface DrizzleQueryBuilder {
   ) => Promise<T>;
 }
 
+/** @public */
 export function createDrizzleDataSource<TTable extends Table>(
   options: DrizzleDataSourceOptions<TTable>,
 ): DataSource {

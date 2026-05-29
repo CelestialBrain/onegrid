@@ -9,4 +9,5 @@
 export * from '@onegrid/core';
 export type * from '@onegrid/protocol';
 
+/** @public */
 export const ONEGRID_VERSION = '0.0.1' as const;

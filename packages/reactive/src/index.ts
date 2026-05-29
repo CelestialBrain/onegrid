@@ -25,9 +25,13 @@
 // Revision
 // -----------------------------------------------------------------------------
 
+/** @beta */
 export type Revision = number;
 
-/** Comparator interface for backdating. Default: strict equality. */
+/**
+ * Comparator interface for backdating. Default: strict equality.
+ * @beta
+ */
 export type Equals<T> = (a: T, b: T) => boolean;
 
 const strictEqual = <T>(a: T, b: T): boolean => a === b;
@@ -63,6 +67,7 @@ interface DepRef {
   readonly verifiedAt: Revision;
 }
 
+/** @beta */
 export class Database {
   /** Monotonically increasing revision. Starts at 0; bumps on every
    *  input write whose value differs from the previous. */

@@ -23,6 +23,7 @@ import type {
 // Minimal Worker-shape interface so the host doesn't pin Web vs Node.
 // -----------------------------------------------------------------------------
 
+/** @public */
 export interface WorkerLike {
   postMessage(message: unknown, transfer?: ReadonlyArray<Transferable>): void;
   addEventListener(
@@ -38,6 +39,7 @@ export interface WorkerLike {
 // WorkerPluginHost
 // -----------------------------------------------------------------------------
 
+/** @public */
 export interface WorkerPluginHostOptions {
   /** Either a pre-constructed Worker OR a URL/blob the host will spawn from. */
   readonly worker: WorkerLike;
@@ -53,6 +55,7 @@ interface PendingCall {
   readonly timer: ReturnType<typeof setTimeout>;
 }
 
+/** @public */
 export class WorkerPluginHost {
   private readonly worker: WorkerLike;
   private readonly timeoutMs: number;
@@ -147,6 +150,7 @@ export class WorkerPluginHost {
  *
  * Use this when you don't need fine-grained control — for hot paths,
  * pass `transfer` explicitly.
+ * @public
  */
 export function collectTransferables(
   args: ReadonlyArray<unknown>,

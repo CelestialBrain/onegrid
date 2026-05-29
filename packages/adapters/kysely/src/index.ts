@@ -33,6 +33,7 @@ import { decodeCursor, encodeCursor, type KeysetCursor } from './cursor';
 // adapter only relies on these structural shapes; pass any kysely instance
 // at the call site and TS narrows it via the structural match.
 
+/** @public */
 export interface KyselyExpressionBuilder {
   (column: string, op: KyselyComparisonOp, value: unknown): KyselyExpression;
   and: (exprs: ReadonlyArray<KyselyExpression>) => KyselyExpression;
@@ -40,6 +41,7 @@ export interface KyselyExpressionBuilder {
   not: (expr: KyselyExpression) => KyselyExpression;
 }
 
+/** @public */
 export type KyselyComparisonOp =
   | '='
   | '!='
@@ -55,12 +57,14 @@ export type KyselyComparisonOp =
   | 'ilike'
   | 'not like';
 
+/** @public */
 export interface KyselyExpression {
   // opaque marker; kysely's `Expression<unknown>` carries internal shape we
   // don't need to inspect.
   readonly __kyselyExpression?: never;
 }
 
+/** @public */
 export interface KyselySelectQueryBuilder {
   selectAll: () => KyselySelectQueryBuilder;
   where: (
@@ -71,12 +75,14 @@ export interface KyselySelectQueryBuilder {
   execute: () => Promise<ReadonlyArray<Record<string, unknown>>>;
 }
 
+/** @public */
 export interface KyselyClient {
   selectFrom: (table: string) => KyselySelectQueryBuilder;
 }
 
 // -----------------------------------------------------------------------------
 
+/** @public */
 export interface KyselyDataSourceOptions {
   /** Kysely instance. Any `Kysely<DB>` works structurally. */
   readonly db: KyselyClient;
@@ -94,6 +100,7 @@ export interface KyselyDataSourceOptions {
   readonly defaultLimit?: number;
 }
 
+/** @public */
 export function createKyselyDataSource(options: KyselyDataSourceOptions): DataSource {
   const defaultLimit = options.defaultLimit ?? 200;
 

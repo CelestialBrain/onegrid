@@ -52,6 +52,7 @@ import {
   parseOffsetCursor,
 } from './sql';
 
+/** @public */
 export interface DuckDbDataSourceOptions {
   /**
    * AsyncDuckDB instance. The adapter doesn't construct DuckDB itself —
@@ -79,6 +80,7 @@ export interface DuckDbDataSourceOptions {
   readonly defaultLimit?: number;
 }
 
+/** @public */
 export interface DuckDbDataSourceHandle extends DataSource {
   /** Current schema (cached after first resolution). */
   readonly schema: () => Promise<Schema>;
@@ -86,6 +88,7 @@ export interface DuckDbDataSourceHandle extends DataSource {
   readonly close: () => Promise<void>;
 }
 
+/** @public */
 export function createDuckDbDataSource(
   options: DuckDbDataSourceOptions,
 ): DuckDbDataSourceHandle {

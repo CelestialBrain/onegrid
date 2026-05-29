@@ -22,13 +22,17 @@ import type { RowDiff } from '@onegrid/protocol';
 // Types
 // -----------------------------------------------------------------------------
 
-/** Logged diff entry. version is monotonic; ts is wall-clock. */
+/**
+ * Logged diff entry. version is monotonic; ts is wall-clock.
+ * @beta
+ */
 export interface TemporalEntry {
   readonly version: number;
   readonly ts: number;
   readonly diff: RowDiff;
 }
 
+/** @beta */
 export interface TemporalLogOptions {
   /**
    * Take a full snapshot every N diffs so replay stays bounded.
@@ -52,6 +56,7 @@ interface Anchor {
 // TemporalLog
 // -----------------------------------------------------------------------------
 
+/** @beta */
 export class TemporalLog {
   private readonly entries: TemporalEntry[] = [];
   private readonly anchors: Anchor[] = [];
@@ -206,7 +211,10 @@ export class TemporalLog {
 // Free-function helpers
 // -----------------------------------------------------------------------------
 
-/** Apply a single RowDiff to a mutable snapshot map. */
+/**
+ * Apply a single RowDiff to a mutable snapshot map.
+ * @beta
+ */
 export function applyDiffToSnapshot(
   snap: Map<string, Readonly<Record<string, unknown>>>,
   diff: RowDiff,
@@ -230,6 +238,7 @@ export function applyDiffToSnapshot(
 /**
  * Compute the inverse of a single RowDiff given the state immediately
  * before it was applied. Used to construct undo diffs.
+ * @beta
  */
 export function invertDiff(
   diff: RowDiff,

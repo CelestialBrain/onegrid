@@ -13,6 +13,7 @@ export declare class OneGridComponent {
   readonly grid: Grid | null;
 }
 
+/** @beta */
 export const ANGULAR_ADAPTER_NOT_IMPLEMENTED = (): never => {
   throw new Error('@onegrid/angular: implementation pending.');
 };
