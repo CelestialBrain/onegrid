@@ -23,6 +23,7 @@ import './functions/lookup';
 import './functions/stats';
 import './functions/financial';
 import './functions/engineering';
+import './functions/database';
 import './functions/_aliases';
 
 export {
