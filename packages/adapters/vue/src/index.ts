@@ -3,22 +3,42 @@
 //
 // Vue 3 adapter. Idiomatic composables over the framework-agnostic core.
 //
-// Public API surface (planned). Implementations TODO.
+// Public surface:
+//   - useOneGrid(options) → { containerRef, grid } — Vue composable
 // =============================================================================
 
-import type { Grid, GridOptions } from '@onegrid/core';
-import type { Ref } from 'vue';
+export { useOneGrid } from './use-one-grid';
+export type { UseOneGridOptions, UseOneGridReturn } from './use-one-grid';
 
-/** @beta */
-export interface UseOneGridOptions extends Omit<GridOptions, 'container'> {}
+// Re-export the most common @onegrid/core types so consumers don't
+// need a separate import — mirrors the @onegrid/react surface.
+export type {
+  CellRenderContext,
+  CellRenderer,
+  ColumnDef,
+  ColumnGroupDef,
+  ContextMenuTarget,
+  FrameStats,
+  Grid,
+  GridOptions,
+  GridTheme,
+  MetricsSnapshot,
+  RowGroupMeta,
+  RowMeta,
+  RowSource,
+  ValidationContext,
+  ValidationResult,
+} from '@onegrid/core';
 
-/** @beta */
-export interface UseOneGridReturn {
-  readonly containerRef: Ref<HTMLDivElement | null>;
-  readonly grid: Ref<Grid | null>;
-}
-
-/** @beta */
-export const useOneGrid = (_options: UseOneGridOptions): UseOneGridReturn => {
-  throw new Error('@onegrid/vue: useOneGrid is not implemented yet.');
-};
+// Pass-through of common protocol types so adapters can speak the SSRM
+// contract without a separate @onegrid/protocol install.
+export type {
+  BlockRequest,
+  BlockResponse,
+  DataSource,
+  FilterModel,
+  FilterNode,
+  Schema,
+  SortField,
+  SortModel,
+} from '@onegrid/protocol';

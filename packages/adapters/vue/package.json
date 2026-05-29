@@ -36,5 +36,10 @@
   "publishConfig": {
     "access": "public"
   },
-  "sideEffects": false
+  "sideEffects": false,
+  "devDependencies": {
+    "@vue/test-utils": "^2",
+    "jsdom": "^25",
+    "vue": "^3.4.0"
+  }
 }

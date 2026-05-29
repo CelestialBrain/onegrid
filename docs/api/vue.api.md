@@ -4,24 +4,90 @@
 
 ```ts
 
+import { BlockRequest } from '@onegrid/protocol';
+import { BlockResponse } from '@onegrid/protocol';
+import { CellRenderContext } from '@onegrid/core';
+import { CellRenderer } from '@onegrid/core';
+import { ColumnDef } from '@onegrid/core';
+import { ColumnGroupDef } from '@onegrid/core';
+import { ContextMenuTarget } from '@onegrid/core';
+import { DataSource } from '@onegrid/protocol';
+import { FilterModel } from '@onegrid/protocol';
+import { FilterNode } from '@onegrid/protocol';
+import { FrameStats } from '@onegrid/core';
 import { Grid } from '@onegrid/core';
 import { GridOptions } from '@onegrid/core';
+import { GridTheme } from '@onegrid/core';
+import { MaybeRefOrGetter } from 'vue';
+import { MetricsSnapshot } from '@onegrid/core';
 import { Ref } from 'vue';
+import { RowGroupMeta } from '@onegrid/core';
+import { RowMeta } from '@onegrid/core';
+import { RowSource } from '@onegrid/core';
+import { Schema } from '@onegrid/protocol';
+import { ShallowRef } from 'vue';
+import { SortField } from '@onegrid/protocol';
+import { SortModel } from '@onegrid/protocol';
+import { ValidationContext } from '@onegrid/core';
+import { ValidationResult } from '@onegrid/core';
+
+export { BlockRequest }
+
+export { BlockResponse }
+
+export { CellRenderContext }
+
+export { CellRenderer }
+
+export { ColumnDef }
+
+export { ColumnGroupDef }
+
+export { ContextMenuTarget }
+
+export { DataSource }
+
+export { FilterModel }
+
+export { FilterNode }
+
+export { FrameStats }
+
+export { Grid }
+
+export { GridOptions }
+
+export { GridTheme }
+
+export { MetricsSnapshot }
+
+export { RowGroupMeta }
+
+export { RowMeta }
+
+export { RowSource }
+
+export { Schema }
+
+export { SortField }
+
+export { SortModel }
+
+// @public
+export function useOneGrid(options: MaybeRefOrGetter<UseOneGridOptions>): UseOneGridReturn;
 
 // @public (undocumented)
-export const useOneGrid: (_options: UseOneGridOptions) => UseOneGridReturn;
-
-// @public (undocumented)
-export interface UseOneGridOptions extends Omit<GridOptions, 'container'> {
-}
+export type UseOneGridOptions = Omit<GridOptions, 'host'>;
 
 // @public (undocumented)
 export interface UseOneGridReturn {
-    // (undocumented)
     readonly containerRef: Ref<HTMLDivElement | null>;
-    // (undocumented)
-    readonly grid: Ref<Grid | null>;
+    readonly grid: ShallowRef<Grid | null>;
 }
+
+export { ValidationContext }
+
+export { ValidationResult }
 
 // (No @packageDocumentation comment for this package)
 
