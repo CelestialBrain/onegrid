@@ -142,7 +142,7 @@ the data layer and rendering layer in a way commercial alternatives don't.
 | Feature | Status | Notes |
 |---|---|---|
 | Formula engine (Adapton-style demand-driven recompute) | ✅ | |
-| Multi-framework adapters (React/Vue/Svelte/Solid/Angular/WC) | ✅ | |
+| Multi-framework adapters (React/Vue/Svelte/Solid/Angular/WC) | ✅ | All six are real implementations sharing the React-discovered shape-key recreate gate + imperative-update fan-out + callback late-bind pattern. Vue/Solid/Svelte/Angular/WC stay `@beta` per surface policy until a minor of stability. |
 | ORM-first data layer | ✅ | First commit-class citizen, not an afterthought |
 | GPU compute kernels | ✅ | |
 | **Live ORM sync** | 🟣 | Grid edits → DB writes via Drizzle/Kysely/Prisma, atomically |
@@ -537,7 +537,7 @@ The flagship moonshot.
 - Compute-shader sort/filter at viewport scale
 - Cross-database joins via DuckDB-WASM in the same render frame
 
-### v1.0.0 — "stable"  🟡 **RC shipped (2026-05-16) — final pending audit + version bumps**
+### v1.0.0 — "stable"  🟡 **RC shipped (2026-05-16); 5 of 7 final blockers done (2026-05-29) — pending external audit + auto-promotion at v1.3**
 Surface freeze, full a11y audit, every adapter promoted from
 experimental, semver guarantees, security review.
 
@@ -554,16 +554,16 @@ RC ([docs/v1.0.0.md](./docs/v1.0.0.md)) ships:
 - [`docs/SECURITY.md`](./docs/SECURITY.md) — threat model + in-scope defenses (XSS / SQL injection / formula eval / Worker messages / MCP mutation discipline / CSP) + out-of-scope items.
 - `apps/benchmarks/src/a11y-modes.spec.ts` — axe-core WCAG 2.1 A/AA gate on every playground mode + column tool panel + filters + group-by sticky rows. 7 new tests, all green.
 
-Final ([docs/v1.0.0.md](./docs/v1.0.0.md) §"What v1.0.0 final still needs") lands when:
-- Workspace-wide version bump (0.0.x → 1.0.0; mechanical, touches every package.json + peer-dep range).
-- `@public` / `@beta` JSDoc tags on every public export.
-- Auto-generated API report (`docs/api/*.api.md`) per package; PR diff gate.
-- Third-party security audit report.
-- Fuzz harness in CI (formula parser, cursor codec, duckdb-join SQL gen, filter expression validator).
-- Deprecation-import lint rule.
-- v0.0.11 + v0.1.0 packages auto-promote `@beta` → `@public` at v1.3 per surface policy.
+Final ([docs/v1.0.0.md](./docs/v1.0.0.md) §"What v1.0.0 final still needs") status as of 2026-05-29:
+- ✅ Workspace-wide version bump (0.0.x → 1.0.0; all 43 packages bumped).
+- ✅ `@public` / `@beta` JSDoc tags on every public export (252 exports tagged, [`scripts/check-public-surface.mjs`](./scripts/check-public-surface.mjs) gate).
+- ✅ Auto-generated API report (`docs/api/*.api.md`) per package — 43 baselines, `pnpm api:check` gate via [`scripts/generate-api-reports.mjs`](./scripts/generate-api-reports.mjs).
+- 🔵 Third-party security audit report (external work; pending commission).
+- ✅ Fuzz harness in CI (formula parser, cursor codec, postgres filter compiler, duckdb-join SQL escape — 12 fast-check specs across 4 packages; `pnpm fuzz` script).
+- ✅ Deprecation-import lint rule (`@typescript-eslint/no-deprecated: error`, ships with installed tseslint 8.59).
+- 🔵 v0.0.11 + v0.1.0 packages auto-promote `@beta` → `@public` at v1.3 per surface policy (mechanical, lands at v1.3 cut).
 
-### v1.1.0 — "spreadsheet-grade compat"
+### v1.1.0 — "spreadsheet-grade compat"  🟡 **In progress — formula library 254/480 (2026-05-29); OOXML + CRDT chunks not started. Scope plan in [docs/v1.1.0.md](./docs/v1.1.0.md).**
 
 Excel/Sheets-grade formula coverage. v0.0.5–v1.0 ships a working
 Adapton-based formula engine with ~41 functions covering the common
@@ -572,6 +572,32 @@ function library and the structural semantics to feature parity with
 Excel's published behavior. Public source only — Microsoft's published
 function documentation and the OOXML spec (ECMA-376) for the wire
 shape; never any proprietary engine source.
+
+**Chunk B (formula library) status as of 2026-05-29.** Six waves
+landed against an own-implementation target of ~480 functions (per
+user direction). `packages/formula/src/functions.ts` refactored from
+a 3,031-line monolith into a per-category `packages/formula/src/functions/`
+split (one file per Excel category + `_shared` for helpers +
+`_aliases` for cross-category names).
+
+- Wave 1 (`fbf4c55`) — math + stats + logical + info expansion (+86).
+- Wave 2 (`6c926cf`) — lookup / reference family (+20).
+- Wave 3 (`dfe8e64`) — text family expansion (+20).
+- Wave 4 (`3be8f12`) — date / time expansion (+20).
+- Wave 5 (`79660d1`) — financial family (+26).
+- Wave 6 (`c238eb7`) — statistical distributions (+40, with shared
+  erf / gammaLn / regGamma / regBeta / bisectInverse numerical
+  primitives).
+
+Remaining waves (deferred): engineering (BIN2DEC/HEX/OCT, COMPLEX/IM*,
+BESSEL, CONVERT), database (DSUM/DGET/DAVERAGE), CUBE.* family.
+Function-level deferrals per [docs/v1.1.0.md](./docs/v1.1.0.md):
+LET / LAMBDA (need parser-scope extension), REGEX.* (security review
+on catastrophic-backtracking), OFFSET / INDIRECT (need evaluator
+reference-awareness — currently stubbed `#NAME!`).
+
+Chunks A (OOXML) and C (CRDT live-collab) per plan have not yet
+started; chunks are independent and can ship in parallel.
 
 Function library — ~460 additional functions across nine groups:
 
