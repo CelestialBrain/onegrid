@@ -563,7 +563,7 @@ Final ([docs/v1.0.0.md](./docs/v1.0.0.md) §"What v1.0.0 final still needs") sta
 - ✅ Deprecation-import lint rule (`@typescript-eslint/no-deprecated: error`, ships with installed tseslint 8.59).
 - 🔵 v0.0.11 + v0.1.0 packages auto-promote `@beta` → `@public` at v1.3 per surface policy (mechanical, lands at v1.3 cut).
 
-### v1.1.0 — "spreadsheet-grade compat"  🟡 **In progress — formula library 254/480 (2026-05-29); OOXML + CRDT chunks not started. Scope plan in [docs/v1.1.0.md](./docs/v1.1.0.md).**
+### v1.1.0 — "spreadsheet-grade compat"  🟡 **In progress — formula library 422/480 (2026-05-29); OOXML + CRDT chunks not started. Scope plan in [docs/v1.1.0.md](./docs/v1.1.0.md).**
 
 Excel/Sheets-grade formula coverage. v0.0.5–v1.0 ships a working
 Adapton-based formula engine with ~41 functions covering the common
@@ -573,7 +573,7 @@ Excel's published behavior. Public source only — Microsoft's published
 function documentation and the OOXML spec (ECMA-376) for the wire
 shape; never any proprietary engine source.
 
-**Chunk B (formula library) status as of 2026-05-29.** Six waves
+**Chunk B (formula library) status as of 2026-05-29.** Twelve waves
 landed against an own-implementation target of ~480 functions (per
 user direction). `packages/formula/src/functions.ts` refactored from
 a 3,031-line monolith into a per-category `packages/formula/src/functions/`
@@ -588,13 +588,37 @@ split (one file per Excel category + `_shared` for helpers +
 - Wave 6 (`c238eb7`) — statistical distributions (+40, with shared
   erf / gammaLn / regGamma / regBeta / bisectInverse numerical
   primitives).
+- Wave 7 (`34a2eea`) — engineering family (+54: BIN/OCT/HEX with signed
+  two's-complement, bitwise on 48-bit BigInt, BESSEL I/J/K/Y, ERF/ERFC,
+  26 IM\* complex-number functions, CONVERT with SI/binary prefixes
+  across 13 dimensions).
+- Wave 8 (`40bf1e2`) — database family (+12: DSUM/DGET/DAVERAGE/DCOUNT/
+  DMAX/DMIN/DPRODUCT/DSTDEV/DSTDEVP/DVAR/DVARP/DCOUNTA, with criteria
+  semantics matching Excel — AND within row by header, OR across rows).
+- Wave 9 (`ce07786`) — web (ENCODEURL/HYPERLINK real impls) + CUBE.\* /
+  WEBSERVICE / FILTERXML stubs (+11).
+- Wave 10 (`6afd483`) — math/matrix/array-shape/stubs (+46):
+  QUOTIENT/FACTDOUBLE/MULTINOMIAL/ROMAN/ARABIC/BASE/DECIMAL/RANDARRAY,
+  MMULT/MINVERSE/MDETERM/TRANSPOSE/MUNIT, dynamic-array shape
+  (TAKE/DROP/WRAPROWS/WRAPCOLS/CHOOSEROWS/CHOOSECOLS/EXPAND/TOROW/TOCOL/
+  HSTACK/VSTACK), CELL/INFO/locale/pivot/RTD stubs.
+- Wave 11 (`9ff0f1c`) — stats extras (+17): GEOMEAN/HARMEAN/TRIMMEAN/
+  DEVSQ/AVEDEV/MODE.MULT/PROB/FREQUENCY/CONFIDENCE.NORM/CONFIDENCE.T,
+  hypothesis tests Z.TEST/T.TEST(paired+equal-variance+Welch)/F.TEST/
+  CHISQ.TEST, OLS regression LINEST/LOGEST/GROWTH.
+- Wave 12 (`42da53e`) — financial extras (+28): CUMIPMT/CUMPRINC/EFFECT/
+  NOMINAL/ISPMT/RRI/PDURATION/DOLLARDE/DOLLARFR/DISC/INTRATE/RECEIVED/
+  PRICEDISC/YIELDDISC/PRICEMAT/YIELDMAT/TBILLEQ/TBILLPRICE/TBILLYIELD.
 
-Remaining waves (deferred): engineering (BIN2DEC/HEX/OCT, COMPLEX/IM*,
-BESSEL, CONVERT), database (DSUM/DGET/DAVERAGE), CUBE.* family.
-Function-level deferrals per [docs/v1.1.0.md](./docs/v1.1.0.md):
-LET / LAMBDA (need parser-scope extension), REGEX.* (security review
-on catastrophic-backtracking), OFFSET / INDIRECT (need evaluator
-reference-awareness — currently stubbed `#NAME!`).
+Remaining gap to ~480 concentrated in three blocked groups:
+day-count-convention plumbing (~9 stubbed in wave 12: COUPDAYS /
+COUPDAYBS / COUPDAYSNC / AMORDEGRC / AMORLINC / ODDFPRICE / ODDFYIELD
+/ ODDLPRICE / ODDLYIELD — need Actual/360, 30/360-European, NASD
+day-count helpers in `_shared`), parser/evaluator extensions
+(LET / LAMBDA / OFFSET / INDIRECT / REGEX.\* / BYROW / BYCOL /
+REDUCE / SCAN / MAP), and cell-metadata introspection
+(CELL / INFO / SHEET / SHEETS / FORMULATEXT / ISFORMULA / ISREF +
+CJK locale + pivot / RTD / IMAGE).
 
 Chunks A (OOXML) and C (CRDT live-collab) per plan have not yet
 started; chunks are independent and can ship in parallel.
