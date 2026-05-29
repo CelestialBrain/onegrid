@@ -25,6 +25,10 @@ import './functions/financial';
 import './functions/engineering';
 import './functions/database';
 import './functions/web';
+import './functions/math_extras';
+import './functions/matrix';
+import './functions/arrayshape';
+import './functions/stubs';
 import './functions/_aliases';
 
 export {
