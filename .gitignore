@@ -36,3 +36,7 @@ test-results/
 # published tree — they reference specific commercial grid libraries
 # by name. Keep here for local planning; restore via `scripts/restore-research.sh`.
 .research/
+
+# api-extractor temp folders — generated per run, never committed.
+packages/*/temp/
+packages/adapters/*/temp/
