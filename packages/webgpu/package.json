@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/webgpu",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "description": "WebGPU compute kernels for oneGrid: GPU-accelerated reductions, filters, and sorts over typed-array columns. Falls back to CPU when WebGPU is unavailable.",
   "license": "MIT",
   "type": "module",

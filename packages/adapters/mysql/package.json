@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/mysql",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "description": "MySQL adapter for oneGrid SSRM. Translates BlockRequest into parameterized SQL; polling-based CDC stream against an outbox table.",
   "license": "MIT",
   "type": "module",

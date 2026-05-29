@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/mongo",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "description": "MongoDB adapter for oneGrid SSRM. Translates BlockRequest into find / aggregation pipeline; change-stream-backed CDC.",
   "license": "MIT",
   "type": "module",

@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/sqlite",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "description": "SQLite adapter for oneGrid SSRM. Targets better-sqlite3, node:sqlite, bun:sqlite, and Cloudflare D1 via a small queryable interface.",
   "license": "MIT",
   "type": "module",

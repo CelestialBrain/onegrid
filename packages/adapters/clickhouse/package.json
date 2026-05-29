@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/clickhouse",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "description": "ClickHouse adapter for oneGrid SSRM. Translates BlockRequest into native parameterized SQL; supports Arrow IPC ingestion against ClickHouse's columnar HTTP interface.",
   "license": "MIT",
   "type": "module",

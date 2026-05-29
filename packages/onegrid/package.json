@@ -1,6 +1,6 @@
 {
   "name": "onegrid",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "description": "A free, open-source, framework-agnostic data grid built for millions of rows, multiple databases, formulas, instant updates, and modern ORM integrations. MIT-licensed.",
   "license": "MIT",
   "type": "module",

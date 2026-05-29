@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/core",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "description": "oneGrid core engine: canvas renderer, accessibility shadow DOM, signals, layout, selection.",
   "license": "MIT",
   "type": "module",

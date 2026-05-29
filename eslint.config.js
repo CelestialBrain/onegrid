@@ -42,6 +42,12 @@ export default tseslint.config(
       '@typescript-eslint/no-unnecessary-condition': 'off',
       // value ?? '' is a deliberate safe-coerce in renderers.
       '@typescript-eslint/no-base-to-string': 'off',
+      // Adopter and first-party code that imports a symbol carrying a
+      // `@deprecated` JSDoc tag fails the build. Pair with the public-
+      // surface tagger (scripts/check-public-surface.mjs) — when a
+      // `@public` export is phased out, switch its tag to `@deprecated`
+      // and this rule flags every remaining caller.
+      '@typescript-eslint/no-deprecated': 'error',
     },
   },
   // Tests can be lighter on style — they routinely stub APIs and assert.

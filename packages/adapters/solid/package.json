@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/solid",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "description": "Solid.js adapter for oneGrid. Idiomatic primitives over the framework-agnostic core.",
   "license": "MIT",
   "type": "module",

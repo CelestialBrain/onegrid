@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/wc",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "description": "Web Component adapter for oneGrid. Optional <one-grid> custom element wrapping the core.",
   "license": "MIT",
   "type": "module",

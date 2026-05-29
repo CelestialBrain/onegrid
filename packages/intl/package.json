@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/intl",
-  "version": "0.0.9",
+  "version": "1.0.0",
   "description": "oneGrid i18n / l10n / RTL — Intl.* thin wrappers, cached Collator, ICU MessageFormat (subset), BCP 47 validator, locale-aware number/date parsers, RTL helpers.",
   "license": "MIT",
   "type": "module",

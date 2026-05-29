@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/headless",
-  "version": "0.0.9",
+  "version": "1.0.0",
   "description": "Framework-agnostic Grid host with Lit-ReactiveController-shaped lifecycle. Imperative surface (setSort/setFilter/setColumns/scrollToRow/subscribe) + rAF-coalesced invalidate + SSR shadow-HTML serialization.",
   "license": "MIT",
   "type": "module",

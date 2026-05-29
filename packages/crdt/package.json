@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/crdt",
-  "version": "0.0.11",
+  "version": "1.0.0",
   "description": "CRDT collaborative editing bridge for oneGrid — pluggable backends for Yjs and Automerge, translating CRDT document changes into RowDiff streams and local edits back through the CRDT.",
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,10 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",

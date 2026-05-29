@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/worker-plugins",
-  "version": "0.0.9",
+  "version": "1.0.0",
   "description": "Worker-boundary plugin sandbox — second trust tier for user-supplied formula functions and aggregators. Structured-clone protocol with Transferable zero-copy for Arrow vectors. Errors surfaced as { ok: false, error } without crashing the main thread.",
   "license": "MIT",
   "type": "module",
@@ -19,7 +19,10 @@
       "require": "./dist/worker.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",

@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/tokens",
-  "version": "0.0.9",
+  "version": "1.0.0",
   "description": "oneGrid design tokens: W3C DTCG 2025.10 JSON bundles compiled to CSS custom properties. Theme + density slots; forced-colors high-contrast mapping.",
   "license": "MIT",
   "type": "module",

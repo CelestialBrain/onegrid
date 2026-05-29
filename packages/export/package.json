@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/export",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "description": "Export oneGrid data to CSV (built-in, zero deps) and XLSX (via SheetJS peer dep). MIT-free moats: every commercial grid charges for these.",
   "license": "MIT",
   "type": "module",

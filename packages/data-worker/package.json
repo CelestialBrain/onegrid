@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/data-worker",
-  "version": "0.0.10",
+  "version": "1.0.0",
   "description": "Web Worker offload for @onegrid/data sort / filter / group / pivot. Keeps 1M-row operations off the render thread so the grid stays at 60 FPS while compute runs.",
   "license": "MIT",
   "type": "module",
@@ -19,7 +19,10 @@
       "require": "./dist/worker.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",

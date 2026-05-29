@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/migrate",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "description": "Codemod CLI that translates other grids' column definitions to oneGrid ColumnDef. Clean-room — translators are written only against publicly-described configuration shapes.",
   "license": "MIT",
   "type": "module",

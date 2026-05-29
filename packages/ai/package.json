@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/ai",
-  "version": "0.0.11",
+  "version": "1.0.0",
   "description": "Natural-language → typed grid intents (filter / sort / formula / mutation). BYO-LLM contract — caller supplies the model call; this package owns the prompt structure + response validation.",
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,10 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",

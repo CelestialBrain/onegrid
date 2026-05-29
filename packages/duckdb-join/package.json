@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/duckdb-join",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Cross-database joins via DuckDB-WASM. Register heterogeneous data sources (Postgres, MySQL, ClickHouse, Mongo, Arrow files) as DuckDB views; run a single SQL query that joins across them inside the browser in the same render frame.",
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,10 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -24,8 +27,8 @@
     "lint": "eslint src"
   },
   "dependencies": {
-    "@onegrid/protocol": "workspace:*",
-    "@onegrid/duckdb": "workspace:*"
+    "@onegrid/duckdb": "workspace:*",
+    "@onegrid/protocol": "workspace:*"
   },
   "peerDependencies": {
     "@duckdb/duckdb-wasm": "^1.28.0"
@@ -36,7 +39,8 @@
     }
   },
   "devDependencies": {
-    "@duckdb/duckdb-wasm": "^1.28.0"
+    "@duckdb/duckdb-wasm": "^1.28.0",
+    "fast-check": "^4.8.0"
   },
   "publishConfig": {
     "access": "public"

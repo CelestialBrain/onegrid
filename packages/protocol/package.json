@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/protocol",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "description": "Wire-format and database-adapter contract types for oneGrid. Types only, no runtime.",
   "license": "MIT",
   "type": "module",

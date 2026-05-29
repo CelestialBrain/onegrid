@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/plugin-kit",
-  "version": "0.0.9",
+  "version": "1.0.0",
   "description": "oneGrid plugin/extension framework: CodeMirror-6-style facets, Compartments for hot reconfigure, typed registries, narrowed PluginContext.",
   "license": "MIT",
   "type": "module",

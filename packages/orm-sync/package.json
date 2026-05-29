@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/orm-sync",
-  "version": "0.0.11",
+  "version": "1.0.0",
   "description": "Live ORM sync — bridge v0.0.8 CDC RowDiffs into ORM-typed model rows for Drizzle / Kysely / Prisma. The underlying database CDC layer does the heavy lifting; this package owns the type-safe glue.",
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,10 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",

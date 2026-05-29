@@ -186,18 +186,11 @@ export async function executeJoinQuery(
 // Helpers
 // -----------------------------------------------------------------------------
 
-function escapeIdent(name: string): string {
-  return name.replace(/"/g, '""');
-}
-
-function sqlLiteral(v: unknown): string {
-  if (v === null || v === undefined) return 'NULL';
-  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : 'NULL';
-  if (typeof v === 'bigint') return String(v);
-  if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
-  if (v instanceof Date) return `TIMESTAMP '${v.toISOString()}'`;
-  return `'${String(v).replace(/'/g, "''")}'`;
-}
+// Helpers live in ./sql-escape so the fuzz harness can drive them
+// directly without forcing them onto the public surface. They are
+// NOT re-exported from this module; the package's @public surface
+// is unchanged.
+import { escapeIdent, sqlLiteral } from './sql-escape';
 
 function nowMs(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();

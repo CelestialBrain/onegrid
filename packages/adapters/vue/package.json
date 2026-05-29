@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/vue",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "description": "Vue 3 adapter for oneGrid. Idiomatic composables over the framework-agnostic core.",
   "license": "MIT",
   "type": "module",

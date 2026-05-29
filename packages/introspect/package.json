@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/introspect",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "description": "Schema introspection helpers — turn a protocol Schema, an ORM model, or a SQL data-type list into renderable ColumnDef[].",
   "license": "MIT",
   "type": "module",

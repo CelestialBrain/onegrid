@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/data",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "description": "oneGrid columnar data layer: Arrow-compatible tables, bitmap selection, sort cache, group tree, IVM hooks.",
   "license": "MIT",
   "type": "module",

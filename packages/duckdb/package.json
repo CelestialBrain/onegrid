@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/duckdb",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "description": "Optional plugin: DuckDB-WASM as a client-side query engine and SSRM source for oneGrid.",
   "license": "MIT",
   "type": "module",

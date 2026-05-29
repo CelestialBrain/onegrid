@@ -1,6 +1,6 @@
 {
   "name": "@onegrid/undo",
-  "version": "0.0.12",
+  "version": "1.0.0",
   "description": "Undo / redo manager for oneGrid — captures user mutations as inverse pairs, bundles multi-cell ops into one entry via transactions, binds Cmd+Z / Cmd+Shift+Z. Adopter owns the data store; this package owns the stack semantics.",
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,10 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
