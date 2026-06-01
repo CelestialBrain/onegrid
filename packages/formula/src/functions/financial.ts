@@ -418,7 +418,7 @@ register('ACCRINT', (args) => {
   return par * rate * (yf as number);
 });
 
-function coupDates(
+export function coupDates(
   settle: Date,
   maturity: Date,
   frequency: number,

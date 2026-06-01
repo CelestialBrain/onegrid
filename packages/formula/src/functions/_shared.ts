@@ -101,6 +101,107 @@ export function isLeapYear(y: number): boolean {
   return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
 }
 
+// ----- Day-count conventions (wave 13: bond / depreciation plumbing) --------
+//
+// Basis codes follow Excel / OOXML §18.17:
+//   0 — US (NASD) 30/360
+//   1 — Actual/Actual
+//   2 — Actual/360
+//   3 — Actual/365
+//   4 — European 30/360
+//
+// `daysInYear(basis, start, end)` returns the denominator used when scaling
+// an integer day count to a year fraction. For Actual/Actual we use the
+// segment-average that matches YEARFRAC basis 1.
+
+export function daysInYear(basis: number, start: Date, end: Date): number {
+  switch (Math.trunc(basis)) {
+    case 1: {
+      let total = 0;
+      let ys = 0;
+      for (let y = start.getFullYear(); y <= end.getFullYear(); y++) {
+        total += isLeapYear(y) ? 366 : 365;
+        ys++;
+      }
+      return total / Math.max(ys, 1);
+    }
+    case 3:
+      return 365;
+    default:
+      return 360;
+  }
+}
+
+function days360(start: Date, end: Date, european: boolean): number {
+  let d1 = start.getDate();
+  let d2 = end.getDate();
+  const m1 = start.getMonth() + 1;
+  const m2 = end.getMonth() + 1;
+  const y1 = start.getFullYear();
+  const y2 = end.getFullYear();
+  if (european) {
+    if (d1 === 31) d1 = 30;
+    if (d2 === 31) d2 = 30;
+  } else {
+    const isLastFeb = (y: number, m: number, d: number): boolean =>
+      m === 2 && d === new Date(y, m, 0).getDate();
+    if (isLastFeb(y1, m1, d1) && isLastFeb(y2, m2, d2)) d2 = 30;
+    if (isLastFeb(y1, m1, d1)) d1 = 30;
+    if (d2 === 31 && d1 >= 30) d2 = 30;
+    if (d1 === 31) d1 = 30;
+  }
+  return 360 * (y2 - y1) + 30 * (m2 - m1) + (d2 - d1);
+}
+
+/**
+ * Integer day count between two dates under one of the five Excel basis modes.
+ * Mirrors the numerator that YEARFRAC produces (without the year denominator).
+ */
+export function daysByBasis(basis: number, start: Date, end: Date): number {
+  switch (Math.trunc(basis)) {
+    case 0:
+      return days360(start, end, false);
+    case 4:
+      return days360(start, end, true);
+    default:
+      return daysBetween(start, end);
+  }
+}
+
+/**
+ * Coupon-period day count tuple: `total` = days in the coupon period
+ * containing `settle`, `bs` = days from the period's start to settle,
+ * `nc` = days from settle to the next coupon. Mirrors COUPDAYS /
+ * COUPDAYBS / COUPDAYSNC.
+ *
+ * For 30/360 (basis 0, 4) and Actual/360 / Actual/365 (basis 2, 3),
+ * `total` is the canonical `E/freq` constant; basis 1 uses real
+ * calendar days for the period containing settlement.
+ */
+export function coupPeriodDays(
+  prev: Date,
+  next: Date,
+  settle: Date,
+  basis: number,
+  frequency: number,
+): { total: number; bs: number; nc: number } {
+  const b = Math.trunc(basis);
+  let total: number;
+  if (b === 0 || b === 4) {
+    total = 360 / frequency;
+  } else if (b === 2) {
+    total = 360 / frequency;
+  } else if (b === 3) {
+    total = 365 / frequency;
+  } else {
+    // basis 1 — actual/actual: real calendar days in the coupon period
+    total = daysBetween(prev, next);
+  }
+  const bs = daysByBasis(basis, prev, settle);
+  const nc = daysByBasis(basis, settle, next);
+  return { total, bs, nc };
+}
+
 // ----- Newton's method (used by financial RATE / IRR / XIRR / YIELD) --------
 
 export function newtonRoot(
@@ -235,6 +336,30 @@ export function to2D(v: unknown): unknown[][] {
   }
   if (Array.isArray(v)) return (v as unknown[]).map((x) => [x]);
   return [[v]];
+}
+
+// ----- Call context sidechannel (wave 14: cell-metadata introspection) ------
+//
+// A few Excel functions need access to the un-evaluated argument AST or the
+// caller's resolver (FORMULATEXT must return the textual form, ISFORMULA /
+// ISREF / CELL must distinguish cell references from values). The evaluator
+// stashes the active call's nodes here before invoking the function, then
+// clears it. Functions that don't read the context simply ignore it.
+
+export type CallContext = {
+  readonly argNodes: ReadonlyArray<unknown>; // typed loosely so _shared stays
+                                              // free of an `ast` import cycle
+  readonly resolver: { readonly getCell: (ref: string) => unknown } | undefined;
+};
+
+let activeCallContext: CallContext | undefined;
+
+export function setCallContext(ctx: CallContext | undefined): void {
+  activeCallContext = ctx;
+}
+
+export function getCallContext(): CallContext | undefined {
+  return activeCallContext;
 }
 
 export function approxBinarySearch(col: unknown[], target: unknown): number {

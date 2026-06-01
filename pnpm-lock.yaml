@@ -671,6 +671,16 @@ importers:
         specifier: workspace:*
         version: link:../plugin-kit
 
+  packages/xlsx:
+    dependencies:
+      '@onegrid/formula':
+        specifier: workspace:*
+        version: link:../formula
+    devDependencies:
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@22.19.17)(jsdom@25.0.1)
+
 packages:
 
   '@angular/core@17.3.12':

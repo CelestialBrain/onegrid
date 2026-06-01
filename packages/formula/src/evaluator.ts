@@ -29,6 +29,7 @@ import {
   isFormulaError,
 } from './errors';
 import { getFunction } from './functions';
+import { setCallContext } from './functions/_shared';
 
 export interface CellResolver {
   /** Resolve a single-cell reference (e.g. "A1" or "$A$1"). */
@@ -131,13 +132,32 @@ function evalCall(
   argsNodes: ReadonlyArray<FormulaNode>,
   resolver: CellResolver,
 ): unknown {
+  const upper = name.toUpperCase();
+
+  // LET(name1, value1, [name2, value2, ...], body) — sequential bindings.
+  // Body is evaluated with a chained resolver that substitutes the bound
+  // names. Excel scope rule: later bindings see earlier ones.
+  if (upper === 'LET') return evalLet(argsNodes, resolver);
+
   const fn = getFunction(name);
-  if (!fn) return NAME_ERROR;
+  if (!fn) {
+    // Zero-arg bare-identifier path: a LET binding (or potential future
+    // named-range) lives in the resolver under its identifier. Defer to
+    // the resolver; if that also misses, surface #NAME?.
+    if (argsNodes.length === 0) {
+      try {
+        const v = resolver.getCell(name);
+        if (v !== null && v !== undefined) return v;
+      } catch {
+        // fall through to NAME_ERROR
+      }
+    }
+    return NAME_ERROR;
+  }
 
   // Evaluate args. Errors propagate UNLESS the function explicitly handles
   // them (IFERROR, ISERROR). Per-function error opt-in via metadata is on
   // the roadmap; for now IFERROR/ISERROR/ISBLANK are special-cased here.
-  const upper = name.toUpperCase();
   const handlesErrors = upper === 'IFERROR' || upper === 'ISERROR' || upper === 'ISBLANK';
 
   const evaluated: unknown[] = [];
@@ -146,12 +166,56 @@ function evalCall(
     if (!handlesErrors && isFormulaError(v)) return v;
     evaluated.push(v);
   }
+  const prev = setCallContextScoped({ argNodes: argsNodes, resolver });
   try {
     return fn(evaluated);
   } catch (err) {
     if (err instanceof FormulaError) return err;
     return VALUE_ERROR;
+  } finally {
+    setCallContext(prev);
   }
+}
+
+function evalLet(
+  argsNodes: ReadonlyArray<FormulaNode>,
+  resolver: CellResolver,
+): unknown {
+  // Must have at least one (name, value) pair and a body.
+  if (argsNodes.length < 3 || argsNodes.length % 2 === 0) return VALUE_ERROR;
+  const bindings = new Map<string, unknown>();
+  // Names appear in the AST as cellRef nodes (single-letter+digit ones)
+  // — Excel reuses that token shape — or as bare identifiers parsed as
+  // a function call with zero args. The parser here surfaces them as
+  // `cellRef` for short names (A1-like) and `call` with empty args for
+  // pure identifiers like `myVar`. Cover both.
+  function bindingName(n: FormulaNode): string | undefined {
+    if (n.kind === 'cellRef' || n.kind === 'rangeRef') return n.ref;
+    if (n.kind === 'call' && n.args.length === 0) return n.name;
+    return undefined;
+  }
+  const chained: CellResolver = {
+    getCell: (ref) => (bindings.has(ref) ? bindings.get(ref) : resolver.getCell(ref)),
+    getRange: (ref) => resolver.getRange(ref),
+  };
+  for (let i = 0; i < argsNodes.length - 1; i += 2) {
+    const nameNode = argsNodes[i]!;
+    const valueNode = argsNodes[i + 1]!;
+    const name = bindingName(nameNode);
+    if (!name) return VALUE_ERROR;
+    bindings.set(name, evaluate(valueNode, chained));
+  }
+  return evaluate(argsNodes[argsNodes.length - 1]!, chained);
+}
+
+function setCallContextScoped(
+  ctx: { argNodes: ReadonlyArray<FormulaNode>; resolver: CellResolver },
+): undefined {
+  // We don't restore a stack — call() is the only entry that nests, and the
+  // finally above clears to `undefined`. Sufficient for the introspection
+  // functions which only read the immediate context.
+  setCallContext({ argNodes: ctx.argNodes, resolver: ctx.resolver });
+  return undefined;
 }
 
 // Re-export for convenience.

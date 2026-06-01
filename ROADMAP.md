@@ -5,7 +5,7 @@ most capable open-source grid in the JavaScript ecosystem. Items are
 grouped by where they create leverage, not by release order — see
 "Sequencing" at the bottom for milestone framing.
 
-**Last updated:** 2026-05-16
+**Last updated:** 2026-06-02
 
 ## Status legend
 
@@ -563,7 +563,7 @@ Final ([docs/v1.0.0.md](./docs/v1.0.0.md) §"What v1.0.0 final still needs") sta
 - ✅ Deprecation-import lint rule (`@typescript-eslint/no-deprecated: error`, ships with installed tseslint 8.59).
 - 🔵 v0.0.11 + v0.1.0 packages auto-promote `@beta` → `@public` at v1.3 per surface policy (mechanical, lands at v1.3 cut).
 
-### v1.1.0 — "spreadsheet-grade compat"  🟡 **In progress — formula library 422/480 (2026-05-29); OOXML + CRDT chunks not started. Scope plan in [docs/v1.1.0.md](./docs/v1.1.0.md).**
+### v1.1.0 — "spreadsheet-grade compat"  🟡 **In progress — formula library 444/480 (2026-06-02, waves 13–15); CRDT Chunk C shipped; OOXML Chunk A scaffold landed; LAMBDA family deferred to v1.1.x. Scope plan in [docs/v1.1.0.md](./docs/v1.1.0.md).**
 
 Excel/Sheets-grade formula coverage. v0.0.5–v1.0 ships a working
 Adapton-based formula engine with ~41 functions covering the common
@@ -609,19 +609,52 @@ split (one file per Excel category + `_shared` for helpers +
 - Wave 12 (`42da53e`) — financial extras (+28): CUMIPMT/CUMPRINC/EFFECT/
   NOMINAL/ISPMT/RRI/PDURATION/DOLLARDE/DOLLARFR/DISC/INTRATE/RECEIVED/
   PRICEDISC/YIELDDISC/PRICEMAT/YIELDMAT/TBILLEQ/TBILLPRICE/TBILLYIELD.
+- Wave 13 (2026-06-02) — day-count plumbing (+9): unblocked
+  COUPDAYS / COUPDAYBS / COUPDAYSNC / AMORDEGRC / AMORLINC /
+  ODDFPRICE / ODDFYIELD / ODDLPRICE / ODDLYIELD on the back of new
+  `daysByBasis` / `coupPeriodDays` / `daysInYear` helpers in
+  `packages/formula/src/functions/_shared.ts`. Odd-period bonds cover
+  the short-first / short-last cases; long-first / long-last require
+  multi-quasi-coupon traversal (deferred). 25/25 tests green.
+- Wave 14 (2026-06-02) — cell-metadata introspection (+7): real
+  implementations for CELL (address/col/row/contents/type/prefix/width
+  info_types), INFO (host-independent info_types), SHEET, SHEETS,
+  FORMULATEXT, ISFORMULA, ISREF. Powered by a new CallContext
+  sidechannel in `_shared.ts` that the evaluator sets per-call;
+  introspection functions read the un-evaluated argument AST and the
+  active resolver so they can answer correctly for refs vs literals.
+  14/14 tests green.
+- Wave 15 (2026-06-02) — parser/evaluator extensions (+6):
+  OFFSET + INDIRECT (now real, AST-context aware), REGEX.TEST +
+  REGEX.EXTRACT + REGEX.REPLACE (mode 0/1/2 + occurrence semantics),
+  LET (sequential bindings + body via evaluator special-case, parser
+  now surfaces bare identifiers as zero-arg call nodes so LET binding
+  names compose). LAMBDA / BYROW / BYCOL / REDUCE / SCAN / MAP /
+  MAKEARRAY / ISOMITTED registered as #NAME! deferrals — they need a
+  first-class function-value type tracked under v1.1.x.
+  19/19 tests green.
 
-Remaining gap to ~480 concentrated in three blocked groups:
-day-count-convention plumbing (~9 stubbed in wave 12: COUPDAYS /
-COUPDAYBS / COUPDAYSNC / AMORDEGRC / AMORLINC / ODDFPRICE / ODDFYIELD
-/ ODDLPRICE / ODDLYIELD — need Actual/360, 30/360-European, NASD
-day-count helpers in `_shared`), parser/evaluator extensions
-(LET / LAMBDA / OFFSET / INDIRECT / REGEX.\* / BYROW / BYCOL /
-REDUCE / SCAN / MAP), and cell-metadata introspection
-(CELL / INFO / SHEET / SHEETS / FORMULATEXT / ISFORMULA / ISREF +
-CJK locale + pivot / RTD / IMAGE).
+**Chunk A (OOXML interop) status as of 2026-06-02.** `@onegrid/xlsx`
+scaffold shipped: package manifest + tsup/tsconfig + worksheet
+formula reader (`parseSheetFormulas` walks `<c>/<f>` cells, handles
+shared-formula `si` reuse + array variant, attaches the
+@onegrid/formula AST per cell), serializer (`serializeFormula`
+emits OOXML-compatible text with minimal parens via per-operator
+precedence table), and an XML escape/unescape helper. 10/10 tests
+green; clean-room from ECMA-376 only.
 
-Chunks A (OOXML) and C (CRDT live-collab) per plan have not yet
-started; chunks are independent and can ship in parallel.
+Remaining gap to ~480 after wave 15: the **LAMBDA family**
+(LAMBDA / BYROW / BYCOL / REDUCE / SCAN / MAP / MAKEARRAY /
+ISOMITTED) and **odd-period long-first / long-last** bond
+variants (multi-quasi-coupon traversal in ODDFPRICE et al.).
+CJK locale (BAHTTEXT / ASC / JIS / DBCS / PHONETIC) and the
+pivot / RTD / IMAGE family remain pure deferrals — they need
+host infrastructure that doesn't live in this engine.
+
+Chunk C (CRDT live-collab) shipped 2026-06-02 (commit `ace7507`).
+Chunk A (OOXML / `@onegrid/xlsx`) scaffold shipped 2026-06-02
+(this update). Full ZIP container parsing / styles graph /
+write-out of the archive tracked as follow-ups under chunk A.
 
 Function library — ~460 additional functions across nine groups:
 

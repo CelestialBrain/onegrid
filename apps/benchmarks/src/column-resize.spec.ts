@@ -22,7 +22,7 @@ test('drag the right edge of a column header to make it wider', async ({ page })
     const cols = grid.getColumns!();
     const targetIdx = cols.findIndex((c) => c.id === 'firstName');
     const idx = targetIdx >= 0 ? targetIdx : 1;
-    const target = cols[idx];
+    const target = cols[idx]!;
     let x = rect.left;
     for (let i = 0; i <= idx; i++) x += cols[i]!.width;
     return {
@@ -60,7 +60,7 @@ test('drag the right edge to make a column narrower', async ({ page }) => {
     const cols = grid.getColumns!();
     const targetIdx = cols.findIndex((c) => c.id === 'revenue');
     const idx = targetIdx >= 0 ? targetIdx : 2;
-    const target = cols[idx];
+    const target = cols[idx]!;
     let x = rect.left;
     for (let i = 0; i <= idx; i++) x += cols[i]!.width;
     return { id: target.id, width: target.width, boundaryX: x, hostTop: rect.top };
@@ -94,7 +94,7 @@ test('clicking the middle of a header (not the resize zone) leaves width unchang
     const cols = grid.getColumns!();
     const targetIdx = cols.findIndex((c) => c.id === 'firstName');
     const idx = targetIdx >= 0 ? targetIdx : 1;
-    const target = cols[idx];
+    const target = cols[idx]!;
     let x = rect.left;
     for (let i = 0; i < idx; i++) x += cols[i]!.width;
     return {

@@ -363,3 +363,78 @@ register('TEXTAFTER', (args) => {
   }
   return text.slice(pos + delim.length);
 });
+
+// ----- REGEX.* (wave 15) ----------------------------------------------------
+//
+// Excel 365's regex family. Defaults: case-sensitive ICU-flavored regex; we
+// use JS RegExp under the hood, which covers the documented subset. The
+// `match_mode` arg (0 = case-sensitive, 1 = case-insensitive) maps onto the
+// JS `i` flag.
+
+function buildRegex(pattern: string, caseInsensitive: boolean, global: boolean): RegExp | unknown {
+  try {
+    return new RegExp(pattern, (global ? 'g' : '') + (caseInsensitive ? 'i' : ''));
+  } catch {
+    return VALUE_ERROR;
+  }
+}
+
+register('REGEX.TEST', (args) => {
+  const text = toString_(args[0]);
+  const pattern = toString_(args[1]);
+  const ci = args.length > 2 ? toBoolean(args[2]) === true || args[2] === 1 : false;
+  const re = buildRegex(pattern, ci, false);
+  if (!(re instanceof RegExp)) return re;
+  return re.test(text);
+});
+
+register('REGEX.EXTRACT', (args) => {
+  const text = toString_(args[0]);
+  const pattern = toString_(args[1]);
+  // return_mode: 0 = first match (default), 1 = all matches (array),
+  // 2 = capture groups of first match (array).
+  const mode = args[2] !== undefined ? toNumber(args[2]) : 0;
+  if (isFormulaError(mode)) return mode;
+  const ci = args.length > 3 ? toBoolean(args[3]) === true || args[3] === 1 : false;
+  const m = Math.trunc(mode);
+  if (m === 1) {
+    const re = buildRegex(pattern, ci, true);
+    if (!(re instanceof RegExp)) return re;
+    const out = text.match(re);
+    return out ?? NA_ERROR;
+  }
+  const re = buildRegex(pattern, ci, false);
+  if (!(re instanceof RegExp)) return re;
+  const match = re.exec(text);
+  if (!match) return NA_ERROR;
+  if (m === 2) return match.slice(1);
+  return match[0];
+});
+
+register('REGEX.REPLACE', (args) => {
+  const text = toString_(args[0]);
+  const pattern = toString_(args[1]);
+  const replacement = toString_(args[2]);
+  // occurrence: 0 = all (default), positive N = Nth, negative N = Nth from end.
+  const occurrence = args[3] !== undefined ? toNumber(args[3]) : 0;
+  if (isFormulaError(occurrence)) return occurrence;
+  const ci = args.length > 4 ? toBoolean(args[4]) === true || args[4] === 1 : false;
+  const occ = Math.trunc(occurrence);
+  if (occ === 0) {
+    const re = buildRegex(pattern, ci, true);
+    if (!(re instanceof RegExp)) return re;
+    return text.replace(re, replacement);
+  }
+  const re = buildRegex(pattern, ci, true);
+  if (!(re instanceof RegExp)) return re;
+  const matches: { index: number; length: number }[] = [];
+  for (let m: RegExpExecArray | null; (m = re.exec(text)) !== null;) {
+    matches.push({ index: m.index, length: m[0].length });
+    if (m[0].length === 0) re.lastIndex++;
+  }
+  if (matches.length === 0) return text;
+  const target = occ > 0 ? occ - 1 : matches.length + occ;
+  if (target < 0 || target >= matches.length) return text;
+  const m = matches[target]!;
+  return text.slice(0, m.index) + replacement + text.slice(m.index + m.length);
+});

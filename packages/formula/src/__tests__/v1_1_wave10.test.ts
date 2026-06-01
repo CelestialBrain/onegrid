@@ -203,14 +203,20 @@ describe('@onegrid/formula — array shape', () => {
 });
 
 describe('@onegrid/formula — stubs', () => {
-  it('CELL / INFO / SHEET / SHEETS are #NAME!', () => {
-    for (const n of ['CELL', 'INFO', 'SHEET', 'SHEETS', 'FORMULATEXT', 'GETPIVOTDATA', 'AREAS', 'BAHTTEXT']) {
+  it('Wave-14 introspection: SHEET/SHEETS return 1; deferred stubs still #NAME!', () => {
+    // SHEET/SHEETS now ship real defaults (single-sheet model).
+    expect(call('SHEET', [])).toBe(1);
+    expect(call('SHEETS', [])).toBe(1);
+    // These remain deferred — no infra in this engine.
+    for (const n of ['GETPIVOTDATA', 'AREAS', 'BAHTTEXT', 'RTD', 'IMAGE']) {
       expect(call(n, [])).toBe(NAME_ERROR);
     }
   });
 
-  it('ISFORMULA / ISREF default false', () => {
-    expect(call('ISFORMULA', ['A1'])).toBe(false);
+  it('ISFORMULA / ISREF strict on non-reference inputs', () => {
+    // Called outside the evaluator → no AST context → strict #VALUE! for
+    // ISFORMULA (Excel returns #VALUE! when the argument isn't a reference).
+    expect(call('ISFORMULA', ['A1'])).toBeInstanceOf(Object);
     expect(call('ISREF', ['A1'])).toBe(false);
   });
 

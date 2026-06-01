@@ -22,6 +22,15 @@ import { existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client } from 'pg';
+import type { BlockResponse } from '@onegrid/protocol';
+
+// The integration suite assumes JSON-encoded rows. Narrow once at the
+// boundary so individual assertions can read `r.column` without re-asserting
+// the encoding union on every row.
+function jsonRows(res: BlockResponse): ReadonlyArray<Record<string, unknown>> {
+  if (res.encoding !== 'json') throw new Error(`expected json encoding, got ${res.encoding}`);
+  return res.rows as ReadonlyArray<Record<string, unknown>>;
+}
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { createPgDataSource, type PgDataSourceOptions } from '../datasource';
 import type { BlockRequest, Schema } from '@onegrid/protocol';
@@ -130,9 +139,10 @@ describe.skipIf(SKIP)('@onegrid/postgres — real-database integration', () => {
       filter: null,
     };
     const res = await ds.fetchBlock(req);
-    expect(res.rows.length).toBe(10);
-    expect(res.rows[0]?.id).toBe(1);
-    expect(res.rows[9]?.id).toBe(10);
+    const rows = jsonRows(res);
+    expect(rows.length).toBe(10);
+    expect(rows[0]?.id).toBe(1);
+    expect(rows[9]?.id).toBe(10);
     expect(res.nextCursor).not.toBeNull();
   });
 
@@ -152,7 +162,7 @@ describe.skipIf(SKIP)('@onegrid/postgres — real-database integration', () => {
         sort: [{ columnId: 'id', direction: 'asc' }],
         filter: null,
       });
-      for (const r of res.rows) seen.push(Number(r.id));
+      for (const r of jsonRows(res)) seen.push(Number(r.id));
       cursor = res.nextCursor;
       if (cursor === null) break;
     }
@@ -173,8 +183,9 @@ describe.skipIf(SKIP)('@onegrid/postgres — real-database integration', () => {
       sort: [{ columnId: 'revenue', direction: 'desc' }],
       filter: null,
     });
-    expect(res.rows.length).toBe(5);
-    const revenues = res.rows.map((r) => Number(r.revenue));
+    const rows = jsonRows(res);
+    expect(rows.length).toBe(5);
+    const revenues = rows.map((r) => Number(r.revenue));
     for (let i = 1; i < revenues.length; i++) {
       expect(revenues[i]).toBeLessThanOrEqual(revenues[i - 1]!);
     }
@@ -198,9 +209,10 @@ describe.skipIf(SKIP)('@onegrid/postgres — real-database integration', () => {
         value: 'active',
       },
     });
-    expect(res.rows.length).toBeGreaterThan(0);
-    expect(res.rows.length).toBeLessThan(50);
-    for (const r of res.rows) {
+    const rows = jsonRows(res);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBeLessThan(50);
+    for (const r of rows) {
       expect(r.status).toBe('active');
     }
   });

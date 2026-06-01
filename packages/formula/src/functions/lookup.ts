@@ -10,13 +10,12 @@
 import { compare, toBoolean, toNumber } from '../coerce';
 import {
   NA_ERROR,
-  NAME_ERROR,
   NUM_ERROR,
   REF_ERROR,
   VALUE_ERROR,
   isFormulaError,
 } from '../errors';
-import { approxBinarySearch, register, to2D } from './_shared';
+import { approxBinarySearch, getCallContext, register, to2D } from './_shared';
 
 register('VLOOKUP', (args) => {
   const target = args[0];
@@ -142,8 +141,97 @@ register('CHOOSE', (args) => {
   return args[i];
 });
 
-register('OFFSET', () => NAME_ERROR);
-register('INDIRECT', () => NAME_ERROR);
+// ----- OFFSET / INDIRECT (wave 15) ------------------------------------------
+//
+// Both need access to the active resolver and to the AST of the reference
+// argument; they read it from the per-call CallContext set by the evaluator.
+// OFFSET(reference, rows, cols, [height], [width]) — returns the value (or
+// 2D array slice) at the derived address. INDIRECT(refText, [a1]) — parses
+// the string as a reference and resolves through the active resolver.
+
+function parseA1ForOffset(ref: string): { col: number; row: number; absCol: boolean; absRow: boolean } | undefined {
+  const m = /^(\$?)([A-Z]+)(\$?)(\d+)$/.exec(ref.toUpperCase());
+  if (!m) return undefined;
+  const absCol = m[1] === '$';
+  const letters = m[2]!;
+  const absRow = m[3] === '$';
+  let col = 0;
+  for (let i = 0; i < letters.length; i++) col = col * 26 + (letters.charCodeAt(i) - 64);
+  return { col, row: Number(m[4]), absCol, absRow };
+}
+
+function colLetters(col: number): string {
+  let s = '';
+  let n = col;
+  while (n > 0) {
+    const r = (n - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+register('OFFSET', (args) => {
+  const ctx = getCallContext();
+  const refNode = ctx?.argNodes[0];
+  if (!refNode || typeof refNode !== 'object') return VALUE_ERROR;
+  const kind = (refNode as { kind?: unknown }).kind;
+  if (kind !== 'cellRef' && kind !== 'rangeRef') return VALUE_ERROR;
+  const refText = (refNode as { ref: string }).ref;
+  const baseRef = (kind === 'rangeRef' ? refText.split(':')[0]! : refText);
+  const parsed = parseA1ForOffset(baseRef);
+  if (!parsed) return REF_ERROR;
+  const rows = toNumber(args[1]);
+  if (isFormulaError(rows)) return rows;
+  const cols = toNumber(args[2]);
+  if (isFormulaError(cols)) return cols;
+  const height = args[3] !== undefined ? toNumber(args[3]) : 1;
+  if (isFormulaError(height)) return height;
+  const width = args[4] !== undefined ? toNumber(args[4]) : 1;
+  if (isFormulaError(width)) return width;
+  if (height < 1 || width < 1) return REF_ERROR;
+  const newRow = parsed.row + Math.trunc(rows);
+  const newCol = parsed.col + Math.trunc(cols);
+  if (newRow < 1 || newCol < 1) return REF_ERROR;
+  const h = Math.trunc(height);
+  const w = Math.trunc(width);
+  const resolver = ctx?.resolver as { getCell: (ref: string) => unknown } | undefined;
+  if (!resolver) return REF_ERROR;
+  if (h === 1 && w === 1) {
+    return resolver.getCell(`${colLetters(newCol)}${newRow}`);
+  }
+  const out: unknown[][] = [];
+  for (let r = 0; r < h; r++) {
+    const row: unknown[] = [];
+    for (let c = 0; c < w; c++) {
+      row.push(resolver.getCell(`${colLetters(newCol + c)}${newRow + r}`));
+    }
+    out.push(row);
+  }
+  return out;
+});
+
+register('INDIRECT', (args) => {
+  const ctx = getCallContext();
+  const text = args[0];
+  if (typeof text !== 'string') return REF_ERROR;
+  const trimmed = text.trim();
+  const resolver = ctx?.resolver as
+    | { getCell: (ref: string) => unknown; getRange: (ref: string) => ReadonlyArray<unknown> }
+    | undefined;
+  if (!resolver) return REF_ERROR;
+  try {
+    if (/^[$]?[A-Z]+[$]?\d+:[$]?[A-Z]+[$]?\d+$/i.test(trimmed)) {
+      return resolver.getRange(trimmed);
+    }
+    if (/^[$]?[A-Z]+[$]?\d+$/i.test(trimmed)) {
+      return resolver.getCell(trimmed);
+    }
+    return REF_ERROR;
+  } catch {
+    return REF_ERROR;
+  }
+});
 
 register('ROW', (args) => {
   if (args.length === 0 || args[0] === undefined) return 1;

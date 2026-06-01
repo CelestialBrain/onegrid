@@ -1,0 +1,39 @@
+{
+  "name": "@onegrid/xlsx",
+  "version": "1.0.0",
+  "description": "OOXML (.xlsx) formula interop for oneGrid. Parses Excel formulas to the @onegrid/formula AST and writes them back. Clean-room MIT.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@onegrid/formula": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.9"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false
+}

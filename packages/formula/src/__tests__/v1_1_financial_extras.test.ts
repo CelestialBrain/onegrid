@@ -4,7 +4,6 @@
 
 import { describe, expect, it } from 'vitest';
 import { getFunction } from '../functions';
-import { NAME_ERROR } from '../errors';
 
 const call = (name: string, args: unknown[]): unknown => {
   const fn = getFunction(name);
@@ -137,20 +136,92 @@ describe('@onegrid/formula — Treasury bills', () => {
   });
 });
 
-describe('@onegrid/formula — deferred (day-count infra)', () => {
-  for (const n of [
-    'COUPDAYS',
-    'COUPDAYBS',
-    'COUPDAYSNC',
-    'AMORDEGRC',
-    'AMORLINC',
-    'ODDFPRICE',
-    'ODDFYIELD',
-    'ODDLPRICE',
-    'ODDLYIELD',
-  ]) {
-    it(`${n} returns #NAME!`, () => {
-      expect(call(n, [])).toBe(NAME_ERROR);
-    });
-  }
+describe('@onegrid/formula — wave 13 day-count + odd-period + AMOR*', () => {
+  // Canonical Excel sample: settle 2008-01-25, maturity 2008-11-15, freq 2,
+  // basis 1 (act/act). Walking semi-annual periods back from maturity:
+  //   2008-11-15 → 2008-05-15 → 2007-11-15 (settle falls here).
+  // So prev = 2007-11-15, next = 2008-05-15. Real-calendar gap = 182 days.
+  const settle = new Date(2008, 0, 25); // Jan 25
+  const maturity = new Date(2008, 10, 15); // Nov 15
+  it('COUPDAYS basis 1 = real period length', () => {
+    expect(call('COUPDAYS', [settle, maturity, 2, 1])).toBe(182);
+  });
+  it('COUPDAYBS + COUPDAYSNC = COUPDAYS', () => {
+    const total = call('COUPDAYS', [settle, maturity, 2, 1]) as number;
+    const bs = call('COUPDAYBS', [settle, maturity, 2, 1]) as number;
+    const nc = call('COUPDAYSNC', [settle, maturity, 2, 1]) as number;
+    expect(bs + nc).toBe(total);
+  });
+  it('COUPDAYS basis 0 = 360/freq', () => {
+    expect(call('COUPDAYS', [settle, maturity, 2, 0])).toBe(180);
+    expect(call('COUPDAYS', [settle, maturity, 4, 0])).toBe(90);
+  });
+  it('COUPDAYS basis 3 = 365/freq', () => {
+    expect(call('COUPDAYS', [settle, maturity, 2, 3])).toBe(182.5);
+  });
+
+  // AMORLINC over a 5-year asset (rate 0.2). Period 0 is prorated by the
+  // basis-aware fraction of (purchase → firstPeriod).
+  it('AMORLINC period 0 is prorated', () => {
+    // Asset bought 2008-08-19, first period close 2008-12-31. Cost 2400,
+    // salvage 300, rate 0.15, basis 1.
+    const r = call('AMORLINC', [
+      2400,
+      new Date(2008, 7, 19),
+      new Date(2008, 11, 31),
+      300,
+      0,
+      0.15,
+      1,
+    ]) as number;
+    // Roughly cost*rate*fraction = 2400*0.15*(134/365) ≈ 132.16
+    expect(r).toBeGreaterThan(125);
+    expect(r).toBeLessThan(140);
+  });
+
+  // AMORDEGRC at the same date with life 1/0.15 ≈ 6.67y → coefficient 2.5.
+  it('AMORDEGRC period 0 returns positive depreciation', () => {
+    const r = call('AMORDEGRC', [
+      2400,
+      new Date(2008, 7, 19),
+      new Date(2008, 11, 31),
+      300,
+      0,
+      0.15,
+      1,
+    ]) as number;
+    expect(r).toBeGreaterThan(0);
+    expect(r).toBeLessThan(2400);
+  });
+
+  // ODDFPRICE / ODDFYIELD round-trip on a short-first period.
+  it('ODDFPRICE then ODDFYIELD round-trips', () => {
+    const issue = new Date(2008, 9, 15);
+    const settleD = new Date(2008, 10, 11);
+    const firstCoupon = new Date(2009, 2, 1);
+    const maturityD = new Date(2021, 2, 1);
+    const price = call('ODDFPRICE', [
+      settleD, maturityD, issue, firstCoupon, 0.0575, 0.0625, 100, 2, 1,
+    ]);
+    expect(typeof price).toBe('number');
+    const yld = call('ODDFYIELD', [
+      settleD, maturityD, issue, firstCoupon, 0.0575, price, 100, 2, 1,
+    ]) as number;
+    expect(yld).toBeCloseTo(0.0625, 4);
+  });
+
+  // ODDLPRICE / ODDLYIELD round-trip on a short-last period.
+  it('ODDLPRICE then ODDLYIELD round-trips', () => {
+    const lastInt = new Date(2008, 9, 15);
+    const settleD = new Date(2008, 10, 11);
+    const maturityD = new Date(2009, 2, 1);
+    const price = call('ODDLPRICE', [
+      settleD, maturityD, lastInt, 0.0375, 0.0405, 100, 2, 0,
+    ]);
+    expect(typeof price).toBe('number');
+    const yld = call('ODDLYIELD', [
+      settleD, maturityD, lastInt, 0.0375, price, 100, 2, 0,
+    ]) as number;
+    expect(yld).toBeCloseTo(0.0405, 3);
+  });
 });

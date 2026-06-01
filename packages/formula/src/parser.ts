@@ -156,9 +156,10 @@ class Parser {
           this.expect('rparen');
           return { kind: 'call', name, args };
         }
-        // Bare identifiers without `(` aren't valid Excel; treat as #NAME?
-        // by surfacing as a call with zero args — the evaluator will reject.
-        throw new FormulaSyntaxError(`expected "(" after function name "${name}"`, tok.start);
+        // Bare identifier (no parens). Surface as a zero-arg call node so
+        // the evaluator can resolve it: LET / LAMBDA bindings see these as
+        // names; everything else degenerates to #NAME? at evaluation time.
+        return { kind: 'call', name, args: [] };
       }
       default:
         throw new FormulaSyntaxError(`unexpected token "${tok.text}"`, tok.start);
