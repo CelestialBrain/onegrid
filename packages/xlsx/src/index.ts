@@ -25,6 +25,6 @@
 // inspection of commercial spreadsheet source.
 // =============================================================================
 
-export { parseSheetFormulas, type SheetFormulaEntry } from './parse-sheet';
+export { parseSheetFormulas, type SheetFormulaEntry, type OoxmlFormulaType } from './parse-sheet';
 export { serializeFormula } from './serialize';
 export { unescapeXml, escapeXml } from './xml';
