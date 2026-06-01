@@ -563,7 +563,7 @@ Final ([docs/v1.0.0.md](./docs/v1.0.0.md) §"What v1.0.0 final still needs") sta
 - ✅ Deprecation-import lint rule (`@typescript-eslint/no-deprecated: error`, ships with installed tseslint 8.59).
 - 🔵 v0.0.11 + v0.1.0 packages auto-promote `@beta` → `@public` at v1.3 per surface policy (mechanical, lands at v1.3 cut).
 
-### v1.1.0 — "spreadsheet-grade compat"  🟡 **In progress — formula library 452/480 (2026-06-02, waves 13–17); LAMBDA family shipped (wave 16); dynamic-array spilling structural layer shipped (wave 17); CRDT Chunk C shipped; OOXML Chunk A scaffold landed. Scope plan in [docs/v1.1.0.md](./docs/v1.1.0.md) + completion plan waves 18–23. **
+### v1.1.0 — "spreadsheet-grade compat"  🟡 **Substantively complete — formula library 457/480 (2026-06-02, waves 13–23); LAMBDA family + dynamic-array spilling + structured table refs + named ranges + Excel-compat bug-list + CJK locale all shipped; `@onegrid/xlsx` reads + writes `.xlsx` end-to-end (waves 21–22) with a cross-validation harness (wave 23); CRDT Chunk C shipped. R1C1 mode, iterative calc, and long-period odd bonds deferred to v1.1.x with documented placeholders. Scope plan in [docs/v1.1.0.md](./docs/v1.1.0.md).**
 
 Excel/Sheets-grade formula coverage. v0.0.5–v1.0 ships a working
 Adapton-based formula engine with ~41 functions covering the common
@@ -648,6 +648,41 @@ split (one file per Excel category + `_shared` for helpers +
   wire from their cell store. Spilled ranges compose with the wave 16
   higher-order family — `MAP(A1#, ...)` works end-to-end.
   15/15 tests green.
+- Wave 18 (2026-06-02) — **structured table refs + named ranges**:
+  tokenizer recognizes `Table1[Column]` / `[@Column]` / `[#Headers]` /
+  `[[#All],[Column]]` as one composite token; new `TableRefNode` AST
+  kind + `CellResolver.getTable` / `getNamedRange` hooks. Parser now
+  preserves identifier casing (was uppercasing) so named ranges and
+  LET bindings stay case-sensitive (matches Excel). 18/18 tests green.
+- Wave 19 (2026-06-02) — **Excel-compat bug-list + date-serial**:
+  three real bug fixes — `INT(-2.5) = -3` (was `-2`),
+  `ROUND(-2.5, 0) = -3` (half-away-from-zero, was `-2`),
+  `ISBLANK("") = false` (was `true`). New `dateToSerial` /
+  `serialToDate` / `isPhantomLeapSlot` helpers gated by `DateSystem`
+  ('1900' / '1900-strict' / '1904') — opt-in; preserves the
+  Lotus-1-2-3 leap-year-1900 bug for OOXML round-trip. R1C1 mode
+  deferred. 22/22 tests green.
+- Wave 20 (2026-06-02) — **CJK locale text**: BAHTTEXT (Thai-baht),
+  ASC (full→half-width with katakana table), JIS / DBCS (half→full
+  width), PHONETIC (degrades to source text without ruby markup).
+  Iterative calc + long-period odd bonds explicitly deferred to
+  v1.1.x with regression-locks. +5 functions → 457/480. 14/14 tests.
+- Wave 21 (2026-06-02) — **`@onegrid/xlsx` container layer**:
+  streaming ZIP reader + writer (no jszip dep — uses
+  `DecompressionStream` in browsers, `node:zlib` under Node), CRC-32
+  implementation, OPC parts + relationships graph,
+  `[Content_Types].xml` + `_rels/*` parsing. Bomb-resistance gate
+  (decompressed-byte + ratio cap). 7/7 tests.
+- Wave 22 (2026-06-02) — **`@onegrid/xlsx` SpreadsheetML round-trip**:
+  `readWorkbook(bytes)` → typed Workbook with shared-strings
+  dereferenced + formulas parsed to AST; `writeWorkbook(workbook)`
+  emits a fresh `.xlsx`. 7/7 tests including write→read round-trip
+  for mixed cell types + shared-string dedup + date1904 flag.
+- Wave 23 (2026-06-02) — **cross-validation harness**: 33 hand-authored
+  formulas with their Excel-computed answers → write through
+  `writeWorkbook` → read through `readWorkbook` → evaluate through
+  `@onegrid/formula` → assert results match. All 33 round-trip and
+  evaluate correctly.
 
 **Chunk A (OOXML interop) status as of 2026-06-02.** `@onegrid/xlsx`
 scaffold shipped: package manifest + tsup/tsconfig + worksheet

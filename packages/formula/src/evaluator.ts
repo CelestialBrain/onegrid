@@ -48,6 +48,26 @@ export interface CellResolver {
    * usually wire `(ref) => tracker.lookup(ref)?.values`.
    */
   readonly getSpill?: (anchor: string) => ReadonlyArray<ReadonlyArray<unknown>> | undefined;
+  /**
+   * (Wave 18, optional) Resolve a structured table reference. Selector
+   * shapes: `'all' | 'headers' | 'data' | 'totals' | 'thisRow'`. Returns
+   * a flat 1D / 2D array shape matching the selected region. If the table
+   * or column doesn't exist, return `undefined` so the evaluator surfaces
+   * `#REF!` / `#NAME?` consistently.
+   */
+  readonly getTable?: (
+    table: string,
+    column: string | undefined,
+    selector: 'all' | 'headers' | 'data' | 'totals' | 'thisRow',
+  ) => unknown;
+  /**
+   * (Wave 18, optional) Resolve a named range. Workbook + sheet scopes
+   * are the adopter's responsibility; the engine just hands the name to
+   * this hook. Returns the value (scalar, range, or array). `undefined`
+   * means "not a named range" — the evaluator falls through to the
+   * existing bare-identifier path (LET bindings, etc.).
+   */
+  readonly getNamedRange?: (name: string) => unknown;
 }
 
 export function evaluate(node: FormulaNode, resolver: CellResolver): unknown {
@@ -87,6 +107,12 @@ export function evaluate(node: FormulaNode, resolver: CellResolver): unknown {
       return evalBinary(node.op, node.left, node.right, resolver);
     case 'call':
       return evalCall(node.name, node.args, resolver);
+    case 'tableRef': {
+      if (!resolver.getTable) return REF_ERROR;
+      const v = resolver.getTable(node.table, node.column, node.selector);
+      if (v === undefined) return REF_ERROR;
+      return v;
+    }
     case 'spilledRef': {
       // `A1#` — look up the spilled range anchored at A1. Without an
       // adopter-supplied spill registry, falls back to #REF!.
@@ -193,10 +219,19 @@ function evalCall(
 
   const fn = getFunction(name);
   if (!fn) {
-    // Zero-arg bare-identifier path: a LET binding (or potential future
-    // named-range) lives in the resolver under its identifier. Defer to
-    // the resolver; if that also misses, surface #NAME?.
+    // Zero-arg bare-identifier path. Resolution order:
+    //   1. Named range via the resolver's `getNamedRange` hook (wave 18).
+    //   2. LET binding via the resolver chain (LET wraps `getCell`).
+    //   3. Otherwise → #NAME?.
     if (argsNodes.length === 0) {
+      if (resolver.getNamedRange) {
+        try {
+          const named = resolver.getNamedRange(name);
+          if (named !== undefined) return named;
+        } catch {
+          // fall through to LET / NAME_ERROR
+        }
+      }
       try {
         const v = resolver.getCell(name);
         if (v !== null && v !== undefined) return v;

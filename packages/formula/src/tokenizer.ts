@@ -14,6 +14,7 @@ export type TokenType =
   | 'boolean'
   | 'cellRef'
   | 'rangeRef'
+  | 'tableRef'
   | 'identifier'
   | 'lparen'
   | 'rparen'
@@ -242,6 +243,35 @@ export function tokenize(input: string): Token[] {
           i = j;
           continue;
         }
+      }
+
+      // Structured table ref: `Identifier[...]`. Excel allows nested
+      // brackets inside (e.g. `Table1[[#All],[Column]]`), so we scan
+      // until the bracket depth returns to zero.
+      if (input[i] === '[') {
+        let j = i;
+        let depth = 0;
+        while (j < len) {
+          if (input[j] === '[') depth++;
+          else if (input[j] === ']') {
+            depth--;
+            if (depth === 0) { j++; break; }
+          }
+          j++;
+        }
+        if (depth === 0) {
+          const bracket = input.slice(i, j);
+          tokens.push({
+            type: 'tableRef',
+            text: s + bracket,
+            value: s + bracket,
+            start,
+          });
+          i = j;
+          continue;
+        }
+        // Unbalanced brackets — fall through to identifier and let the
+        // parser surface the error.
       }
 
       // Otherwise: function name / identifier.

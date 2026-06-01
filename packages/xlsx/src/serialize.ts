@@ -60,5 +60,22 @@ export function serializeFormula(node: FormulaNode): string {
       return `${node.anchor}#`;
     case 'implicitIntersection':
       return `@${serializeFormula(node.operand)}`;
+    case 'tableRef': {
+      const region = {
+        all: '#All',
+        headers: '#Headers',
+        data: null,
+        totals: '#Totals',
+        thisRow: '#This Row',
+      } as const;
+      const r = region[node.selector];
+      if (node.selector === 'thisRow' && node.column) {
+        return `${node.table}[@${node.column}]`;
+      }
+      if (r && node.column) return `${node.table}[[${r}],[${node.column}]]`;
+      if (r) return `${node.table}[${r}]`;
+      if (node.column) return `${node.table}[${node.column}]`;
+      return `${node.table}[]`;
+    }
   }
 }

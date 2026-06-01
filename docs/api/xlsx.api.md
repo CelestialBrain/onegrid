@@ -8,16 +8,74 @@ import { FormulaNode } from '@onegrid/formula';
 import { FormulaSyntaxError } from '@onegrid/formula';
 
 // @public (undocumented)
+export interface Cell {
+    readonly cachedValue?: string;
+    readonly formula?: string;
+    readonly formulaAst?: FormulaNode;
+    readonly ref: string;
+    readonly type: CellType;
+    readonly value: string | number | boolean | Date | null;
+}
+
+// @public (undocumented)
+export type CellType = 'n' | 's' | 'b' | 'str' | 'inlineStr' | 'd' | 'e';
+
+// @public (undocumented)
 export function escapeXml(text: string): string;
 
 // @public (undocumented)
 export type OoxmlFormulaType = 'normal' | 'array' | 'shared' | 'dataTable';
 
+// @public (undocumented)
+export class OpcPackage {
+    constructor(parts: Map<string, OpcPart>, relsByPart: Map<string, OpcRelationship[]>);
+    followFirst(from: string, type: string): OpcPart | undefined;
+    static fromEntries(parts: OpcPart[], rels: ReadonlyMap<string, OpcRelationship[]>): OpcPackage;
+    getPart(uri: string): OpcPart | undefined;
+    getRelationships(partUri: string): ReadonlyArray<OpcRelationship>;
+    listParts(): ReadonlyArray<OpcPart>;
+}
+
+// @public (undocumented)
+export interface OpcPart {
+    readonly bytes: Uint8Array;
+    readonly text: string;
+    readonly uri: string;
+}
+
+// @public (undocumented)
+export interface OpcRelationship {
+    // (undocumented)
+    readonly id: string;
+    readonly target: string;
+    // (undocumented)
+    readonly type: string;
+}
+
 // @public
 export function parseSheetFormulas(xml: string): SheetFormulaEntry[];
 
 // @public (undocumented)
+export function readPackage(bytes: Uint8Array, opts?: ZipReadOptions): Promise<OpcPackage>;
+
+// @public
+export function readWorkbook(bytes: Uint8Array): Promise<Workbook>;
+
+// @public
+export function readZip(bytes: Uint8Array, opts?: ZipReadOptions): Promise<ZipEntry[]>;
+
+// @public (undocumented)
 export function serializeFormula(node: FormulaNode): string;
+
+// @public (undocumented)
+export interface Sheet {
+    // (undocumented)
+    readonly cells: ReadonlyArray<Cell>;
+    // (undocumented)
+    readonly name: string;
+    // (undocumented)
+    readonly sheetId: number;
+}
 
 // @public (undocumented)
 export interface SheetFormulaEntry {
@@ -33,6 +91,40 @@ export interface SheetFormulaEntry {
 
 // @public (undocumented)
 export function unescapeXml(text: string): string;
+
+// @public (undocumented)
+export interface Workbook {
+    readonly date1904: boolean;
+    readonly opc: OpcPackage;
+    // (undocumented)
+    readonly sheets: ReadonlyArray<Sheet>;
+}
+
+// @public (undocumented)
+export function writePackage(pkg: OpcPackage): Promise<Uint8Array>;
+
+// @public
+export function writeWorkbook(wb: Workbook): Promise<Uint8Array>;
+
+// @public
+export function writeZip(entries: ZipEntry[]): Promise<Uint8Array>;
+
+// @public (undocumented)
+export interface ZipEntry {
+    // (undocumented)
+    readonly data: Uint8Array;
+    readonly isDirectory: boolean;
+    // (undocumented)
+    readonly path: string;
+}
+
+// @public (undocumented)
+export interface ZipReadOptions {
+    // (undocumented)
+    readonly maxDecompressedBytes?: number;
+    // (undocumented)
+    readonly maxRatio?: number;
+}
 
 // (No @packageDocumentation comment for this package)
 

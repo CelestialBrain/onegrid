@@ -17,7 +17,8 @@ export type FormulaNode =
   | PercentNode
   | LambdaNode
   | SpilledRefNode
-  | ImplicitIntersectionNode;
+  | ImplicitIntersectionNode
+  | TableRefNode;
 
 export interface NumberLiteral {
   readonly kind: 'number';
@@ -119,4 +120,21 @@ export interface SpilledRefNode {
 export interface ImplicitIntersectionNode {
   readonly kind: 'implicitIntersection';
   readonly operand: FormulaNode;
+}
+
+/**
+ * `Table1[Column]`, `Table1[#Headers]`, `Table1[@Column]`,
+ * `Table1[[#All],[Column]]`. The selector tag covers the four documented
+ * region keywords; if absent, the default is `data` (data-rows only).
+ *
+ * - `column`: the column name, or `undefined` when the ref reads a whole
+ *   region (e.g. `Table1[#Headers]` with no column).
+ * - `selector`: `'all' | 'headers' | 'data' | 'totals' | 'thisRow'`.
+ *   `'thisRow'` corresponds to the `@` form.
+ */
+export interface TableRefNode {
+  readonly kind: 'tableRef';
+  readonly table: string;
+  readonly column?: string;
+  readonly selector: 'all' | 'headers' | 'data' | 'totals' | 'thisRow';
 }

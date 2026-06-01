@@ -87,6 +87,11 @@ export type { FormulaErrorCode } from './errors';
 export { SpillTracker, asSpilled, checkSpillCollision } from './spill';
 export type { SpillExtent, SpillRecord } from './spill';
 
+// Wave 19: Excel date-serial conversion (opt-in). The OOXML writer
+// (wave 22) routes every date cell through these.
+export { dateToSerial, serialToDate, isPhantomLeapSlot } from './date-serial';
+export type { DateSystem } from './date-serial';
+
 export { FormulaSyntaxError } from './tokenizer';
 
 // -----------------------------------------------------------------------------

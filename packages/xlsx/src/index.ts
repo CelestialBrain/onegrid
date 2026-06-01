@@ -28,3 +28,26 @@
 export { parseSheetFormulas, type SheetFormulaEntry, type OoxmlFormulaType } from './parse-sheet';
 export { serializeFormula } from './serialize';
 export { unescapeXml, escapeXml } from './xml';
+
+// Wave 21 (2026-06-02) — OPC container layer:
+//   * `readZip` / `writeZip` — minimal PKZIP reader and writer, no jszip
+//     dep; uses native `DecompressionStream` in browsers and `node:zlib`
+//     under Node.
+//   * `readPackage` / `writePackage` — promotes the flat ZIP entry list
+//     into an `OpcPackage` (parts + relationships graph) per ECMA-376.
+export { readZip, writeZip, type ZipEntry, type ZipReadOptions } from './zip';
+export {
+  OpcPackage,
+  readPackage,
+  writePackage,
+  type OpcPart,
+  type OpcRelationship,
+} from './opc';
+
+// Wave 22 (2026-06-02) — SpreadsheetML round-trip:
+//   * `readWorkbook(bytes)` opens an `.xlsx` archive and returns a typed
+//     Workbook with sheets, cells, formula ASTs, and shared-string
+//     resolution. Styles / drawings / charts ride through as raw OpcParts.
+//   * `writeWorkbook(workbook)` emits a fresh archive — Content_Types +
+//     rels + workbook + worksheets + sharedStrings.
+export { readWorkbook, writeWorkbook, type Workbook, type Sheet, type Cell, type CellType } from './workbook';

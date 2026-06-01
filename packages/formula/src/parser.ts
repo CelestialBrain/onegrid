@@ -153,6 +153,10 @@ class Parser {
       case 'rangeRef':
         this.pos++;
         return { kind: 'rangeRef', ref: tok.value as string };
+      case 'tableRef': {
+        this.pos++;
+        return parseTableRefText(tok.value as string, tok.start);
+      }
       case 'lparen': {
         this.pos++;
         const expr = this.parseExpression();
@@ -160,7 +164,10 @@ class Parser {
         return expr;
       }
       case 'identifier': {
-        const name = (tok.value as string).toUpperCase();
+        // Preserve original casing — `getFunction` looks up
+        // case-insensitively, but bare-identifier paths (LET bindings,
+        // named ranges, etc.) need the user's exact identifier.
+        const name = tok.value as string;
         this.pos++;
         if (this.peek('lparen')) {
           this.pos++;
@@ -177,7 +184,8 @@ class Parser {
         }
         // Bare identifier (no parens). Surface as a zero-arg call node so
         // the evaluator can resolve it: LET / LAMBDA bindings see these as
-        // names; everything else degenerates to #NAME? at evaluation time.
+        // names; named ranges via `getNamedRange`; everything else
+        // degenerates to #NAME? at evaluation time.
         return { kind: 'call', name, args: [] };
       }
       default:
@@ -230,4 +238,96 @@ function comparisonOpToString(t: TokenType): BinaryOp {
     default:
       return '=';
   }
+}
+
+// ----- Structured table-ref text parsing (wave 18) --------------------------
+//
+// Excel grammar for `Table[...]`:
+//   Table1[Column]                  → data column
+//   Table1[[Column]]                → same (single column in brackets)
+//   Table1[@Column]                 → this-row of column
+//   Table1[#Headers]                → headers row only (single column not named)
+//   Table1[#Totals]                 → totals row only
+//   Table1[#All]                    → entire table including headers + totals
+//   Table1[#Data]                   → data rows only (default)
+//   Table1[[#Headers],[Column]]     → headers row of that column
+//   Table1[[#All],[Column]]         → entire column including header + totals
+//   Table1[[#This Row],[Column]]    → same as Table1[@Column]
+//
+// The tokenizer already captured the whole `Identifier[...]` as one token;
+// here we split off `table` and parse the bracket body. We accept the
+// shapes above and emit a TableRefNode with the resolved `selector` + the
+// optional `column`. Unknown shapes throw FormulaSyntaxError.
+
+function parseTableRefText(text: string, start: number): FormulaNode {
+  const open = text.indexOf('[');
+  if (open < 0) throw new FormulaSyntaxError(`malformed table ref "${text}"`, start);
+  const table = text.slice(0, open);
+  const body = text.slice(open + 1, -1).trim(); // strip outer []
+  if (!body) {
+    // `Table1[]` — full data range, no column.
+    return { kind: 'tableRef', table, selector: 'data' };
+  }
+  // `@Column` shorthand for `[#This Row],[Column]`.
+  if (body.startsWith('@')) {
+    return { kind: 'tableRef', table, selector: 'thisRow', column: body.slice(1).trim() };
+  }
+  // Region keyword without column: `[#Headers]` / `[#Totals]` / etc.
+  if (body.startsWith('#')) {
+    return { kind: 'tableRef', table, selector: regionKeyword(body, text, start) };
+  }
+  // Compound `[#Region],[Column]`. Split top-level commas (none nested
+  // here since brackets are balanced by the tokenizer).
+  const parts = splitTopLevelCommas(body).map((p) => p.trim());
+  if (parts.length === 2) {
+    const a = parts[0]!;
+    const b = parts[1]!;
+    const selector = regionKeyword(stripBrackets(a), text, start);
+    const column = stripBrackets(b);
+    return { kind: 'tableRef', table, selector, column };
+  }
+  // Single bracketed segment `[Column]` or bare `Column`.
+  const single = stripBrackets(parts[0]!);
+  if (single.startsWith('#')) {
+    return { kind: 'tableRef', table, selector: regionKeyword(single, text, start) };
+  }
+  return { kind: 'tableRef', table, selector: 'data', column: single };
+}
+
+function regionKeyword(
+  raw: string,
+  source: string,
+  start: number,
+): 'all' | 'headers' | 'data' | 'totals' | 'thisRow' {
+  const k = raw.trim().toLowerCase();
+  if (k === '#all') return 'all';
+  if (k === '#headers') return 'headers';
+  if (k === '#data') return 'data';
+  if (k === '#totals') return 'totals';
+  if (k === '#this row' || k === '#thisrow') return 'thisRow';
+  throw new FormulaSyntaxError(`unknown table region "${raw}" in ${source}`, start);
+}
+
+function stripBrackets(s: string): string {
+  const t = s.trim();
+  if (t.startsWith('[') && t.endsWith(']')) return t.slice(1, -1).trim();
+  return t;
+}
+
+function splitTopLevelCommas(s: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let buf = '';
+  for (const ch of s) {
+    if (ch === '[') depth++;
+    else if (ch === ']') depth--;
+    if (ch === ',' && depth === 0) {
+      out.push(buf);
+      buf = '';
+      continue;
+    }
+    buf += ch;
+  }
+  if (buf) out.push(buf);
+  return out;
 }

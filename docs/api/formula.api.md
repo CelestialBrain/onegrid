@@ -18,8 +18,10 @@ export interface CellRef {
 // @public (undocumented)
 export interface CellResolver {
     readonly getCell: (ref: string) => unknown;
+    readonly getNamedRange?: (name: string) => unknown;
     readonly getRange: (ref: string) => ReadonlyArray<unknown>;
     readonly getSpill?: (anchor: string) => ReadonlyArray<ReadonlyArray<unknown>> | undefined;
+    readonly getTable?: (table: string, column: string | undefined, selector: 'all' | 'headers' | 'data' | 'totals' | 'thisRow') => unknown;
 }
 
 // @public
@@ -30,6 +32,12 @@ export function createFormulaEngine(): FormulaEngine;
 
 // @public (undocumented)
 export function createIncrementalEngine(): IncrementalFormulaEngine;
+
+// @public (undocumented)
+export type DateSystem = '1900' | '1900-strict' | '1904';
+
+// @public
+export function dateToSerial(d: Date, system?: DateSystem): number;
 
 // @public
 export const DEFAULT_WHOLE_COLUMN_MAX_ROW = 1000;
@@ -107,9 +115,10 @@ export type FormulaFn = (args: ReadonlyArray<unknown>) => unknown;
 // Warning: (ae-forgotten-export) The symbol "LambdaNode" needs to be exported by the entry point index.d.ts
 // Warning: (ae-forgotten-export) The symbol "SpilledRefNode" needs to be exported by the entry point index.d.ts
 // Warning: (ae-forgotten-export) The symbol "ImplicitIntersectionNode" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "TableRefNode" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export type FormulaNode = NumberLiteral | StringLiteral | BooleanLiteral | CellRefNode | RangeRefNode | UnaryOpNode | BinaryOpNode | FunctionCallNode | PercentNode | LambdaNode | SpilledRefNode | ImplicitIntersectionNode;
+export type FormulaNode = NumberLiteral | StringLiteral | BooleanLiteral | CellRefNode | RangeRefNode | UnaryOpNode | BinaryOpNode | FunctionCallNode | PercentNode | LambdaNode | SpilledRefNode | ImplicitIntersectionNode | TableRefNode;
 
 // @public (undocumented)
 export class FormulaSyntaxError extends Error {
@@ -139,6 +148,9 @@ export function indexToLetter(index: number): string;
 
 // @public (undocumented)
 export function isFormulaError(v: unknown): v is FormulaError;
+
+// @public
+export function isPhantomLeapSlot(serial: number, system?: DateSystem): boolean;
 
 // @public
 export function isRangeId(id: string): boolean;
@@ -189,6 +201,9 @@ export const REF_ERROR: FormulaError;
 
 // @public (undocumented)
 export function registerFormulaFunction(name: string, fn: FormulaFn): void;
+
+// @public
+export function serialToDate(serial: number, system?: DateSystem): Date;
 
 // @public (undocumented)
 export const SPILL_ERROR: FormulaError;

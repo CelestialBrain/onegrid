@@ -66,6 +66,9 @@ register('ABS', (args) => {
 });
 
 register('ROUND', (args) => {
+  // Excel rounds half-away-from-zero: ROUND(2.5, 0) = 3, ROUND(-2.5, 0)
+  // = -3. JS `Math.round` rounds half toward +∞ instead (so it would
+  // give -2.5 → -2). Use the sign-preserving form.
   const err = firstError(args);
   if (err) return err;
   const n = toNumber(args[0]);
@@ -73,7 +76,8 @@ register('ROUND', (args) => {
   const digits = args.length > 1 ? toNumber(args[1]) : 0;
   if (isFormulaError(digits)) return digits;
   const p = Math.pow(10, digits);
-  return Math.round(n * p) / p;
+  const sign = n < 0 ? -1 : 1;
+  return (sign * Math.round(Math.abs(n) * p)) / p;
 });
 
 register('FLOOR', (args) => {
@@ -87,8 +91,11 @@ register('CEILING', (args) => {
 });
 
 register('INT', (args) => {
+  // Excel-compat: INT rounds toward negative infinity, not toward zero.
+  // INT(-2.5) = -3, INT(2.5) = 2. Differs from TRUNC which always rounds
+  // toward zero (TRUNC(-2.5) = -2).
   const n = toNumber(args[0]);
-  return isFormulaError(n) ? n : Math.trunc(n);
+  return isFormulaError(n) ? n : Math.floor(n);
 });
 
 register('SQRT', (args) => {

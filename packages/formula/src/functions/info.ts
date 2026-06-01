@@ -17,7 +17,12 @@ import { register } from './_shared';
 
 register('ISNUMBER', (args) => typeof args[0] === 'number');
 register('ISTEXT', (args) => typeof args[0] === 'string');
-register('ISBLANK', (args) => args[0] === null || args[0] === undefined || args[0] === '');
+register('ISBLANK', (args) => {
+  // Excel-compat: only truly-empty cells are blank. Empty string `""` is
+  // NOT blank (Excel distinguishes "blank cell" from "cell containing
+  // empty string"; LEN("") = 0 but ISBLANK("") = FALSE).
+  return args[0] === null || args[0] === undefined;
+});
 register('ISERROR', (args) => isFormulaError(args[0]));
 
 // ----- v1.1.0 -----

@@ -54,7 +54,31 @@ function serialize(node: FormulaNode): string {
       return `${node.anchor}#`;
     case 'implicitIntersection':
       return `@${serialize(node.operand)}`;
+    case 'tableRef':
+      return serializeTableRef(node);
   }
+}
+
+function serializeTableRef(node: {
+  table: string;
+  column?: string;
+  selector: 'all' | 'headers' | 'data' | 'totals' | 'thisRow';
+}): string {
+  const region: Record<typeof node.selector, string | null> = {
+    all: '#All',
+    headers: '#Headers',
+    data: null,
+    totals: '#Totals',
+    thisRow: '#This Row',
+  };
+  const r = region[node.selector];
+  if (node.selector === 'thisRow' && node.column) {
+    return `${node.table}[@${node.column}]`;
+  }
+  if (r && node.column) return `${node.table}[[${r}],[${node.column}]]`;
+  if (r) return `${node.table}[${r}]`;
+  if (node.column) return `${node.table}[${node.column}]`;
+  return `${node.table}[]`;
 }
 
 // ----- CELL ----------------------------------------------------------------
@@ -236,7 +260,10 @@ register('ISREF', () => {
 // (IMAGE), area-count introspection that crosses non-contiguous ranges
 // (AREAS), and CJK locale-specific text handling (BAHTTEXT, ASC, JIS,
 // DBCS, PHONETIC).
-for (const name of ['GETPIVOTDATA', 'RTD', 'IMAGE', 'AREAS', 'BAHTTEXT', 'ASC', 'JIS', 'DBCS', 'PHONETIC']) {
+// CJK locale functions (BAHTTEXT / ASC / JIS / DBCS / PHONETIC) are now
+// implemented in `./cjk.ts` (wave 20). The remaining stubs need host
+// infrastructure not present in this engine.
+for (const name of ['GETPIVOTDATA', 'RTD', 'IMAGE', 'AREAS']) {
   register(name, () => NAME_ERROR);
 }
 

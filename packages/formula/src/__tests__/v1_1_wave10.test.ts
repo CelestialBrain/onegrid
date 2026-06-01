@@ -208,7 +208,7 @@ describe('@onegrid/formula — stubs', () => {
     expect(call('SHEET', [])).toBe(1);
     expect(call('SHEETS', [])).toBe(1);
     // These remain deferred — no infra in this engine.
-    for (const n of ['GETPIVOTDATA', 'AREAS', 'BAHTTEXT', 'RTD', 'IMAGE']) {
+    for (const n of ['GETPIVOTDATA', 'AREAS', 'RTD', 'IMAGE']) {
       expect(call(n, [])).toBe(NAME_ERROR);
     }
   });
