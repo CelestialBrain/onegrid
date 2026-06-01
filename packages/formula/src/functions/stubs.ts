@@ -48,6 +48,12 @@ function serialize(node: FormulaNode): string {
       return `(${serialize(node.left)}${node.op}${serialize(node.right)})`;
     case 'call':
       return `${node.name.toUpperCase()}(${node.args.map(serialize).join(',')})`;
+    case 'lambda':
+      return `LAMBDA(${[...node.params, serialize(node.body)].join(',')})`;
+    case 'spilledRef':
+      return `${node.anchor}#`;
+    case 'implicitIntersection':
+      return `@${serialize(node.operand)}`;
   }
 }
 
@@ -234,13 +240,10 @@ for (const name of ['GETPIVOTDATA', 'RTD', 'IMAGE', 'AREAS', 'BAHTTEXT', 'ASC', 
   register(name, () => NAME_ERROR);
 }
 
-// LAMBDA + lambda-consuming higher-order functions are deferred until the
-// engine has a first-class function-value type. Each one accepts a LAMBDA
-// (or anonymous body) plus an iteration source; without closure values we
-// can't honor the lambda body in the function context. Tracked under v1.1.x.
-for (const name of ['LAMBDA', 'BYROW', 'BYCOL', 'REDUCE', 'SCAN', 'MAP', 'MAKEARRAY', 'ISOMITTED']) {
-  register(name, () => NAME_ERROR);
-}
+// LAMBDA itself is special-cased in the evaluator (constructs a
+// FormulaFunction from the AST + captured resolver). The consumers below
+// take a FormulaFunction value as one of their args and invoke its
+// .call() per element / row / column / fold step. Wave 16 (2026-06-02).
 
 // ----- VALUETOTEXT / ARRAYTOTEXT --------------------------------------------
 

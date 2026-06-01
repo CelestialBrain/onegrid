@@ -78,8 +78,14 @@ export {
   REF_ERROR,
   NA_ERROR,
   NUM_ERROR,
+  SPILL_ERROR,
 } from './errors';
 export type { FormulaErrorCode } from './errors';
+
+// Wave 17: dynamic-array spill registry. Adopters wire `SpillTracker`
+// into the resolver via the optional `getSpill` hook.
+export { SpillTracker, asSpilled, checkSpillCollision } from './spill';
+export type { SpillExtent, SpillRecord } from './spill';
 
 export { FormulaSyntaxError } from './tokenizer';
 

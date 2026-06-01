@@ -31,6 +31,8 @@ export type TokenType =
   | 'gt'
   | 'gte'
   | 'concat'
+  | 'hash'
+  | 'at'
   | 'eof';
 
 export interface Token {
@@ -62,6 +64,8 @@ const SINGLE_CHAR_TOKENS: Record<string, TokenType> = {
   '^': 'caret',
   '%': 'percent',
   '&': 'concat',
+  '#': 'hash',
+  '@': 'at',
 };
 
 export function tokenize(input: string): Token[] {

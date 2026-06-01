@@ -338,6 +338,44 @@ export function to2D(v: unknown): unknown[][] {
   return [[v]];
 }
 
+// ----- Function values (wave 16: LAMBDA + higher-order consumers) -----------
+//
+// A `FormulaFunction` is the runtime representation of a `LAMBDA(p, ..., body)`
+// node. It carries the body AST plus the resolver-shaped scope captured at
+// construction time, so a lambda passed into BYROW/MAP/REDUCE can still
+// resolve cell refs and LET bindings from its lexical context — not from
+// the caller's. The `call` thunk is plugged in by the evaluator (so this
+// module stays free of an `ast` import cycle) and accepts an arg array.
+//
+// A reserved string sentinel `__OG_OMITTED__` is what ISOMITTED checks for.
+// Higher-order callers pass it for params the user didn't supply.
+
+export const OMITTED = '__OG_OMITTED__' as const;
+
+export type FormulaFunctionTag = '__og_formula_function__';
+
+export interface FormulaFunction {
+  readonly __tag: FormulaFunctionTag;
+  readonly params: ReadonlyArray<string>;
+  /** Invoke the lambda with positional args. */
+  readonly call: (args: ReadonlyArray<unknown>) => unknown;
+}
+
+export function isFormulaFunction(v: unknown): v is FormulaFunction {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    (v as { __tag?: unknown }).__tag === '__og_formula_function__'
+  );
+}
+
+export function makeFormulaFunction(
+  params: ReadonlyArray<string>,
+  call: (args: ReadonlyArray<unknown>) => unknown,
+): FormulaFunction {
+  return { __tag: '__og_formula_function__', params, call };
+}
+
 // ----- Call context sidechannel (wave 14: cell-metadata introspection) ------
 //
 // A few Excel functions need access to the un-evaluated argument AST or the

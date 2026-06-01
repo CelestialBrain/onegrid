@@ -563,7 +563,7 @@ Final ([docs/v1.0.0.md](./docs/v1.0.0.md) §"What v1.0.0 final still needs") sta
 - ✅ Deprecation-import lint rule (`@typescript-eslint/no-deprecated: error`, ships with installed tseslint 8.59).
 - 🔵 v0.0.11 + v0.1.0 packages auto-promote `@beta` → `@public` at v1.3 per surface policy (mechanical, lands at v1.3 cut).
 
-### v1.1.0 — "spreadsheet-grade compat"  🟡 **In progress — formula library 444/480 (2026-06-02, waves 13–15); CRDT Chunk C shipped; OOXML Chunk A scaffold landed; LAMBDA family deferred to v1.1.x. Scope plan in [docs/v1.1.0.md](./docs/v1.1.0.md).**
+### v1.1.0 — "spreadsheet-grade compat"  🟡 **In progress — formula library 452/480 (2026-06-02, waves 13–17); LAMBDA family shipped (wave 16); dynamic-array spilling structural layer shipped (wave 17); CRDT Chunk C shipped; OOXML Chunk A scaffold landed. Scope plan in [docs/v1.1.0.md](./docs/v1.1.0.md) + completion plan waves 18–23. **
 
 Excel/Sheets-grade formula coverage. v0.0.5–v1.0 ships a working
 Adapton-based formula engine with ~41 functions covering the common
@@ -633,6 +633,21 @@ split (one file per Excel category + `_shared` for helpers +
   MAKEARRAY / ISOMITTED registered as #NAME! deferrals — they need a
   first-class function-value type tracked under v1.1.x.
   19/19 tests green.
+- Wave 16 (2026-06-02) — **LAMBDA family** (+8): new `LambdaNode` AST +
+  `FormulaFunction` value kind in `_shared`. LAMBDA constructed via
+  evaluator special-case captures the active resolver as closure scope.
+  Consumers BYROW / BYCOL / MAP / REDUCE / SCAN / MAKEARRAY / ISOMITTED
+  invoke the lambda via its `.call(args)` thunk. Lambdas compose with
+  LET bindings, nest cleanly, and survive REDUCE/MAP/etc. dispatch.
+  16/16 tests green.
+- Wave 17 (2026-06-02) — **dynamic-array spilling** (structural layer):
+  `#` spilled-range operator (`A1#`), `@` implicit-intersection
+  operator, `#SPILL!` error code, and a new `SpillTracker` registry +
+  `asSpilled` shape normalization + `checkSpillCollision` helper.
+  `CellResolver` gains an optional `getSpill(anchor)` hook adopters
+  wire from their cell store. Spilled ranges compose with the wave 16
+  higher-order family — `MAP(A1#, ...)` works end-to-end.
+  15/15 tests green.
 
 **Chunk A (OOXML interop) status as of 2026-06-02.** `@onegrid/xlsx`
 scaffold shipped: package manifest + tsup/tsconfig + worksheet

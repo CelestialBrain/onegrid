@@ -54,5 +54,11 @@ export function serializeFormula(node: FormulaNode): string {
     }
     case 'call':
       return `${node.name.toUpperCase()}(${node.args.map(serializeFormula).join(',')})`;
+    case 'lambda':
+      return `LAMBDA(${[...node.params, serializeFormula(node.body)].join(',')})`;
+    case 'spilledRef':
+      return `${node.anchor}#`;
+    case 'implicitIntersection':
+      return `@${serializeFormula(node.operand)}`;
   }
 }

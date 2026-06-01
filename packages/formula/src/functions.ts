@@ -31,6 +31,7 @@ import './functions/arrayshape';
 import './functions/stubs';
 import './functions/stats_extras';
 import './functions/financial_extras';
+import './functions/higherorder';
 import './functions/_aliases';
 
 export {

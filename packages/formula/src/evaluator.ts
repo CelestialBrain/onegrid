@@ -29,13 +29,25 @@ import {
   isFormulaError,
 } from './errors';
 import { getFunction } from './functions';
-import { setCallContext } from './functions/_shared';
+import {
+  makeFormulaFunction,
+  OMITTED,
+  setCallContext,
+  type FormulaFunction,
+} from './functions/_shared';
 
 export interface CellResolver {
   /** Resolve a single-cell reference (e.g. "A1" or "$A$1"). */
   readonly getCell: (ref: string) => unknown;
   /** Resolve a range reference (e.g. "A1:B10") to a flat array of values. */
   readonly getRange: (ref: string) => ReadonlyArray<unknown>;
+  /**
+   * (Wave 17, optional) Look up the spilled-range output of a dynamic-array
+   * anchor (`A1#`). Returns a 2D array if `anchor` is registered as a
+   * spill anchor, or `undefined` otherwise. Adopters using SpillTracker
+   * usually wire `(ref) => tracker.lookup(ref)?.values`.
+   */
+  readonly getSpill?: (anchor: string) => ReadonlyArray<ReadonlyArray<unknown>> | undefined;
 }
 
 export function evaluate(node: FormulaNode, resolver: CellResolver): unknown {
@@ -75,6 +87,40 @@ export function evaluate(node: FormulaNode, resolver: CellResolver): unknown {
       return evalBinary(node.op, node.left, node.right, resolver);
     case 'call':
       return evalCall(node.name, node.args, resolver);
+    case 'spilledRef': {
+      // `A1#` — look up the spilled range anchored at A1. Without an
+      // adopter-supplied spill registry, falls back to #REF!.
+      if (!resolver.getSpill) return REF_ERROR;
+      const v = resolver.getSpill(node.anchor);
+      if (v === undefined) return REF_ERROR;
+      return v as unknown;
+    }
+    case 'implicitIntersection': {
+      // `@expr` — collapse an array result to a single value. Per Excel
+      // semantics: when the operand is a range or 2D array, take the
+      // element on the calling cell's row. Without an anchor, take the
+      // first element (Excel's documented degradation).
+      const v = evaluate(node.operand, resolver);
+      if (isFormulaError(v)) return v;
+      if (!Array.isArray(v)) return v;
+      const flat: unknown[] = (v as unknown[]).flat();
+      return flat.length > 0 ? flat[0] : VALUE_ERROR;
+    }
+    case 'lambda':
+      // Lambda construction is normally driven by `LAMBDA(...)` as a
+      // function call; if a parser ever emits a bare `LambdaNode`,
+      // construct the FormulaFunction here too.
+      return makeFormulaFunction(node.params, (args) => {
+        const bindings = new Map<string, unknown>();
+        for (let i = 0; i < node.params.length; i++) {
+          bindings.set(node.params[i]!, args[i] !== undefined ? args[i] : OMITTED);
+        }
+        const chained: CellResolver = {
+          getCell: (ref) => (bindings.has(ref) ? bindings.get(ref) : resolver.getCell(ref)),
+          getRange: (ref) => resolver.getRange(ref),
+        };
+        return evaluate(node.body, chained);
+      });
   }
 }
 
@@ -138,6 +184,12 @@ function evalCall(
   // Body is evaluated with a chained resolver that substitutes the bound
   // names. Excel scope rule: later bindings see earlier ones.
   if (upper === 'LET') return evalLet(argsNodes, resolver);
+
+  // LAMBDA(p1, ..., body) — construct a FormulaFunction. The last arg is
+  // the body; everything before it is a parameter name (parsed as a
+  // zero-arg call node thanks to the wave-15 bare-identifier path).
+  // Closure: the resolver is captured at construction time.
+  if (upper === 'LAMBDA') return evalLambda(argsNodes, resolver);
 
   const fn = getFunction(name);
   if (!fn) {
@@ -206,6 +258,39 @@ function evalLet(
     bindings.set(name, evaluate(valueNode, chained));
   }
   return evaluate(argsNodes[argsNodes.length - 1]!, chained);
+}
+
+function evalLambda(
+  argsNodes: ReadonlyArray<FormulaNode>,
+  capturedResolver: CellResolver,
+): FormulaFunction | FormulaError {
+  if (argsNodes.length < 1) return VALUE_ERROR;
+  const paramNodes = argsNodes.slice(0, -1);
+  const bodyNode = argsNodes[argsNodes.length - 1]!;
+  const params: string[] = [];
+  for (const p of paramNodes) {
+    // Param names surface as either `cellRef` (when they happen to look
+    // like A1/B2) or `call` with zero args (bare identifiers).
+    if (p.kind === 'cellRef' || p.kind === 'rangeRef') {
+      params.push(p.ref);
+    } else if (p.kind === 'call' && p.args.length === 0) {
+      params.push(p.name);
+    } else {
+      return VALUE_ERROR;
+    }
+  }
+  return makeFormulaFunction(params, (args) => {
+    const bindings = new Map<string, unknown>();
+    for (let i = 0; i < params.length; i++) {
+      bindings.set(params[i]!, args[i] !== undefined ? args[i] : OMITTED);
+    }
+    const chained: CellResolver = {
+      getCell: (ref) =>
+        bindings.has(ref) ? bindings.get(ref) : capturedResolver.getCell(ref),
+      getRange: (ref) => capturedResolver.getRange(ref),
+    };
+    return evaluate(bodyNode, chained);
+  });
 }
 
 function setCallContextScoped(

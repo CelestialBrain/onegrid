@@ -4,6 +4,9 @@
 
 ```ts
 
+// @public
+export function asSpilled(value: unknown): unknown[][] | null;
+
 // @public (undocumented)
 export interface CellRef {
     // (undocumented)
@@ -16,7 +19,11 @@ export interface CellRef {
 export interface CellResolver {
     readonly getCell: (ref: string) => unknown;
     readonly getRange: (ref: string) => ReadonlyArray<unknown>;
+    readonly getSpill?: (anchor: string) => ReadonlyArray<ReadonlyArray<unknown>> | undefined;
 }
+
+// @public
+export function checkSpillCollision(anchor: string, extent: SpillExtent, isOccupied: (ref: string) => boolean): FormulaError | null;
 
 // @public (undocumented)
 export function createFormulaEngine(): FormulaEngine;
@@ -83,7 +90,7 @@ export class FormulaError extends Error {
 }
 
 // @public (undocumented)
-export type FormulaErrorCode = '#DIV/0!' | '#VALUE!' | '#NAME?' | '#REF!' | '#N/A' | '#NUM!';
+export type FormulaErrorCode = '#DIV/0!' | '#VALUE!' | '#NAME?' | '#REF!' | '#N/A' | '#NUM!' | '#SPILL!';
 
 // @public (undocumented)
 export type FormulaFn = (args: ReadonlyArray<unknown>) => unknown;
@@ -97,9 +104,12 @@ export type FormulaFn = (args: ReadonlyArray<unknown>) => unknown;
 // Warning: (ae-forgotten-export) The symbol "BinaryOpNode" needs to be exported by the entry point index.d.ts
 // Warning: (ae-forgotten-export) The symbol "FunctionCallNode" needs to be exported by the entry point index.d.ts
 // Warning: (ae-forgotten-export) The symbol "PercentNode" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "LambdaNode" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "SpilledRefNode" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "ImplicitIntersectionNode" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export type FormulaNode = NumberLiteral | StringLiteral | BooleanLiteral | CellRefNode | RangeRefNode | UnaryOpNode | BinaryOpNode | FunctionCallNode | PercentNode;
+export type FormulaNode = NumberLiteral | StringLiteral | BooleanLiteral | CellRefNode | RangeRefNode | UnaryOpNode | BinaryOpNode | FunctionCallNode | PercentNode | LambdaNode | SpilledRefNode | ImplicitIntersectionNode;
 
 // @public (undocumented)
 export class FormulaSyntaxError extends Error {
@@ -179,6 +189,37 @@ export const REF_ERROR: FormulaError;
 
 // @public (undocumented)
 export function registerFormulaFunction(name: string, fn: FormulaFn): void;
+
+// @public (undocumented)
+export const SPILL_ERROR: FormulaError;
+
+// @public (undocumented)
+export interface SpillExtent {
+    readonly cols: number;
+    readonly rows: number;
+}
+
+// @public (undocumented)
+export interface SpillRecord {
+    // (undocumented)
+    readonly anchor: string;
+    // (undocumented)
+    readonly extent: SpillExtent;
+    // (undocumented)
+    readonly values: ReadonlyArray<ReadonlyArray<unknown>>;
+}
+
+// @public
+export class SpillTracker {
+    // (undocumented)
+    clear(anchor: string): void;
+    // (undocumented)
+    clearAll(): void;
+    // (undocumented)
+    lookup(anchor: string): SpillRecord | undefined;
+    // (undocumented)
+    record(anchor: string, values: ReadonlyArray<ReadonlyArray<unknown>>): SpillRecord;
+}
 
 // @public (undocumented)
 export const VALUE_ERROR: FormulaError;

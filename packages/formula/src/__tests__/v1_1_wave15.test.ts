@@ -101,11 +101,5 @@ describe('@onegrid/formula — wave 15 — REGEX.* family', () => {
   });
 });
 
-describe('@onegrid/formula — wave 15 — lambda family (deferred)', () => {
-  it('LAMBDA/BYROW/BYCOL/REDUCE/SCAN/MAP/MAKEARRAY/ISOMITTED return #NAME?', () => {
-    for (const name of ['LAMBDA', 'BYROW', 'BYCOL', 'REDUCE', 'SCAN', 'MAP', 'MAKEARRAY', 'ISOMITTED']) {
-      const r = ev(`=${name}()`) as { code?: string };
-      expect(r?.code).toBe('#NAME?');
-    }
-  });
-});
+// Note: the LAMBDA family deferral test from wave 15 was superseded by
+// wave 16 (`v1_1_wave16.test.ts`) which ships real implementations.

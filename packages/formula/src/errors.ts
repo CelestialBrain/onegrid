@@ -10,7 +10,8 @@ export type FormulaErrorCode =
   | '#NAME?'
   | '#REF!'
   | '#N/A'
-  | '#NUM!';
+  | '#NUM!'
+  | '#SPILL!';
 
 export class FormulaError extends Error {
   constructor(
@@ -32,6 +33,7 @@ export const NAME_ERROR = new FormulaError('#NAME?');
 export const REF_ERROR = new FormulaError('#REF!');
 export const NA_ERROR = new FormulaError('#N/A');
 export const NUM_ERROR = new FormulaError('#NUM!');
+export const SPILL_ERROR = new FormulaError('#SPILL!');
 
 export function isFormulaError(v: unknown): v is FormulaError {
   return v instanceof FormulaError;

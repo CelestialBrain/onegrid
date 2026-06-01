@@ -102,14 +102,33 @@ class Parser {
       const operand = this.parseUnary();
       return { kind: 'unary', op, operand };
     }
+    // `@operand` — implicit-intersection operator (wave 17). Binds tighter
+    // than binary operators but looser than postfix.
+    if (this.peek('at')) {
+      this.consume();
+      const operand = this.parseUnary();
+      return { kind: 'implicitIntersection', operand };
+    }
     return this.parsePostfix();
   }
 
   private parsePostfix(): FormulaNode {
     let node = this.parsePrimary();
-    while (this.peek('percent')) {
-      this.consume();
-      node = { kind: 'percent', operand: node };
+    while (true) {
+      if (this.peek('percent')) {
+        this.consume();
+        node = { kind: 'percent', operand: node };
+        continue;
+      }
+      // `A1#` — spilled-range operator (wave 17). Only valid against a
+      // single-cell ref; anything else falls back to #NAME?-at-eval-time
+      // via a `call` node so the parser stays permissive.
+      if (this.peek('hash') && node.kind === 'cellRef') {
+        this.consume();
+        node = { kind: 'spilledRef', anchor: node.ref };
+        continue;
+      }
+      break;
     }
     return node;
   }
