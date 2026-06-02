@@ -881,10 +881,35 @@ import '@onegrid/formula/excel-compat';        // +460 functions
 import '@onegrid/formula/excel-compat/financial';  // just the finance subset
 ```
 
-### v1.2.0 — "interaction polish" (NEW — feature-parity track)
+### v1.2.0 — "interaction polish" (NEW — feature-parity track)  🟡 **Substantively complete — 9 of 11 items shipped across waves 24–26 (2026-06-02); pinned column resize + multi-row drag-reorder remain as small follow-ups.**
 
 Closes the most-visible UX gaps surfacing in adopter feedback. Each
 item is roughly half-a-session of work; the milestone is one batch.
+
+**Waves shipped this milestone.** Three back-to-back sessions on
+2026-06-02:
+
+- Wave 24 ([`dafd28e`](https://github.com/onegrid/onegrid/commit/dafd28e)):
+  loading / no-rows overlay, cell flash on update, auto-size column,
+  Excel-class keyboard nav, row drag-to-resize, column-resize surfaced
+  through the React adapter. 96/96 core tests.
+- Wave 25 ([`1a48e22`](https://github.com/onegrid/onegrid/commit/1a48e22)):
+  find / replace within cells. Canvas paint hook tints matches, in-host
+  toolbar + ARIA + imperative API + `onReplace` callback. 104/104
+  core tests.
+- Wave 26 ([`7a1ac29`](https://github.com/onegrid/onegrid/commit/7a1ac29)):
+  row drag-reorder (`rowDragColumnId` + `onRowReorder`) + mid-table
+  row pinning (`RowMeta.kind === 'data'` with `pinned: 'top' | 'bottom'`).
+  110/110 core tests. Verified in real Chrome — pinned row 1 stayed at
+  top after Ctrl+End scrolled to row 100,000.
+
+**Remaining gap (small).** Two v1.2 items that haven't shipped:
+- 🔵 **Pinned column resize** — currently frozen columns are
+  fixed-width. Same-shape problem as wave-24 column resize but on the
+  frozen band. ~30 min.
+- 🔵 **Multi-row drag-drop reorder** — wave 26 ships single-row drag.
+  Multi-row needs selection-aware drag (collect every selected row,
+  emit `onRowReorder` with an array). ~1 hr.
 
 **Wave 24 (2026-06-02).** Six features in one wave, all wired through
 the showcase live tab + verified in real Chrome via chrome-devtools

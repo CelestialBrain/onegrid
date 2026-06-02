@@ -179,16 +179,24 @@ export interface FrameStats {
 // @public (undocumented)
 export class Grid {
     constructor(options: GridOptions);
+    autoSizeColumn(columnId: string): void;
+    autoSizeColumns(): void;
     beginEdit(row: number, col: number, initialText?: string): void;
     // (undocumented)
     cancelEdit(): void;
     // (undocumented)
     clearSelection(): void;
+    closeFind(): void;
     commitEdit(): void | Promise<void>;
     copySelectionToClipboard(): Promise<string>;
     // (undocumented)
     destroy(): void;
+    findNext(): boolean;
+    findPrev(): boolean;
+    flashCell(rowIndex: number, columnId: string): void;
+    flashRow(rowIndex: number): void;
     getColumns(): ReadonlyArray<ColumnDef>;
+    getFindQuery(): string;
     // (undocumented)
     getMetricsSnapshot(): MetricsSnapshot;
     // (undocumented)
@@ -204,11 +212,15 @@ export class Grid {
         readonly firstVisibleRow: number;
         readonly lastVisibleRow: number;
     };
+    gotoCell(row: number, col: number, extend?: boolean): void;
     // (undocumented)
     isEditing(): boolean;
     // (undocumented)
     isExpanded(rowIndex: number): boolean;
+    openFind(): void;
     refresh(): void;
+    replaceAll(newValue: string): number;
+    replaceCurrent(newValue?: string): void;
     // (undocumented)
     resetMetrics(): void;
     // (undocumented)
@@ -223,6 +235,8 @@ export class Grid {
     selectCell(pos: CellPosition): void;
     setColumns(columns: ReadonlyArray<ColumnDef>): void;
     setExpanded(expanded: ReadonlySet<number> | ReadonlyArray<number>): void;
+    setFindQuery(query: string): void;
+    setLoading(value: boolean): void;
     setPinnedBottomRowSource(rowSource: RowSource | undefined): void;
     setPinnedTopRowSource(rowSource: RowSource | undefined): void;
     // (undocumented)
@@ -244,14 +258,23 @@ export interface GridOptions {
     readonly enableColumnReorder?: boolean;
     readonly enableColumnResize?: boolean;
     readonly enableFillHandle?: boolean;
+    readonly enableFind?: boolean;
+    readonly enableRowResize?: boolean;
     readonly expanded?: ReadonlySet<number> | ReadonlyArray<number>;
+    readonly flash?: {
+        readonly durationMs?: number;
+        readonly color?: string;
+    };
     readonly floatingFilters?: boolean;
     readonly frozenColumnCount?: number;
     readonly getDetailContent?: (rowIndex: number) => HTMLElement | null;
     readonly getRowMeta?: (rowIndex: number) => RowMeta | null | undefined;
     readonly headerHeight?: number;
     readonly host: HTMLElement;
+    readonly loading?: boolean;
+    readonly loadingOverlay?: (host: HTMLElement) => void;
     readonly meta?: GridMeta;
+    readonly noRowsOverlay?: (host: HTMLElement) => void;
     readonly onBeginEdit?: (rowIndex: number, columnId: string) => void;
     readonly onCellEdit?: (rowIndex: number, columnId: string, newValue: string, oldValue: unknown) => void;
     readonly onColumnReorder?: (fromIndex: number, toIndex: number, columnId: string) => void;
@@ -273,12 +296,17 @@ export interface GridOptions {
     readonly onFrame?: (stats: FrameStats) => void;
     readonly onHeaderClick?: (columnId: string) => void;
     readonly onPaste?: (anchorRow: number, anchorCol: number, rows: ReadonlyArray<ReadonlyArray<string>>) => void;
+    readonly onReplace?: (rowIndex: number, columnId: string, newValue: string, oldValue: unknown) => void;
+    readonly onRowReorder?: (fromRow: number, toRow: number) => void;
+    // (undocumented)
+    readonly onRowResize?: (rowIndex: number, newHeight: number, finalCommit: boolean) => void;
     readonly onSelectionChange?: (selection: SelectionSnapshot) => void;
     readonly onToggleExpand?: (rowIndex: number) => void;
     readonly onToggleGroup?: (path: string) => void;
     readonly pinnedBottomRowSource?: RowSource;
     readonly pinnedRowHeight?: number;
     readonly pinnedTopRowSource?: RowSource;
+    readonly rowDragColumnId?: string;
     readonly rowHeight: number | Float32Array;
     readonly rowSource: RowSource;
     readonly sort?: SortModel;
@@ -429,9 +457,10 @@ export interface RowGroupMeta {
 }
 
 // Warning: (ae-forgotten-export) The symbol "RowTreeMeta" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "RowDataMeta" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export type RowMeta = RowGroupMeta | RowTreeMeta;
+export type RowMeta = RowGroupMeta | RowTreeMeta | RowDataMeta;
 
 // @public
 export interface RowSource {
