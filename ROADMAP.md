@@ -1024,6 +1024,13 @@ or external services. Each is a fix-it batch, not a feature milestone.
   VoiceOver / JAWS smoke via Guidepup or similar.
 - 🟡 **Continuous benchmarking history** — `perf-scroll.spec.ts` emits
   numbers but they're not persisted across commits; need a dashboard.
+- 🟡 **Real Excel-written `.xlsx` corpus** — the wave-23 cross-validation
+  harness only round-trips workbooks `writeWorkbook` itself produced;
+  same author for both sides of the oracle. Real adopter confidence
+  needs at least one Excel-saved and one LibreOffice-saved fixture in
+  the corpus. Tracked in `docs/v1.1.0.md` ("Test-coverage gaps");
+  promoted here so the top-level operational view doesn't claim full
+  OOXML round-trip coverage.
 - 🟡 **Fuzz harness** — formula parser, cursor codec, duckdb-join SQL
   generator, filter expression validator all accept untrusted input;
   each needs a property-test pass.
