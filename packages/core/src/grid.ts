@@ -311,6 +311,21 @@ export class Grid {
   private resizeRow: number | null = null;
   private resizeStartClientY = 0;
   private resizeStartHeight = 0;
+
+  // Row reorder state (wave 26). Mirror of column reorder on the Y axis.
+  // Trigger: pointerdown inside any cell of `rowDragColumnId`. We track
+  // a candidate first (so a tap on the cell still works as cell-select)
+  // and only "promote" to an active drag once the pointer moves a few
+  // pixels.
+  private readonly rowDragColumnId: string | undefined;
+  private readonly onRowReorder:
+    | ((fromRow: number, toRow: number) => void)
+    | undefined;
+  private rowDragCandidateRow: number | null = null;
+  private rowDragCandidateClientY = 0;
+  private rowDragActiveRow: number | null = null;
+  private rowDragInsertIndex = 0;
+  private rowDragIndicatorEl: HTMLDivElement | null = null;
   /** Drag insertion index (the column index where the dragged column
    *  would land if dropped now). Range: [0, this.columns.length]. */
   private dragInsertIndex = 0;
@@ -335,6 +350,8 @@ export class Grid {
     this.onColumnResize = options.onColumnResize;
     this.rowResizeEnabled = options.enableRowResize ?? false;
     this.onRowResize = options.onRowResize;
+    this.rowDragColumnId = options.rowDragColumnId;
+    this.onRowReorder = options.onRowReorder;
     this.findEnabled = options.enableFind ?? false;
     this.onReplaceCallback = options.onReplace;
     this.onContextMenu = options.onContextMenu;
@@ -893,6 +910,7 @@ export class Grid {
     this.a11yMount.remove();
     this.overlayEl.remove();
     this.findToolbarEl?.remove();
+    this.rowDragIndicatorEl?.remove();
     this.detailLayer?.remove();
     this.editorEl?.remove();
     this.editorEl = null;
@@ -1426,6 +1444,26 @@ export class Grid {
       }
     }
 
+    // Row drag-reorder candidate (wave 26). Pointerdown inside any cell
+    // of `rowDragColumnId` captures a candidate; promotes to active drag
+    // once the pointer crosses the 6-px threshold. Lives below the row-
+    // resize check so resize wins on row boundaries.
+    if (this.rowDragColumnId && this.onRowReorder && localY >= dataTop) {
+      const cell = this.cellAtClient(e.clientX, e.clientY);
+      const col = cell ? this.columns[cell.col] : undefined;
+      if (cell && col && col.id === this.rowDragColumnId) {
+        this.rowDragCandidateRow = cell.row;
+        this.rowDragCandidateClientY = e.clientY;
+        this.suppressSelectionUntilUp = true;
+        try {
+          this.scrollHost.setPointerCapture(e.pointerId);
+        } catch {
+          // ignore
+        }
+        return;
+      }
+    }
+
     // Header click? When column reorder is enabled, capture a drag
     // candidate and defer the onHeaderClick fire to pointerup — that
     // way a tap still toggles sort while a drag enters reorder mode.
@@ -1742,6 +1780,18 @@ export class Grid {
     if (this.dragActiveColumn !== null) {
       this.updateDragIndicator(e.clientX);
     }
+    // Row drag-reorder (wave 26): promote candidate → active after the
+    // 6-px threshold; then track the cursor's nearest row boundary.
+    if (this.rowDragCandidateRow !== null) {
+      if (Math.abs(e.clientY - this.rowDragCandidateClientY) > 6) {
+        this.rowDragActiveRow = this.rowDragCandidateRow;
+        this.rowDragCandidateRow = null;
+        this.ensureRowDragIndicator();
+      }
+    }
+    if (this.rowDragActiveRow !== null) {
+      this.updateRowDragIndicator(e.clientY);
+    }
     // Fill-handle drag tracking: convert cursor → cell, update
     // target, redraw the dashed preview.
     if (this.fillDragState) {
@@ -1847,6 +1897,42 @@ export class Grid {
       this.scheduleRender();
       return;
     }
+    // Row drag-reorder finalize (wave 26). The grid doesn't own the row
+    // store, so we just emit `onRowReorder(fromRow, toRow)` — the adopter
+    // performs the actual data mutation. Insertion index semantics match
+    // column-reorder: `to > from` means the target index shifts by -1
+    // after the splice.
+    if (this.rowDragActiveRow !== null) {
+      const from = this.rowDragActiveRow;
+      const to = this.rowDragInsertIndex;
+      this.rowDragActiveRow = null;
+      this.removeRowDragIndicator();
+      const targetIndex = to > from ? to - 1 : to;
+      if (targetIndex !== from && this.onRowReorder) {
+        this.onRowReorder(from, targetIndex);
+      }
+      this.suppressSelectionUntilUp = false;
+      try {
+        this.scrollHost.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    if (this.rowDragCandidateRow !== null) {
+      this.rowDragCandidateRow = null;
+      this.suppressSelectionUntilUp = false;
+      try {
+        this.scrollHost.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+      // Fall through: pointerup on a candidate (no movement) is just a
+      // click — but we already suppressed cell-selection on pointerdown
+      // so we don't need to do anything more here.
+      return;
+    }
+
     // Column drag finalize. If a drag was active, splice columns + fire
     // onColumnReorder. If only a candidate was held (no movement), it
     // counts as a header click — fire onHeaderClick.
@@ -1939,6 +2025,56 @@ export class Grid {
         : boundary - this.scrollLeft;
     this.dragIndicatorEl.style.left = `${String(viewportX - 1)}px`;
     this.dragIndicatorEl.style.height = `${String(this.viewportHeight)}px`;
+  }
+
+  // ---- Row drag-reorder indicator (wave 26) -------------------------------
+
+  private ensureRowDragIndicator(): void {
+    if (this.rowDragIndicatorEl) return;
+    const el = document.createElement('div');
+    el.style.cssText =
+      'position:absolute;left:0;right:0;height:2px;background:#6ea8fe;pointer-events:none;' +
+      'z-index:20;box-shadow:0 0 4px rgba(110,168,254,0.6);';
+    this.host.appendChild(el);
+    this.rowDragIndicatorEl = el;
+  }
+
+  private removeRowDragIndicator(): void {
+    this.rowDragIndicatorEl?.remove();
+    this.rowDragIndicatorEl = null;
+  }
+
+  /** Compute the nearest row boundary to the cursor and snap the drop
+   *  indicator there. Insertion index range: [0, rowSource.numRows]. */
+  private updateRowDragIndicator(clientY: number): void {
+    if (!this.rowDragIndicatorEl) return;
+    const hostRect = this.host.getBoundingClientRect();
+    const localY = clientY - hostRect.top;
+    const dataTop = this.dataBandTop();
+    const yInData = Math.max(0, localY - dataTop + this.scrollTop);
+    // Find the row index whose top-or-bottom is closest to the cursor.
+    let bestIndex = 0;
+    let bestDelta = Infinity;
+    const maxRows = this.rowSource.numRows;
+    // Sample boundaries at every visible row; cheap because we only
+    // walk the visible range.
+    const start = Math.max(0, this.fenwick.indexAtOffset(this.scrollTop) - 1);
+    const visibleEnd = Math.min(
+      maxRows,
+      this.fenwick.indexAtOffset(this.scrollTop + this.viewportHeight - dataTop) + 2,
+    );
+    for (let i = start; i <= visibleEnd; i++) {
+      const boundary = this.fenwick.prefixSum(i);
+      const delta = Math.abs(boundary - yInData);
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        bestIndex = i;
+      }
+    }
+    this.rowDragInsertIndex = bestIndex;
+    const boundary = this.fenwick.prefixSum(bestIndex);
+    const viewportY = boundary - this.scrollTop + dataTop;
+    this.rowDragIndicatorEl.style.top = `${String(viewportY - 1)}px`;
   }
 
   private handlePointerLeave = (): void => {
@@ -3178,6 +3314,7 @@ export class Grid {
     );
     this.drawHeader();
     this.drawStickyGroupRow(start);
+    this.drawPinnedDataRows(start, end);
     this.updateStatusBar();
     if (this.rendererPool) this.syncCellOverlay(start, end);
     this.updateAccessibilityShadow(start, end);
@@ -3663,6 +3800,84 @@ export class Grid {
    *  Single-level only — for tree views with depth > 1 this stacks
    *  exactly one ancestor (the immediate group). Multi-level sticky
    *  is a v0.0.8 follow-up. */
+  /**
+   * Paint mid-table pinned data rows (wave 26). Finds the highest-priority
+   * pinned row in each direction (top, bottom) whose natural Y has
+   * scrolled off-band, and re-paints it at the sticky position. Uses the
+   * existing drawRows pipeline so styling, column-band logic, and column
+   * pinning all "just work."
+   */
+  private drawPinnedDataRows(_visibleStart: number, _visibleEnd: number): void {
+    if (!this.getRowMeta) return;
+    const numRows = this.rowSource.numRows;
+    if (numRows === 0) return;
+    const dataTop = this.dataBandTop();
+    const dataBottom = this.dataBandBottom();
+    const dataHeight = Math.max(0, dataBottom - dataTop);
+
+    // Walk every row checking for pinned-data meta. We assume adopters
+    // mark only a handful of rows pinned; the walk is bounded by a hard
+    // cap so a buggy resolver can't lock the UI.
+    const HARD_CAP = 50_000;
+    const scanLimit = Math.min(numRows, HARD_CAP);
+    let pinnedTopRow = -1;
+    let pinnedBottomRow = -1;
+    for (let r = 0; r < scanLimit; r++) {
+      const m = this.getRowMeta(r);
+      if (!m || m.kind !== 'data') continue;
+      if (m.pinned === 'top' && pinnedTopRow < 0) pinnedTopRow = r;
+      else if (m.pinned === 'bottom' && pinnedBottomRow < 0) pinnedBottomRow = r;
+      if (pinnedTopRow >= 0 && pinnedBottomRow >= 0) break;
+    }
+
+    const ctx = this.ctx;
+
+    const paintRowAt = (row: number, stickY: number): void => {
+      const h = this.fenwick.get(row);
+      const fakeFirstRowTop = this.scrollTop + (stickY - dataTop);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(this.frozenWidth, stickY, this.viewportWidth - this.frozenWidth, h);
+      ctx.clip();
+      this.drawRows(
+        row,
+        row,
+        fakeFirstRowTop,
+        this.frozenColumnCount,
+        this.columns.length,
+        -this.scrollLeft,
+      );
+      ctx.restore();
+      // Frozen band
+      if (this.frozenColumnCount > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, stickY, this.frozenWidth, h);
+        ctx.clip();
+        this.drawRows(row, row, fakeFirstRowTop, 0, this.frozenColumnCount, 0);
+        ctx.restore();
+      }
+    };
+
+    // Pinned-top: only show when its natural position has scrolled off.
+    if (pinnedTopRow >= 0) {
+      const naturalTop = this.fenwick.prefixSum(pinnedTopRow);
+      if (naturalTop < this.scrollTop) {
+        paintRowAt(pinnedTopRow, dataTop);
+      }
+    }
+    // Pinned-bottom: show when its natural position is below the
+    // viewport bottom.
+    if (pinnedBottomRow >= 0) {
+      const naturalTop = this.fenwick.prefixSum(pinnedBottomRow);
+      const h = this.fenwick.get(pinnedBottomRow);
+      const viewportBottomInData = this.scrollTop + dataHeight;
+      if (naturalTop > viewportBottomInData - h) {
+        paintRowAt(pinnedBottomRow, dataBottom - h);
+      }
+    }
+  }
+
   private drawStickyGroupRow(_visibleStart: number): void {
     if (!this.stickyGroupRowsEnabled || !this.getRowMeta) return;
     if (this.rowSource.numRows === 0) return;

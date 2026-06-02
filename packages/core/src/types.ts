@@ -341,6 +341,20 @@ export interface GridOptions {
     newHeight: number,
     finalCommit: boolean,
   ) => void;
+
+  /** Wave 26. Designate a column whose cells act as the row drag handle.
+   *  Pointerdown inside any cell of that column starts a row-reorder
+   *  drag (matches AG Grid's `rowDragManaged` UX). When omitted, row
+   *  reorder is off — we don't grab cell-click events accidentally.
+   *  Common values: the row-number column or a dedicated `id` column. */
+  readonly rowDragColumnId?: string;
+
+  /** Wave 26. Fires when a row drag-and-drop lands. Adopters apply the
+   *  reorder to their data store (the grid never owns row data). */
+  readonly onRowReorder?: (
+    fromRow: number,
+    toRow: number,
+  ) => void;
   /** Fires while the user drags a column-resize handle and again on
    *  drop. `finalCommit=false` during the drag (for UI feedback);
    *  `finalCommit=true` on pointer-up. Consumers should persist the
@@ -648,4 +662,21 @@ export interface RowTreeMeta {
   readonly hasChildren: boolean;
 }
 
-export type RowMeta = RowGroupMeta | RowTreeMeta;
+/**
+ * Mid-table row pinning (wave 26). Adopters mark specific rows from
+ * the main RowSource as sticky-to-top or sticky-to-bottom; the renderer
+ * pins them in place when their natural scroll position would otherwise
+ * scroll off-screen. The minimal-viable implementation supports one
+ * pinned row per direction — adopters who need stacked pins can pin
+ * different rows from different scroll positions to compose.
+ *
+ * Returned from `GridOptions.getRowMeta(rowIndex)` as `{ kind: 'data',
+ * pinned: 'top' }` etc. Mirrors how the existing group/tree row meta
+ * shapes carry per-row hints to the renderer.
+ */
+export interface RowDataMeta {
+  readonly kind: 'data';
+  readonly pinned: 'top' | 'bottom';
+}
+
+export type RowMeta = RowGroupMeta | RowTreeMeta | RowDataMeta;

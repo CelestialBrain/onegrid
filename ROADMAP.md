@@ -707,9 +707,20 @@ split (one file per Excel category + `_shared` for helpers +
   owns row data so it can't mutate directly. Verified in real Chrome:
   typed "Linus" into the showcase live grid, yellow highlight rendered
   on the matching cell in row 5. 104/104 core tests pass.
-  Multi-row drag-reorder + dynamic mid-table row pinning explicitly
-  deferred — each one's pointer arbitration + sticky-render math
-  deserves a dedicated wave.
+  Multi-row drag-reorder + dynamic mid-table row pinning deferred
+  to wave 26 — pointer arbitration + sticky-render math each deserve
+  their own session. (Both shipped in wave 26, same day.)
+- Wave 26 (2026-06-02) — **v1.2 interaction polish, part 3**: row
+  drag-reorder + mid-table row pinning. `rowDragColumnId` GridOption
+  designates a column whose cells act as the row-drag handle;
+  pointerdown captures a candidate, 6-px movement promotes to active
+  drag, horizontal drop indicator snaps to the nearest row boundary,
+  drop fires `onRowReorder(fromRow, toRow)`. Mid-table row pinning
+  adds a new `RowDataMeta { kind: 'data', pinned: 'top' | 'bottom' }`
+  variant to `RowMeta`; renderer re-paints those rows at the data-band
+  edges when their natural scroll position would scroll them off.
+  Verified in showcase: row 1 stayed at the top after Ctrl+End jumped
+  to row 100,000. 110/110 core tests pass.
 
 **Chunk A (OOXML interop) status as of 2026-06-02.** `@onegrid/xlsx`
 scaffold shipped: package manifest + tsup/tsconfig + worksheet
@@ -926,10 +937,16 @@ MCP. 96/96 core tests pass.
   PageUp/PageDown → jump by one viewport's worth of rows. Shift extends
   selection. `Grid.gotoCell(row, col, extend)` public method for
   imperative use.
-- Multi-row drag-drop reorder — extends the column-reorder pointer
-  path to the row axis with the existing drop-indicator.
-- Dynamic mid-table row pinning — `rowMeta.pinned: 'top' | 'bottom' | null`
-  pins any row in place while scrolling.
+- ✅ **Row drag-reorder** (wave 26) — `rowDragColumnId` GridOption
+  designates a column whose cells act as the drag handle. Pointerdown
+  starts a candidate, 6-px movement promotes to active drag, horizontal
+  drop indicator snaps to the nearest row boundary. On drop, fires
+  `onRowReorder(fromRow, toRow)` — adopter applies the move.
+- ✅ **Dynamic mid-table row pinning** (wave 26) — `getRowMeta` may
+  return `{ kind: 'data', pinned: 'top' | 'bottom' }` for any row. When
+  its natural position would scroll off-band, the renderer re-paints
+  it stuck at the data-band top or bottom. Verified in showcase: row 1
+  pinned-top stays visible after Ctrl+End scrolled to row 100,000.
 - Pinned column resize — currently frozen columns are fixed-width.
 
 **Customization surface expansion**

@@ -263,12 +263,24 @@ function WaveControls({
     enableColumnReorder: true,
     enableRowResize: true,
     enableFind: true,
+    rowDragColumnId: 'id',
+    getRowMeta: (rowIndex) => {
+      // Wave 26: pin the first row to the top and the last row to the
+      // bottom of the visible band. Demonstrates mid-table row pinning
+      // (different from the wave-23 `pinnedTopRowSource` band).
+      if (rowIndex === 0) return { kind: 'data', pinned: 'top' };
+      if (rowIndex === 99_999) return { kind: 'data', pinned: 'bottom' };
+      return null;
+    },
     onColumnResize: (id, width, final) => {
       if (final) onColumnsChange(columns.map((c) => (c.id === id ? { ...c, width } : c)));
     },
     onRowResize: () => {
       // Grid commits height into its own baseHeights array; this callback
       // is just for adopters who want to persist the value.
+    },
+    onRowReorder: (from, to) => {
+      console.log(`[showcase] row reorder: ${from} → ${to}`);
     },
     onReplace: (rowIndex, columnId, newValue, oldValue) => {
       console.log(`[showcase] replace (${rowIndex}, ${columnId}): ${String(oldValue)} → ${newValue}`);
