@@ -43,6 +43,18 @@ The grid in tab 1 receives:
 
 …and the formula bar evaluates against the same `RowSource` through a `CellResolver` that maps `A1` notation to grid cells. That's the entire integration story — small contracts (`ColumnDef`, `RowSource`, `CellResolver`, `BlockRequest`, `CdcAdapter`, `PresenceBridge`) compose without ceremony.
 
+## Deploy
+
+The showcase is a pure-static Vite build — `pnpm --filter @onegrid/showcase build` emits `apps/showcase/dist/` (single HTML + one JS chunk + sourcemap, ~2.7 MB / 720 KB gz) that any static host can serve. Three host configs ship with the package:
+
+- **Vercel** — [`apps/showcase/vercel.json`](./vercel.json). Point a Vercel project at the repo root, set the project root to `apps/showcase`. Vercel auto-detects Vite and runs the monorepo-aware `pnpm install` + filtered build from the config.
+- **Netlify** — [`apps/showcase/netlify.toml`](./netlify.toml). Point a Netlify site at `apps/showcase`. The `[build]` block runs the same workspace-filtered build.
+- **Cloudflare Pages** — [`apps/showcase/wrangler.toml`](./wrangler.toml). Configure the Pages project with build command `cd ../.. && pnpm --filter @onegrid/showcase build` and output `dist`.
+
+All three configs set the same `Cache-Control: max-age=31536000, immutable` on `/assets/*` (Vite emits content-hashed filenames) and the same baseline security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`).
+
+**SheetJS exclusion.** `@onegrid/export` carries an optional peer dep on SheetJS (`xlsx`) for its non-clean-room fallback. The showcase only uses `@onegrid/xlsx`'s clean-room `writeWorkbook`, so `xlsx` is marked `external` in [`vite.config.ts`](./vite.config.ts) — it stays out of the bundle. If a hypothetical adopter ever hits the SheetJS path through `@onegrid/export`, the dynamic import throws a clear error rather than silently shipping 430 KB of dead code.
+
 ## What this app is NOT
 
 - **Not a production starter.** Routes / auth / state management / error boundaries are deliberately minimal.

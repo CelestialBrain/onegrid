@@ -1,0 +1,11 @@
+# Cloudflare Pages build config for apps/showcase.
+#
+# To deploy: configure a Cloudflare Pages project pointing at this repo
+# with build command `cd ../.. && pnpm --filter @onegrid/showcase build`
+# and output directory `dist`. wrangler.toml below is only consumed by
+# Workers/Pages Functions if you later wire any; the build settings
+# above live in the dashboard.
+
+name = "onegrid-showcase"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "./dist"

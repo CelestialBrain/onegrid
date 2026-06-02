@@ -112,15 +112,25 @@ ${JSON.stringify(result.integrated, null, 2)}`}
 
 function AiSection(): JSX.Element {
   const [nl, setNl] = useState('show rows where status is active and revenue > 1000');
-  const result = useMemo(() => {
-    const translate = (ai as { translateIntent?: unknown }).translateIntent;
-    if (typeof translate !== 'function') {
-      return { error: 'translateIntent not in current build' };
+  const promptPreview = useMemo(() => {
+    if (typeof (ai as { buildPrompt?: unknown }).buildPrompt !== 'function') {
+      return '(buildPrompt not in current build)';
     }
     try {
-      return (translate as (s: string) => unknown)(nl);
+      const { buildPrompt } = ai as unknown as {
+        buildPrompt: (input: { instruction: string; columns: Array<{ id: string }>; rows?: ReadonlyArray<unknown> }) => string;
+      };
+      return buildPrompt({
+        instruction: nl,
+        columns: [
+          { id: 'id' },
+          { id: 'name' },
+          { id: 'status' },
+          { id: 'revenue' },
+        ],
+      });
     } catch (err) {
-      return { error: err instanceof Error ? err.message : String(err) };
+      return err instanceof Error ? err.message : String(err);
     }
   }, [nl]);
 
@@ -141,7 +151,13 @@ function AiSection(): JSX.Element {
           marginBottom: 8,
         }}
       />
-      <Output>{JSON.stringify(result, null, 2)}</Output>
+      <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
+        <Mono>buildPrompt</Mono> assembles the LLM input; the live
+        interpretation step (<Mono>interpretIntent</Mono>) needs an
+        adopter-supplied <Mono>LlmClient</Mono>, so the showcase only
+        renders the prompt half.
+      </div>
+      <Output>{promptPreview}</Output>
     </Card>
   );
 }

@@ -1,0 +1,27 @@
+# Netlify build config for apps/showcase.
+#
+# Point Netlify at this directory (or set `base = "apps/showcase"` in the
+# top-level netlify.toml if you'd rather host the config at the repo root).
+# Netlify automatically uses the workspace's pnpm-lock.yaml when it sees a
+# pnpm-workspace.yaml file two levels up.
+
+[build]
+  base = "."
+  command = "cd ../.. && pnpm --filter @onegrid/showcase build"
+  publish = "dist"
+
+[build.environment]
+  # pnpm is preinstalled on Netlify's default image (v9+).
+  NODE_VERSION = "20"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
