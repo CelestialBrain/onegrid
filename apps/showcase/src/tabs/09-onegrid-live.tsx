@@ -262,12 +262,16 @@ function WaveControls({
     enableColumnResize: true,
     enableColumnReorder: true,
     enableRowResize: true,
+    enableFind: true,
     onColumnResize: (id, width, final) => {
       if (final) onColumnsChange(columns.map((c) => (c.id === id ? { ...c, width } : c)));
     },
     onRowResize: () => {
       // Grid commits height into its own baseHeights array; this callback
       // is just for adopters who want to persist the value.
+    },
+    onReplace: (rowIndex, columnId, newValue, oldValue) => {
+      console.log(`[showcase] replace (${rowIndex}, ${columnId}): ${String(oldValue)} → ${newValue}`);
     },
   });
 
@@ -287,6 +291,7 @@ function WaveControls({
         <Btn onClick={() => grid?.autoSizeColumns()}>autoSizeColumns()</Btn>
         <Btn onClick={() => grid?.gotoCell(0, 0)}>Ctrl+Home</Btn>
         <Btn onClick={() => grid?.gotoCell(99_999, 6)}>Ctrl+End</Btn>
+        <Btn onClick={() => grid?.openFind()}>Find (Ctrl+F)</Btn>
       </div>
       <div
         ref={ref}

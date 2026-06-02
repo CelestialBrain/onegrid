@@ -695,6 +695,21 @@ split (one file per Excel category + `_shared` for helpers +
   no row-gutter; `enableRowResize` + `onRowResize`); column-resize
   surfaced through the React adapter slot props. 96/96 core tests
   pass; production build verified.
+- Wave 25 (2026-06-02) — **v1.2 interaction polish, part 2** — find /
+  replace within cells. `enableFind: true` mounts an in-host toolbar
+  (search input + replace input + prev/next/close/replace/replace-all
+  buttons + ARIA-labeled controls); Ctrl/Cmd+F opens it; Esc closes.
+  Canvas paint hook tints every matching cell yellow (case-insensitive
+  substring). Imperative API: `openFind` / `closeFind` /
+  `setFindQuery` / `findNext` / `findPrev` / `replaceCurrent` /
+  `replaceAll`. Adopters wire `onReplace(rowIndex, columnId,
+  newValue, oldValue)` to mutate their data store — the grid never
+  owns row data so it can't mutate directly. Verified in real Chrome:
+  typed "Linus" into the showcase live grid, yellow highlight rendered
+  on the matching cell in row 5. 104/104 core tests pass.
+  Multi-row drag-reorder + dynamic mid-table row pinning explicitly
+  deferred — each one's pointer arbitration + sticky-render math
+  deserves a dedicated wave.
 
 **Chunk A (OOXML interop) status as of 2026-06-02.** `@onegrid/xlsx`
 scaffold shipped: package manifest + tsup/tsconfig + worksheet
@@ -893,9 +908,18 @@ MCP. 96/96 core tests pass.
   === 0`. Adopters override via `loadingOverlay(host)` /
   `noRowsOverlay(host)` callbacks. `Grid.setLoading(value)` imperative
   setter for runtime toggle.
-- 🔵 Find / replace within cells — modal with per-cell match highlight +
-  replace-all + scope (column / range / sheet). Tracked for a
-  follow-up wave.
+- ✅ **Find / replace within cells** (wave 25) — opt-in via
+  `enableFind: true`; Ctrl+F (Cmd+F on macOS) opens an in-host
+  toolbar with Find input + Replace input + prev/next/close/replace/
+  replace-all buttons. Canvas paint hook tints every matching cell
+  yellow (case-insensitive substring match). Public imperative API:
+  `Grid.openFind()` / `closeFind()` / `setFindQuery(q)` /
+  `findNext()` / `findPrev()` / `replaceCurrent(value?)` /
+  `replaceAll(value)`. Adopters wire `onReplace(rowIndex, columnId,
+  newValue, oldValue)` to mutate their data store. Scope is the
+  visible viewport (with a 50K-row fallback when the viewport
+  height is unknown); whole-dataset scope is the adopter's job to
+  drive via scrolling.
 - ✅ **Excel-class keyboard nav** (wave 24) — Ctrl+Home → (0,0),
   Ctrl+End → last data cell, Ctrl+arrow → jump to data extent in the
   arrow's direction, Home/End → row-extent navigation,

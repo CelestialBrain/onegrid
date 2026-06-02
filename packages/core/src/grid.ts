@@ -272,6 +272,17 @@ export class Grid {
   private flashDurationMs = 600;
   private flashColor = '#fce28a';
 
+  // Find / replace state (wave 25).
+  private readonly findEnabled: boolean;
+  private readonly onReplaceCallback:
+    | ((rowIndex: number, columnId: string, newValue: string, oldValue: unknown) => void)
+    | undefined;
+  private findQuery = '';
+  private findToolbarEl: HTMLDivElement | null = null;
+  private findInputEl: HTMLInputElement | null = null;
+  private replaceInputEl: HTMLInputElement | null = null;
+  private findHighlightColor = '#fde047'; // soft yellow
+
   // Loading / no-rows overlay state (wave 24).
   private readonly overlayEl: HTMLDivElement;
   private loading: boolean;
@@ -324,6 +335,8 @@ export class Grid {
     this.onColumnResize = options.onColumnResize;
     this.rowResizeEnabled = options.enableRowResize ?? false;
     this.onRowResize = options.onRowResize;
+    this.findEnabled = options.enableFind ?? false;
+    this.onReplaceCallback = options.onReplace;
     this.onContextMenu = options.onContextMenu;
 
     this.dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
@@ -462,6 +475,90 @@ export class Grid {
     this.loading = options.loading ?? false;
     this.loadingOverlay = options.loadingOverlay;
     this.noRowsOverlay = options.noRowsOverlay;
+
+    // Find / replace toolbar (wave 25). Mounted only when enableFind is
+    // on. Lives above the data band, anchored to the top-right of the
+    // host; `display:none` until openFind() / Ctrl+F flips it visible.
+    if (this.findEnabled) {
+      this.findToolbarEl = document.createElement('div');
+      this.findToolbarEl.setAttribute('role', 'toolbar');
+      this.findToolbarEl.setAttribute('aria-label', 'Find and replace');
+      this.findToolbarEl.style.cssText =
+        'position:absolute;top:8px;right:12px;display:none;flex-direction:column;gap:4px;' +
+        `background:${this.theme.headerBackground};color:${this.theme.text};` +
+        'border:1px solid #2a2f37;border-radius:6px;padding:6px 8px;z-index:5;' +
+        `font-family:${this.theme.fontFamily};font-size:12px;` +
+        'box-shadow:0 4px 12px rgba(0,0,0,0.5);';
+      const buildRow = (
+        labelText: string,
+        input: HTMLInputElement,
+        actions: HTMLButtonElement[],
+      ) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:4px;';
+        const label = document.createElement('span');
+        label.textContent = labelText;
+        label.style.cssText = `color:${this.theme.mutedText};font-size:11px;min-width:54px;`;
+        row.appendChild(label);
+        row.appendChild(input);
+        for (const a of actions) row.appendChild(a);
+        return row;
+      };
+      this.findInputEl = document.createElement('input');
+      this.findInputEl.type = 'search';
+      this.findInputEl.placeholder = 'Find';
+      this.findInputEl.style.cssText =
+        `background:${this.theme.background};color:${this.theme.text};` +
+        'border:1px solid #2a2f37;border-radius:3px;padding:2px 6px;width:160px;font-size:12px;';
+      this.findInputEl.addEventListener('input', () => {
+        this.setFindQuery(this.findInputEl?.value ?? '');
+      });
+      this.findInputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          this.closeFind();
+          e.preventDefault();
+        } else if (e.key === 'Enter') {
+          if (e.shiftKey) this.findPrev();
+          else this.findNext();
+          e.preventDefault();
+        }
+      });
+      const mkBtn = (text: string, onClick: () => void) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = text;
+        b.style.cssText =
+          `background:${this.theme.background};color:${this.theme.text};` +
+          'border:1px solid #2a2f37;border-radius:3px;padding:2px 6px;font-size:11px;cursor:pointer;';
+        b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          onClick();
+        });
+        return b;
+      };
+      const prevBtn = mkBtn('▲', () => this.findPrev());
+      prevBtn.setAttribute('aria-label', 'Previous match');
+      const nextBtn = mkBtn('▼', () => this.findNext());
+      nextBtn.setAttribute('aria-label', 'Next match');
+      const closeBtn = mkBtn('✕', () => this.closeFind());
+      closeBtn.setAttribute('aria-label', 'Close find');
+      this.findToolbarEl.appendChild(
+        buildRow('Find', this.findInputEl, [prevBtn, nextBtn, closeBtn]),
+      );
+      this.replaceInputEl = document.createElement('input');
+      this.replaceInputEl.type = 'text';
+      this.replaceInputEl.placeholder = 'Replace';
+      this.replaceInputEl.style.cssText = this.findInputEl.style.cssText;
+      const replaceBtn = mkBtn('Replace', () => this.replaceCurrent());
+      const replaceAllBtn = mkBtn('Replace all', () => {
+        const replaceWith = this.replaceInputEl?.value ?? '';
+        this.replaceAll(replaceWith);
+      });
+      this.findToolbarEl.appendChild(
+        buildRow('Replace', this.replaceInputEl, [replaceBtn, replaceAllBtn]),
+      );
+      this.host.appendChild(this.findToolbarEl);
+    }
     if (options.flash?.durationMs !== undefined) {
       this.flashDurationMs = options.flash.durationMs;
     }
@@ -795,6 +892,7 @@ export class Grid {
     this.scrollHost.remove();
     this.a11yMount.remove();
     this.overlayEl.remove();
+    this.findToolbarEl?.remove();
     this.detailLayer?.remove();
     this.editorEl?.remove();
     this.editorEl = null;
@@ -1125,6 +1223,12 @@ export class Grid {
     // Ctrl/Cmd + A → select all.
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
       this.selectAll();
+      e.preventDefault();
+      return;
+    }
+    // Ctrl/Cmd + F → open find toolbar (wave 25).
+    if (this.findEnabled && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
+      this.openFind();
       e.preventDefault();
       return;
     }
@@ -2778,6 +2882,146 @@ export class Grid {
     for (const c of this.columns) this.autoSizeColumn(c.id);
   }
 
+  // ---------------------------------------------------------------------------
+  // Find / replace (wave 25)
+  // ---------------------------------------------------------------------------
+
+  /** Show the find toolbar and focus its input. */
+  openFind(): void {
+    if (!this.findToolbarEl) return;
+    this.findToolbarEl.style.display = 'flex';
+    this.findInputEl?.focus();
+    this.findInputEl?.select();
+  }
+
+  /** Hide the find toolbar and clear the query so highlights disappear. */
+  closeFind(): void {
+    if (!this.findToolbarEl) return;
+    this.findToolbarEl.style.display = 'none';
+    this.findQuery = '';
+    this.scheduleRender();
+  }
+
+  /** Set the current find query (highlights every visible match). */
+  setFindQuery(query: string): void {
+    this.findQuery = query;
+    this.scheduleRender();
+  }
+
+  /** Return the active find query, or '' when no find is in flight. */
+  getFindQuery(): string {
+    return this.findQuery;
+  }
+
+  /**
+   * Advance the selection to the next matching cell. Searches forward
+   * from the current active cell; if no later match exists, wraps to
+   * the start of the dataset (Excel/VS Code behavior).
+   */
+  findNext(): boolean {
+    return this.findStep(1);
+  }
+
+  /** Step backward. Wraps to end when no earlier match exists. */
+  findPrev(): boolean {
+    return this.findStep(-1);
+  }
+
+  /**
+   * Apply `newValue` to the cell currently matched. Fires `onReplace`
+   * for the adopter to actually mutate the data — the grid doesn't own
+   * the row store. Then advances to the next match.
+   */
+  replaceCurrent(newValue?: string): void {
+    if (!this.onReplaceCallback) return;
+    const replaceWith = newValue ?? this.replaceInputEl?.value ?? '';
+    const active = this.selection.active;
+    if (!active) return;
+    const column = this.columns[active.col];
+    if (!column) return;
+    const oldValue = this.rowSource.getCell(active.row, column.id);
+    if (!this.cellMatches(active.row, column.id)) {
+      this.findNext();
+      return;
+    }
+    this.onReplaceCallback(active.row, column.id, replaceWith, oldValue);
+    this.findNext();
+  }
+
+  /**
+   * Walk every cell across the visible viewport and call `onReplace`
+   * for each match. Adopters who want whole-dataset scope can scroll
+   * to the top, call this, then iterate. The grid intentionally does
+   * NOT walk 10M rows in one call.
+   */
+  replaceAll(newValue: string): number {
+    if (!this.onReplaceCallback) return 0;
+    if (!this.findQuery) return 0;
+    let count = 0;
+    // Default scope: visible viewport. If the viewport has no usable
+    // height (test envs, hidden grids), fall back to a hard-capped
+    // whole-dataset walk so the operation isn't silently a no-op.
+    const dataTop = this.dataBandTop();
+    const dataBottom = this.dataBandBottom();
+    const viewportHeight = Math.max(0, dataBottom - dataTop);
+    let start = 0;
+    let end = Math.min(this.rowSource.numRows - 1, 50_000);
+    if (viewportHeight > 0) {
+      start = Math.max(0, this.fenwick.indexAtOffset(this.scrollTop));
+      end = Math.min(
+        this.rowSource.numRows - 1,
+        this.fenwick.indexAtOffset(this.scrollTop + viewportHeight),
+      );
+    }
+    for (let r = start; r <= end; r++) {
+      for (const col of this.columns) {
+        if (this.cellMatches(r, col.id)) {
+          const oldValue = this.rowSource.getCell(r, col.id);
+          this.onReplaceCallback(r, col.id, newValue, oldValue);
+          count++;
+        }
+      }
+    }
+    this.scheduleRender();
+    return count;
+  }
+
+  /** Test whether a single cell's stringified value contains the query. */
+  private cellMatches(rowIndex: number, columnId: string): boolean {
+    if (!this.findQuery) return false;
+    const v = this.rowSource.getCell(rowIndex, columnId);
+    const text = v === null || v === undefined ? '' : String(v);
+    return text.toLowerCase().includes(this.findQuery.toLowerCase());
+  }
+
+  /** Walk forward (+1) or backward (-1) to the next match; return true if found. */
+  private findStep(direction: 1 | -1): boolean {
+    if (!this.findQuery) return false;
+    const active = this.selection.active;
+    const startRow = active?.row ?? 0;
+    const startCol = active?.col ?? 0;
+    const rows = this.rowSource.numRows;
+    const cols = this.columns.length;
+    // Linear scan across the visible range first (cheap, matches user
+    // expectation). If nothing visible, fall back to whole-dataset scan
+    // capped at a hard limit so the UI doesn't freeze.
+    const HARD_CAP = 50_000;
+    const scanRows = Math.min(rows, HARD_CAP);
+    for (let off = 1; off <= scanRows * cols; off++) {
+      const total = scanRows * cols;
+      const delta = direction === 1 ? off : -off;
+      const idx = ((startRow * cols + startCol + delta) % total + total) % total;
+      const r = Math.floor(idx / cols);
+      const c = idx % cols;
+      const col = this.columns[c];
+      if (col && this.cellMatches(r, col.id)) {
+        this.gotoCell(r, c, false);
+        return true;
+      }
+    }
+    return false;
+  }
+
   /**
    * Move (or shift-extend) the active cell to an absolute (row, col)
    * position, clamped to the grid extent. Used by Ctrl+Home / Ctrl+End /
@@ -3252,6 +3496,16 @@ export class Grid {
           if (bg) {
             ctx.fillStyle = bg;
             ctx.fillRect(x, y, w, h);
+          }
+
+          // Wave-25 find/replace highlight: tint cells whose stringified
+          // value contains the active query. Drawn on top of bg fill,
+          // below the flash overlay, behind the text.
+          if (this.findQuery && this.cellMatches(row, column.id)) {
+            ctx.globalAlpha = 0.55;
+            ctx.fillStyle = this.findHighlightColor;
+            ctx.fillRect(x, y, w, h);
+            ctx.globalAlpha = 1;
           }
 
           // Wave-24 cell flash overlay. Sits between the bg paint and

@@ -438,6 +438,22 @@ export interface GridOptions {
     readonly color?: string;
   };
 
+  /** Find / replace (wave 25). When true, Ctrl+F (Cmd+F on macOS) opens
+   *  the find toolbar; the grid highlights every matching cell in the
+   *  visible viewport. Default: false. */
+  readonly enableFind?: boolean;
+
+  /** Fires when a find-replace operation commits. The grid does not own
+   *  the row store, so it can't mutate values itself; this callback hands
+   *  the change to the adopter who applies it the same way they handle
+   *  cell editing. */
+  readonly onReplace?: (
+    rowIndex: number,
+    columnId: string,
+    newValue: string,
+    oldValue: unknown,
+  ) => void;
+
   // ---- Sticky group rows ----
 
   /** Pin the topmost visible group ancestor's header to the top of
