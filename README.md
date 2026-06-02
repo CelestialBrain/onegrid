@@ -97,6 +97,7 @@ The full slate of planned work — surface area, performance, hierarchy, databas
   - **Pivot** — pivots a 100k-row dataset by status × firstName with sum(revenue) and avg(score), rendered through the standard column pipeline.
   - **Tree** — synthetic regions/countries/cities tree with a lazy-loaded country (Brazil) demonstrating the async `loadChildren` path.
 - **[apps/benchmarks](apps/benchmarks)** — Playwright-driven performance gates: 1M-row scroll FPS, SSRM block latency, formula recompute throughput, throttled-CPU floors.
+- **[apps/showcase](apps/showcase)** — Every public-surface package wired into one app, organized as nine tabs (live grid, formula+xlsx, data adapters, CRDT collab, framework adapters, WebGPU, cross-cutting, moats, export). Proves the contracts compose end-to-end; verified in real Chrome via chrome-devtools MCP. Screenshots in [`apps/showcase/screenshots/`](apps/showcase/screenshots/).
 
 ---
 

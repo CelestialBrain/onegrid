@@ -1003,7 +1003,7 @@ or external services. Each is a fix-it batch, not a feature milestone.
 **Distribution + reachability**
 - 🔴 **Publish to npm** — every dep is currently `workspace:*`;
   nothing on the registry. Blocks every external adopter.
-- 🔴 **Live demo URL** — playground is local-only; no hosted preview.
+- 🔴 **Live demo URL** — `apps/playground` and the broader [`apps/showcase`](./apps/showcase) (every-package-wired-together demo, 2026-06-02 `0244521`) are local-only; no hosted preview yet.
 - 🔴 **Docs site** — `docs/*.md` are markdown only; no rendered site
   (`docs.onegrid.dev` or similar via Astro / Nextra / VitePress).
 - **CDN / unpkg bundle** — standalone `<script>`-tag distribution.
