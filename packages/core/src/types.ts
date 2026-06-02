@@ -330,6 +330,17 @@ export interface GridOptions {
    *  if set. Emits `onColumnResize(columnId, newWidth, finalCommit)`
    *  during the drag (finalCommit=false) and on drop (true). */
   readonly enableColumnResize?: boolean;
+
+  /** Wave 24. Enable row drag-to-resize. With no row-header gutter today,
+   *  the hit-zone lives in the bottom 4–6 px of any data cell. Adopters
+   *  who want a "drag row borders" UX flip this on; otherwise it stays
+   *  off so the resize handle doesn't compete with cell-click. */
+  readonly enableRowResize?: boolean;
+  readonly onRowResize?: (
+    rowIndex: number,
+    newHeight: number,
+    finalCommit: boolean,
+  ) => void;
   /** Fires while the user drags a column-resize handle and again on
    *  drop. `finalCommit=false` during the drag (for UI feedback);
    *  `finalCommit=true` on pointer-up. Consumers should persist the
@@ -395,6 +406,37 @@ export interface GridOptions {
     source: { rowStart: number; rowEnd: number; colStart: number; colEnd: number },
     fill: { rowStart: number; rowEnd: number; colStart: number; colEnd: number },
   ) => void;
+
+  // ---- Overlays (wave 24) ----
+
+  /** When true, render the `loadingOverlay` (or a built-in spinner) on
+   *  top of the data band. Adopters bind this to their data-fetching
+   *  state — e.g. SSRM block-pending, ORM query in flight, async
+   *  filter recompute. Independent of `numRows` so a stale dataset
+   *  can still show its rows while a refresh runs. Default: false. */
+  readonly loading?: boolean;
+
+  /** Override the built-in loading overlay. Receives the grid host so
+   *  the override can append/replace whatever it wants; the grid
+   *  removes the previously-rendered element before calling this.
+   *  When omitted and `loading === true`, a small centered spinner +
+   *  "Loading…" label render. */
+  readonly loadingOverlay?: (host: HTMLElement) => void;
+
+  /** Override the built-in no-rows overlay. Fires when `rowSource.numRows
+   *  === 0` and `loading !== true`. When omitted, a centered "No rows
+   *  to show" label renders. */
+  readonly noRowsOverlay?: (host: HTMLElement) => void;
+
+  /** Cell flash-on-update (wave 24). Configure the fade duration and
+   *  flash tint applied by `Grid.flashCell(rowIndex, columnId)`. Adopters
+   *  wire their CDC stream / optimistic-mutation onCommit / formula
+   *  recompute callback to `flashCell` so changed values are visually
+   *  obvious for a moment. Defaults: 600ms, soft amber. */
+  readonly flash?: {
+    readonly durationMs?: number;
+    readonly color?: string;
+  };
 
   // ---- Sticky group rows ----
 

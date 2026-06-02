@@ -262,6 +262,23 @@ export class Grid {
   private dragActiveColumn: number | null = null;
   private dragIndicatorEl: HTMLDivElement | null = null;
 
+  // Cell flash-on-update (wave 24). Adopters wire their CDC handler to
+  // `flashCell(rowIndex, columnId)` whenever a value changes; the grid
+  // keeps a small map of recently-flashed cells and tints their
+  // background by the remaining fade time on each render frame. O(N)
+  // where N is the flash-buffer size, which is bounded by the visible
+  // viewport — irrelevant compared to per-frame draw cost.
+  private readonly flashes = new Map<string, number>(); // key → start timestamp
+  private flashDurationMs = 600;
+  private flashColor = '#fce28a';
+
+  // Loading / no-rows overlay state (wave 24).
+  private readonly overlayEl: HTMLDivElement;
+  private loading: boolean;
+  private readonly loadingOverlay: ((host: HTMLElement) => void) | undefined;
+  private readonly noRowsOverlay: ((host: HTMLElement) => void) | undefined;
+  private lastOverlayMode: 'hidden' | 'loading' | 'no-rows' = 'hidden';
+
   // Column resize state. v1.2 — pointer enters resize mode when it
   // lands inside the rightmost RESIZE_HANDLE_PX of a column header.
   // We then track the width delta per frame until pointerup.
@@ -272,6 +289,17 @@ export class Grid {
   private resizeColumn: number | null = null;
   private resizeStartClientX = 0;
   private resizeStartWidth = 0;
+
+  // Row resize state (wave 24). Mirror of column resize on the Y axis;
+  // hit-zone is the bottom RESIZE_HANDLE_PX of any data cell when
+  // `enableRowResize` is on. No header gutter today.
+  private readonly rowResizeEnabled: boolean;
+  private readonly onRowResize:
+    | ((rowIndex: number, newHeight: number, finalCommit: boolean) => void)
+    | undefined;
+  private resizeRow: number | null = null;
+  private resizeStartClientY = 0;
+  private resizeStartHeight = 0;
   /** Drag insertion index (the column index where the dragged column
    *  would land if dropped now). Range: [0, this.columns.length]. */
   private dragInsertIndex = 0;
@@ -294,6 +322,8 @@ export class Grid {
     this.onColumnReorder = options.onColumnReorder;
     this.columnResizeEnabled = options.enableColumnResize ?? false;
     this.onColumnResize = options.onColumnResize;
+    this.rowResizeEnabled = options.enableRowResize ?? false;
+    this.onRowResize = options.onRowResize;
     this.onContextMenu = options.onContextMenu;
 
     this.dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
@@ -412,6 +442,31 @@ export class Grid {
         'position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:2;';
       this.host.appendChild(this.cellOverlayEl);
       this.rendererPool = new RendererPool(this.cellOverlayEl);
+    }
+
+    // Loading / no-rows overlay layer (wave 24). A single positioned
+    // element that the render loop shows/hides based on `loading` +
+    // `rowSource.numRows`. Sits below cell-overlay z-index so renderer
+    // pool widgets still receive pointer events when only "loading" is
+    // ambient (not modal).
+    this.overlayEl = document.createElement('div');
+    this.overlayEl.setAttribute('role', 'status');
+    this.overlayEl.setAttribute('aria-live', 'polite');
+    this.overlayEl.style.cssText =
+      'position:absolute;left:0;right:0;display:none;' +
+      'align-items:center;justify-content:center;flex-direction:column;gap:8px;' +
+      `color:${this.theme.mutedText};font-family:${this.theme.fontFamily};` +
+      'font-size:12px;pointer-events:none;z-index:1;' +
+      'background:rgba(11,13,16,0.6);backdrop-filter:blur(2px);';
+    this.host.appendChild(this.overlayEl);
+    this.loading = options.loading ?? false;
+    this.loadingOverlay = options.loadingOverlay;
+    this.noRowsOverlay = options.noRowsOverlay;
+    if (options.flash?.durationMs !== undefined) {
+      this.flashDurationMs = options.flash.durationMs;
+    }
+    if (options.flash?.color !== undefined) {
+      this.flashColor = options.flash.color;
     }
 
     // Floating filter row: a DOM band below the header with one
@@ -739,6 +794,7 @@ export class Grid {
     this.canvas.remove();
     this.scrollHost.remove();
     this.a11yMount.remove();
+    this.overlayEl.remove();
     this.detailLayer?.remove();
     this.editorEl?.remove();
     this.editorEl = null;
@@ -1110,6 +1166,70 @@ export class Grid {
       return;
     }
 
+    // Wave 24 — Excel-class keyboard nav.
+    //
+    // Ctrl+Home → first cell (0,0). Ctrl+End → last cell. Excel/Sheets
+    // convention; shift extends selection rather than moves.
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Home') {
+      this.gotoCell(0, 0, e.shiftKey);
+      e.preventDefault();
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'End') {
+      this.gotoCell(this.rowSource.numRows - 1, this.columns.length - 1, e.shiftKey);
+      e.preventDefault();
+      return;
+    }
+    // Home / End without modifier → row-extent navigation.
+    if (e.key === 'Home' && !e.metaKey && !e.ctrlKey) {
+      if (active) this.gotoCell(active.row, 0, e.shiftKey);
+      e.preventDefault();
+      return;
+    }
+    if (e.key === 'End' && !e.metaKey && !e.ctrlKey) {
+      if (active) this.gotoCell(active.row, this.columns.length - 1, e.shiftKey);
+      e.preventDefault();
+      return;
+    }
+    // Ctrl+arrow → jump to the edge of the data block in the arrow's
+    // direction. Excel "go to extent" behavior. For now (no per-cell
+    // emptiness model) we jump to the dataset edge — the most common
+    // expectation for a dense grid.
+    if (
+      (e.metaKey || e.ctrlKey) &&
+      (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')
+    ) {
+      if (active) {
+        const dr =
+          e.key === 'ArrowDown' ? this.rowSource.numRows - 1 - active.row
+          : e.key === 'ArrowUp' ? -active.row
+          : 0;
+        const dc =
+          e.key === 'ArrowRight' ? this.columns.length - 1 - active.col
+          : e.key === 'ArrowLeft' ? -active.col
+          : 0;
+        this.gotoCell(active.row + dr, active.col + dc, e.shiftKey);
+      }
+      e.preventDefault();
+      return;
+    }
+    // PageUp / PageDown — jump by one viewport's worth of rows.
+    if (e.key === 'PageDown' || e.key === 'PageUp') {
+      if (active) {
+        const dataHeight = this.dataBandBottom() - this.dataBandTop();
+        const approxRowHeight = this.baseHeights[active.row] ?? 28;
+        const rows = Math.max(1, Math.floor(dataHeight / approxRowHeight));
+        const dr = e.key === 'PageDown' ? rows : -rows;
+        this.gotoCell(
+          Math.max(0, Math.min(this.rowSource.numRows - 1, active.row + dr)),
+          active.col,
+          e.shiftKey,
+        );
+      }
+      e.preventDefault();
+      return;
+    }
+
     // Selection-aware arrow keys: extend with shift, replace without.
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       const dr = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
@@ -1178,6 +1298,25 @@ export class Grid {
           this.scrollHost.setPointerCapture(e.pointerId);
         } catch {
           // capture refused — fall back to window pointerup
+        }
+        return;
+      }
+    }
+
+    // Row resize hit-test (wave 24): pointer in the bottom RESIZE_HANDLE_PX
+    // of any visible data row enters row-resize mode. Lives below the
+    // column-resize check so column resize wins on header boundaries.
+    if (this.rowResizeEnabled && localY >= dataTop) {
+      const rowAtBoundary = this.rowAtBottomBoundary(localY);
+      if (rowAtBoundary !== null) {
+        this.resizeRow = rowAtBoundary;
+        this.resizeStartClientY = e.clientY;
+        this.resizeStartHeight = this.baseHeights[rowAtBoundary] ?? 0;
+        this.suppressSelectionUntilUp = true;
+        try {
+          this.scrollHost.setPointerCapture(e.pointerId);
+        } catch {
+          // ignore
         }
         return;
       }
@@ -1403,6 +1542,27 @@ export class Grid {
     return null;
   }
 
+  /**
+   * Row-resize hit-test (wave 24). Returns the row whose BOTTOM edge
+   * falls within the bottom RESIZE_HANDLE_PX of its visible band. By
+   * analogy with `columnAtRightBoundary`, the handle belongs to the
+   * row ABOVE the boundary. Returns null when the pointer isn't in a
+   * row-boundary strip or row resize is off.
+   */
+  private rowAtBottomBoundary(localY: number): number | null {
+    if (!this.rowResizeEnabled) return null;
+    const RESIZE_HANDLE_PX = 6;
+    const dataTop = this.dataBandTop();
+    const dataBottom = this.dataBandBottom();
+    if (localY < dataTop || localY > dataBottom) return null;
+    const yInData = localY - dataTop + this.scrollTop;
+    const rowAtY = this.fenwick.indexAtOffset(yInData);
+    if (rowAtY < 0 || rowAtY >= this.rowSource.numRows) return null;
+    const bottomOfRow = this.fenwick.prefixSum(rowAtY + 1);
+    if (Math.abs(yInData - bottomOfRow) <= RESIZE_HANDLE_PX) return rowAtY;
+    return null;
+  }
+
   private handlePointerMove = (e: PointerEvent): void => {
     // Column resize tracking: update the column width per-frame as
     // the pointer moves; fire onColumnResize with finalCommit=false.
@@ -1422,6 +1582,21 @@ export class Grid {
           this.setColumns(next);
           this.onColumnResize?.(col.id, nextWidth, false);
         }
+      }
+      return;
+    }
+
+    // Row resize tracking (wave 24). Mirror of the column path; clamps
+    // to a minimum to keep at least the text-baseline visible.
+    if (this.resizeRow !== null) {
+      const delta = e.clientY - this.resizeStartClientY;
+      const next = Math.max(16, this.resizeStartHeight + delta);
+      const current = this.baseHeights[this.resizeRow] ?? 0;
+      if (next !== current) {
+        this.baseHeights[this.resizeRow] = next;
+        this.rebuildHeightsFromExpansion();
+        this.scheduleRender();
+        this.onRowResize?.(this.resizeRow, next, false);
       }
       return;
     }
@@ -1499,6 +1674,19 @@ export class Grid {
         this.scrollHost.releasePointerCapture(e.pointerId);
       } catch {
         // release may fail; harmless
+      }
+      return;
+    }
+    // Row resize finalize (wave 24). Same shape as column resize.
+    if (this.resizeRow !== null) {
+      const h = this.baseHeights[this.resizeRow] ?? 0;
+      this.onRowResize?.(this.resizeRow, h, true);
+      this.resizeRow = null;
+      this.suppressSelectionUntilUp = false;
+      try {
+        this.scrollHost.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
       }
       return;
     }
@@ -2363,6 +2551,21 @@ export class Grid {
   }
 
   private handleDoubleClick = (e: MouseEvent): void => {
+    // Wave 24: double-click on a column-resize boundary triggers
+    // auto-size for that column. Same hit-zone as the resize drag.
+    if (this.columnResizeEnabled) {
+      const rect = this.scrollHost.getBoundingClientRect();
+      const localX = e.clientX - rect.left;
+      const localY = e.clientY - rect.top;
+      if (localY >= 0 && localY < this.fullHeaderHeight()) {
+        const colIdx = this.columnAtRightBoundary(localX);
+        if (colIdx !== null && this.columns[colIdx]) {
+          this.autoSizeColumn(this.columns[colIdx].id);
+          e.preventDefault();
+          return;
+        }
+      }
+    }
     const cell = this.cellAtClient(e.clientX, e.clientY);
     if (!cell) return;
     if (!this.isEditableAt(cell.row, cell.col)) return;
@@ -2431,7 +2634,8 @@ export class Grid {
       this.scrollTop !== this.lastRenderedScrollTop ||
       this.scrollLeft !== this.lastRenderedScrollLeft ||
       this.isEditing() ||
-      this.floatingFilterBandEl !== null;
+      this.floatingFilterBandEl !== null ||
+      this.flashes.size > 0;
     if (!this.destroyed && stillDirty) {
       this.rafHandle = requestAnimationFrame(this.tick);
     }
@@ -2482,6 +2686,183 @@ export class Grid {
   }
 
   // ---------------------------------------------------------------------------
+  // Loading / no-rows overlay (wave 24)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Public setter for the loading flag. Adopters who use SSRM block-fetch
+   * pending state, ORM query-in-flight, or async filter recompute call
+   * this whenever their async pipeline starts / finishes.
+   */
+  setLoading(value: boolean): void {
+    if (this.loading === value) return;
+    this.loading = value;
+    this.scheduleRender();
+  }
+
+  /**
+   * Flash a cell with the configured tint (wave 24). Adopters call this
+   * from their CDC handler / optimistic-mutation onCommit / formula
+   * recompute callback. Idempotent within one flash window — calling
+   * twice resets the start time so the user sees the latest change.
+   */
+  flashCell(rowIndex: number, columnId: string): void {
+    if (this.flashDurationMs <= 0) return;
+    this.flashes.set(`${String(rowIndex)}:${columnId}`, performance.now());
+    this.scheduleRender();
+  }
+
+  /** Same as flashCell, broadcast to every column in a row. */
+  flashRow(rowIndex: number): void {
+    if (this.flashDurationMs <= 0) return;
+    const now = performance.now();
+    for (const c of this.columns) {
+      this.flashes.set(`${String(rowIndex)}:${c.id}`, now);
+    }
+    this.scheduleRender();
+  }
+
+  /**
+   * Resize a column to fit the widest visible cell + a constant padding
+   * (wave 24). Measures via the canvas 2D `measureText` so the result
+   * matches the renderer's actual font metrics. Clamped to the column's
+   * `minWidth` / `maxWidth` if set; emits `onColumnResize(id, width, true)`
+   * so the host store stays in sync.
+   */
+  autoSizeColumn(columnId: string): void {
+    const colIdx = this.columns.findIndex((c) => c.id === columnId);
+    if (colIdx < 0) return;
+    const column = this.columns[colIdx];
+    if (!column) return;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.font = `${String(this.theme.fontSize)}px ${this.theme.fontFamily}`;
+    // Measure across the currently-visible row range — auto-sizing the
+    // whole 10M-row dataset would be O(N) and unnecessary; the visible
+    // sample matches what the user expects.
+    const dataTop = this.dataBandTop();
+    const dataBottom = this.dataBandBottom();
+    const start = Math.max(0, this.fenwick.indexAtOffset(this.scrollTop));
+    const end = Math.min(
+      this.rowSource.numRows - 1,
+      this.fenwick.indexAtOffset(this.scrollTop + (dataBottom - dataTop)),
+    );
+    let maxText = 0;
+    // Include the header text in the measurement.
+    const headerText = column.displayName ?? column.id;
+    maxText = Math.max(maxText, ctx.measureText(headerText).width);
+    for (let r = start; r <= end; r++) {
+      const value = this.rowSource.getCell(r, column.id);
+      const text = column.format
+        ? column.format(value, r)
+        : String(value ?? '');
+      const w = ctx.measureText(text).width;
+      if (w > maxText) maxText = w;
+    }
+    ctx.restore();
+    const PAD = 24; // 12 px left + right
+    let target = Math.ceil(maxText + PAD);
+    if (column.minWidth !== undefined) target = Math.max(target, column.minWidth);
+    if (column.maxWidth !== undefined) target = Math.min(target, column.maxWidth);
+    if (target === column.width) return;
+    const next = [...this.columns];
+    next[colIdx] = { ...column, width: target };
+    this.columns = next;
+    this.recomputeColumnLayout();
+    this.scheduleRender();
+    this.onColumnResize?.(column.id, target, true);
+  }
+
+  /** Auto-size every column. Useful as a one-off "fit everything" action. */
+  autoSizeColumns(): void {
+    for (const c of this.columns) this.autoSizeColumn(c.id);
+  }
+
+  /**
+   * Move (or shift-extend) the active cell to an absolute (row, col)
+   * position, clamped to the grid extent. Used by Ctrl+Home / Ctrl+End /
+   * Ctrl+arrow / PageUp / PageDown handlers and exposed publicly so
+   * adopters can drive navigation imperatively too.
+   */
+  gotoCell(row: number, col: number, extend = false): void {
+    const targetRow = Math.max(0, Math.min(this.rowSource.numRows - 1, row));
+    const targetCol = Math.max(0, Math.min(this.columns.length - 1, col));
+    const active = this.selection.active;
+    const dr = active ? targetRow - active.row : targetRow;
+    const dc = active ? targetCol - active.col : targetCol;
+    if (extend && active && !this.selection.isEmpty()) {
+      this.selection.extendActiveBy(dr, dc, this.rowSource.numRows, this.columns.length);
+    } else {
+      this.selection.moveActive(dr, dc, this.rowSource.numRows, this.columns.length);
+    }
+    this.notifySelectionChange();
+    this.scrollActiveIntoView();
+    this.scheduleRender();
+  }
+
+  /**
+   * Sync the overlay element to the current grid state. Runs every frame
+   * because it's cheap (mode comparison + a couple style writes); the
+   * mode-change guard avoids touching DOM unless something flipped.
+   */
+  private syncOverlay(): void {
+    const dataTop = this.dataBandTop();
+    const dataBottom = this.dataBandBottom();
+    this.overlayEl.style.top = `${String(dataTop)}px`;
+    this.overlayEl.style.height = `${String(Math.max(0, dataBottom - dataTop))}px`;
+    const mode: 'hidden' | 'loading' | 'no-rows' = this.loading
+      ? 'loading'
+      : this.rowSource.numRows === 0
+        ? 'no-rows'
+        : 'hidden';
+    if (mode === this.lastOverlayMode) return;
+    this.lastOverlayMode = mode;
+    if (mode === 'hidden') {
+      this.overlayEl.style.display = 'none';
+      this.overlayEl.replaceChildren();
+      return;
+    }
+    this.overlayEl.style.display = 'flex';
+    this.overlayEl.replaceChildren();
+    if (mode === 'loading' && this.loadingOverlay) {
+      this.loadingOverlay(this.overlayEl);
+      return;
+    }
+    if (mode === 'no-rows' && this.noRowsOverlay) {
+      this.noRowsOverlay(this.overlayEl);
+      return;
+    }
+    // Built-in default: small spinner-ish dot + label.
+    const label = document.createElement('div');
+    label.style.cssText =
+      'display:flex;align-items:center;gap:8px;padding:8px 14px;' +
+      `background:${this.theme.headerBackground};border:1px solid #2a2f37;border-radius:6px;`;
+    if (mode === 'loading') {
+      const dot = document.createElement('div');
+      dot.style.cssText =
+        'width:12px;height:12px;border-radius:50%;border:2px solid #2a2f37;' +
+        `border-top-color:${this.theme.text};animation:onegrid-spin 0.8s linear infinite;`;
+      // Inject keyframes once.
+      if (!document.getElementById('onegrid-overlay-keyframes')) {
+        const style = document.createElement('style');
+        style.id = 'onegrid-overlay-keyframes';
+        style.textContent =
+          '@keyframes onegrid-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }';
+        document.head.appendChild(style);
+      }
+      label.appendChild(dot);
+      const text = document.createElement('span');
+      text.textContent = 'Loading…';
+      label.appendChild(text);
+    } else {
+      const text = document.createElement('span');
+      text.textContent = 'No rows to show';
+      label.appendChild(text);
+    }
+    this.overlayEl.appendChild(label);
+  }
+
+  // ---------------------------------------------------------------------------
   // Drawing
   // ---------------------------------------------------------------------------
 
@@ -2489,6 +2870,8 @@ export class Grid {
     const ctx = this.ctx;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.viewportWidth, this.viewportHeight);
+
+    this.syncOverlay();
 
     const dataTop = this.dataBandTop();
     const dataBottom = this.dataBandBottom();
@@ -2869,6 +3252,25 @@ export class Grid {
           if (bg) {
             ctx.fillStyle = bg;
             ctx.fillRect(x, y, w, h);
+          }
+
+          // Wave-24 cell flash overlay. Sits between the bg paint and
+          // the text so it tints the background but doesn't wash out
+          // the text. Cheap when the flash buffer is empty.
+          if (this.flashes.size > 0) {
+            const flashStart = this.flashes.get(`${String(row)}:${column.id}`);
+            if (flashStart !== undefined) {
+              const elapsed = performance.now() - flashStart;
+              if (elapsed >= this.flashDurationMs) {
+                this.flashes.delete(`${String(row)}:${column.id}`);
+              } else {
+                const fade = 1 - elapsed / this.flashDurationMs;
+                ctx.globalAlpha = fade;
+                ctx.fillStyle = this.flashColor;
+                ctx.fillRect(x, y, w, h);
+                ctx.globalAlpha = 1;
+              }
+            }
           }
 
           // Tree row: paint chevron + indent on the leftmost column,

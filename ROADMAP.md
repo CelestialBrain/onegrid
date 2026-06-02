@@ -683,6 +683,18 @@ split (one file per Excel category + `_shared` for helpers +
   `writeWorkbook` → read through `readWorkbook` → evaluate through
   `@onegrid/formula` → assert results match. All 33 round-trip and
   evaluate correctly.
+- Wave 24 (2026-06-02) — **v1.2 interaction polish** (six features in
+  one wave, all wired through the showcase live tab + verified in real
+  Chrome): loading / no-rows overlay (`loading` / `loadingOverlay` /
+  `noRowsOverlay` GridOptions + `setLoading()` setter); cell flash on
+  update (`flashCell` / `flashRow` + `flash: { durationMs, color }`
+  config); auto-size column on dblclick + `autoSizeColumn(id)` /
+  `autoSizeColumns()` imperative API; Excel-class keyboard nav
+  (Ctrl+Home/End/arrow/Home/End/PgUp/PgDn) + `gotoCell(row, col,
+  extend)` public method; row drag-to-resize (in-cell variant since
+  no row-gutter; `enableRowResize` + `onRowResize`); column-resize
+  surfaced through the React adapter slot props. 96/96 core tests
+  pass; production build verified.
 
 **Chunk A (OOXML interop) status as of 2026-06-02.** `@onegrid/xlsx`
 scaffold shipped: package manifest + tsup/tsconfig + worksheet
@@ -848,27 +860,48 @@ import '@onegrid/formula/excel-compat/financial';  // just the finance subset
 Closes the most-visible UX gaps surfacing in adopter feedback. Each
 item is roughly half-a-session of work; the milestone is one batch.
 
+**Wave 24 (2026-06-02).** Six features in one wave, all wired through
+the showcase live tab + verified in real Chrome via chrome-devtools
+MCP. 96/96 core tests pass.
+
 **Cell + column resize (the headline gap)**
-- **Column drag-to-resize** — pointer over the column-boundary 4–6 px
-  "resize zone" of the header enters resize mode on drag; updates
-  `column.width` per frame; emits `onColumnResize(columnId, newWidth)`.
-  Extends the v0.0.7 column-reorder pointer routing.
-- **Row drag-to-resize** — same pattern on the leftmost-gutter row
-  boundary; updates the per-row entry in the `Float32Array` row-height
-  buffer.
-- **Auto-size column to content** — double-click the resize handle OR
-  programmatic `grid.autoSizeColumn(id)`. `measureText` against the
-  column's font + max-text-width across visible rows + padding constant.
-- **Auto-size all columns** — toolbar action; loops over columns.
+- ✅ **Column drag-to-resize** — already wired in core (v1.2 starter);
+  wave 24 surfaced it through the React adapter slot props + the
+  showcase live tab.
+- ✅ **Row drag-to-resize** (wave 24) — in-cell variant since we don't
+  ship a row-number gutter today; pointer in the bottom 4 px of any
+  data row enters resize mode, updates `baseHeights[row]` per frame,
+  fires `onRowResize(rowIndex, newHeight, finalCommit)`. Adopters opt
+  in via `enableRowResize: true`.
+- ✅ **Auto-size column to content** (wave 24) — `Grid.autoSizeColumn(id)`
+  measures text via canvas `measureText` across visible rows + a 24px
+  padding constant, clamped to `minWidth`/`maxWidth`. Wired to
+  double-click on the column-resize handle when `enableColumnResize`
+  is on.
+- ✅ **Auto-size all columns** (wave 24) — `Grid.autoSizeColumns()`
+  loops every column. Surfaced in the showcase as a button.
 
 **Interaction nuances**
-- Cell flash on update — fade animation when a CDC diff lands; opt-in
-  via `column.flashOnUpdate` or per-grid `flash: true`.
-- Find / replace within cells — modal with per-cell match highlight +
-  replace-all + scope (column / range / sheet).
-- Excel-class keyboard nav — Ctrl+Home / Ctrl+End / Ctrl+arrow to data
-  extents; Page Up/Down to viewport bounds; Tab/Shift-Tab wraps row
-  boundary correctly.
+- ✅ **Cell flash on update** (wave 24) — `Grid.flashCell(rowIndex,
+  columnId)` / `Grid.flashRow(rowIndex)` push entries onto a flash
+  buffer the render loop paints with a fading translucent rectangle.
+  Adopters wire CDC handlers / optimistic-mutation onCommit / formula
+  recompute callbacks to these methods. Configurable via
+  `flash: { durationMs, color }` GridOption.
+- ✅ **Loading / no-rows / skeleton overlay** (wave 24) — built-in
+  overlay element shown when `loading === true` or `rowSource.numRows
+  === 0`. Adopters override via `loadingOverlay(host)` /
+  `noRowsOverlay(host)` callbacks. `Grid.setLoading(value)` imperative
+  setter for runtime toggle.
+- 🔵 Find / replace within cells — modal with per-cell match highlight +
+  replace-all + scope (column / range / sheet). Tracked for a
+  follow-up wave.
+- ✅ **Excel-class keyboard nav** (wave 24) — Ctrl+Home → (0,0),
+  Ctrl+End → last data cell, Ctrl+arrow → jump to data extent in the
+  arrow's direction, Home/End → row-extent navigation,
+  PageUp/PageDown → jump by one viewport's worth of rows. Shift extends
+  selection. `Grid.gotoCell(row, col, extend)` public method for
+  imperative use.
 - Multi-row drag-drop reorder — extends the column-reorder pointer
   path to the row axis with the existing drop-indicator.
 - Dynamic mid-table row pinning — `rowMeta.pinned: 'top' | 'bottom' | null`

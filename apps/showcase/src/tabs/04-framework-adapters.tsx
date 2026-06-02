@@ -53,7 +53,7 @@ export function FrameworkAdaptersTab(): JSX.Element {
     <div>
       <Card title="React mount (live)">
         <GridHost>
-          <OneGrid columns={COLUMNS} rowSource={SOURCE} rowHeight={28} />
+          <OneGrid columns={COLUMNS} rowSource={SOURCE} rowHeight={28} enableColumnResize enableColumnReorder />
         </GridHost>
         <div style={{ marginTop: 8, fontSize: 11, color: 'var(--muted)' }}>
           Rendered through <Mono>@onegrid/react</Mono>'s <Mono>{`<OneGrid>`}</Mono>{' '}

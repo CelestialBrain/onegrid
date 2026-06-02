@@ -11,11 +11,11 @@
 // =============================================================================
 
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import { OneGrid } from '@onegrid/react';
+import { OneGrid, useOneGrid } from '@onegrid/react';
 import type { ColumnDef, RowSource } from '@onegrid/core';
 import { createFormulaEngine, type CellResolver } from '@onegrid/formula';
 import { readWorkbook, type Workbook } from '@onegrid/xlsx';
-import { Btn, Card, GridHost, Mono, Output } from '../ui';
+import { Btn, Card, Mono, Output } from '../ui';
 
 interface SyntheticRow {
   readonly id: number;
@@ -235,11 +235,76 @@ export function OneGridLiveTab(): JSX.Element {
         </div>
       </Card>
 
-      <Card title="Grid (rendered via @onegrid/react)">
-        <GridHost>
-          <OneGrid columns={columns} rowSource={source} rowHeight={28} />
-        </GridHost>
+      <Card title="Grid (rendered via @onegrid/react · wave 24 polish enabled)">
+        <WaveControls
+          columns={columns}
+          source={source}
+          onColumnsChange={setColumns}
+        />
       </Card>
     </div>
+  );
+}
+
+function WaveControls({
+  columns,
+  source,
+  onColumnsChange,
+}: {
+  columns: ReadonlyArray<ColumnDef>;
+  source: RowSource;
+  onColumnsChange: (next: ReadonlyArray<ColumnDef>) => void;
+}): JSX.Element {
+  const { ref, grid } = useOneGrid({
+    columns,
+    rowSource: source,
+    rowHeight: 28,
+    enableColumnResize: true,
+    enableColumnReorder: true,
+    enableRowResize: true,
+    onColumnResize: (id, width, final) => {
+      if (final) onColumnsChange(columns.map((c) => (c.id === id ? { ...c, width } : c)));
+    },
+    onRowResize: () => {
+      // Grid commits height into its own baseHeights array; this callback
+      // is just for adopters who want to persist the value.
+    },
+  });
+
+  return (
+    <>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+        <Btn onClick={() => grid?.setLoading(true)}>setLoading(true)</Btn>
+        <Btn onClick={() => grid?.setLoading(false)}>setLoading(false)</Btn>
+        <Btn
+          onClick={() => {
+            if (!grid) return;
+            for (let r = 0; r < 5; r++) grid.flashRow(r);
+          }}
+        >
+          flashRow ×5
+        </Btn>
+        <Btn onClick={() => grid?.autoSizeColumns()}>autoSizeColumns()</Btn>
+        <Btn onClick={() => grid?.gotoCell(0, 0)}>Ctrl+Home</Btn>
+        <Btn onClick={() => grid?.gotoCell(99_999, 6)}>Ctrl+End</Btn>
+      </div>
+      <div
+        ref={ref}
+        style={{
+          height: 360,
+          background: 'var(--bg)',
+          border: '1px solid var(--border)',
+          borderRadius: 4,
+          overflow: 'hidden',
+          position: 'relative',
+        }}
+        tabIndex={0}
+      />
+      <div style={{ marginTop: 4, fontSize: 11, color: 'var(--muted)' }}>
+        Tip: drag a column border to resize · double-click a column border to
+        auto-size · drag a row's bottom edge to resize · click the grid
+        and use Ctrl+Home/End/Arrow/PgUp/PgDn for Excel-class navigation.
+      </div>
+    </>
   );
 }
